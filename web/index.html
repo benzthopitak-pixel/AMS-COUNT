@@ -58,7 +58,10 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .pill { border: none; padding: 7px 13px; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: 14px; }
 .pill.on { background: var(--blue); color: #fff; font-weight: 600; }
 .pill.done { background: var(--ok-soft); color: var(--ok-ink); }
-.sync { margin-left: auto; font-size: 13px; padding: 5px 11px; border-radius: 999px; font-weight: 600; }
+.sync { margin-left: auto; font-size: 13px; padding: 5px 10px; border-radius: 999px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; line-height: 1; cursor: help; }
+.sync svg { display: block; }
+.s-bad { background: var(--bad-soft); color: var(--bad-ink); }
+.sync-mini .sync { margin: 0; }
 .s-on { background: var(--ok-soft); color: var(--ok-ink); } .s-wait { background: var(--warn-soft); color: var(--warn-ink); } .s-off { background: #f2f4f7; color: var(--muted); }
 .wrap { max-width: 1240px; margin: 0 auto; padding-block: 22px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
 h1 { margin: 0; font-size: 28px; line-height: 1.2; text-wrap: balance; }
@@ -380,20 +383,30 @@ meta = LS.get('meta', null); indexMaster(LS.get('master', [])); loadMine();
 /* ================= UI shell ================= */
 function flash(t) { S.toast = t; clearTimeout(flash.t); flash.t = setTimeout(() => { S.toast = null; render(); }, 2600); render(); }
 function syncInfo() {
-  if (usbMode) { const n = mine.length - LS.get('usbOut-' + (meta?.id || ''), 0); return [n > 0 ? 's-wait' : 's-on', n > 0 ? `สาย USB · ยังไม่ส่งออก ${n}` : 'สาย USB · ส่งออกครบ']; }
-  if (!db) return ['s-wait', 'ยังไม่เชื่อมต่อ'];
+  // [css class, words for tooltip, icon, number to show]
+  if (usbMode) { const n = Math.max(0, mine.length - LS.get('usbOut-' + (meta?.id || ''), 0)); return n ? ['s-wait', `สาย USB · ยังไม่ส่งออก ${n} รายการ`, 'usb', n] : ['s-on', 'สาย USB · ส่งออกครบแล้ว', 'usb', 0]; }
+  if (!db) return ['s-off', 'ยังไม่เชื่อมต่อระบบ', 'off', pendingCount() || mine.length && 0];
   const p = pendingCount();
-  if (!online) return ['s-wait', p ? `ออฟไลน์ · รอส่ง ${p}` : 'ออฟไลน์'];
-  if (p || writing) return ['s-wait', `กำลังส่ง ${p}`];
-  return ['s-on', '✓✓ ซิงก์แล้ว'];
+  if (!online) return ['s-bad', p ? `ออฟไลน์ · รอส่ง ${p} รายการ` : 'ออฟไลน์ · ไม่มีอินเทอร์เน็ต', 'off', p];
+  if (p || writing) return ['s-wait', `กำลังส่ง ${p} รายการ`, 'up', p];
+  return ['s-on', 'ซิงก์แล้ว · ข้อมูลถึงระบบครบ', 'ok', 0];
 }
-function paintSync() { const el = $('#sync'); if (el) { const [c, t] = syncInfo(); el.className = 'sync ' + c; el.textContent = t; } }
+const SYNC_ICON = {
+  ok: '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1 0 9.5H7z"/><path d="m9 13 2 2 4-4"/>',
+  up: '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1 0 9.5H7z"/><path d="M12 16v-5m-2.5 2.5L12 11l2.5 2.5"/>',
+  off: '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 9 7.4M13.5 6.6A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1 2 8.6"/><path d="m4 4 16 16"/>',
+  usb: '<path d="M12 3v13m0 0-3-3m3 3 3-3M8 7h.01M16 9h.01M8 7v3l4 2 4-2V9"/><circle cx="12" cy="19" r="2"/>'
+};
+function syncHtml() {
+  const [c, t, ic, n] = syncInfo();
+  return `<span id="sync" class="sync ${c}" title="${esc(t)}" role="status" aria-label="${esc(t)}" data-a="syncinfo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SYNC_ICON[ic]}</svg>${n ? `<b>${N(n)}</b>` : ''}</span>`;
+}
+function paintSync() { const el = $('#sync'); if (el) el.outerHTML = syncHtml(); }
 const stageOf = () => !meta ? 0 : meta.status === 'prepare' ? 1 : meta.status === 'counting' ? 2 : 4;
 
 function render() {
   const root = $('#app'); if (!root) return;
   const keepFocus = document.activeElement?.id, keepVal = keepFocus && 'value' in document.activeElement ? document.activeElement.value : null, scanVal = $('#scanIn')?.value || '';
-  const [sc, st] = syncInfo();
   const c = meta && master.size ? cats() : null;
   const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
   if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus(); return; }
@@ -403,14 +416,14 @@ function render() {
     const stg = stageOf();
     const I = (v, num, label, n, doneAt) => `<button class="nav-item ${S.web === v ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}" ${S.web === v ? 'aria-current="page"' : ''}><span class="nav-num">${num}</span><span class="nav-label">${label}</span>${n ? `<span class="nav-badge">${n}</span>` : ''}</button>`;
     let items;
-    if (meta && !isLead()) items = I('live', '②', 'นับ (ดูอย่างเดียว)', 0, 99);
-    else items = I('rounds', '+', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('prepare', '①', 'เตรียม', 0, 1) + I('live', '②', 'นับ', 0, 99) + I('inbox', '③', 'ตรวจ', inboxN, 99) + I('close', '④', 'ปิด + ส่งออก', 0, 99)
-      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '▦', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '⇄', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '⚙', 'ทีม + ตั้งค่า', 0, 99));
-    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span><span id="sync" class="sync ${sc}">${st}</span></div>
+    if (meta && !isLead()) items = I('live', '3', 'นับ (ดูอย่างเดียว)', 0, 99);
+    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('prepare', '2', 'เตรียม', 0, 1) + I('live', '3', 'นับ', 0, 99) + I('inbox', '4', 'ตรวจ', inboxN, 99) + I('close', '5', 'ปิด + ส่งออก', 0, 99)
+      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '6', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '7', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '8', 'ทีม + ตั้งค่า', 0, 99));
+    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">รอบปัจจุบัน</span><b>${esc(meta.name)}</b>` : '<span class="sub">ยังไม่มีรอบนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
-    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span><span id="sync" class="sync ${sc}">${st}</span></div></header>`;
+    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div></header>`;
   }
   html += S.mode === 'web' ? webView(c) + '</div></div>' : appView(c);
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
@@ -440,7 +453,7 @@ function totals() {
   return { total, found, left: total - found, other, unk };
 }
 function webRounds(c) {
-  let h = `<main class="wrap"><h1>เพิ่มข้อมูลตรวจนับ</h1>`;
+  let h = `<main class="wrap"><h1>1 · เพิ่มข้อมูลตรวจนับ</h1>`;
   if (meta && meta.status !== 'closed' && !S.imp) {
     const T = totals(), pct = T.total ? Math.round(T.found / T.total * 100) : 0;
     const stLabel = { prepare: ['c-blue', 'รอมอบหมายคนนับ'], counting: ['c-warn', 'กำลังนับ'] }[meta.status] || ['c-gray', meta.status];
@@ -506,7 +519,7 @@ function importStats() {
   return { codes: codes.size, rows: I.rows.length, multi: [...codes.values()].filter(v => v > 1).length, wo };
 }
 function webPrepare() {
-  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)}</p><h1>① เตรียมรอบนับ</h1></div>`;
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)}</p><h1>2 · เตรียมรอบนับ</h1></div>`;
   const locked = meta.status !== 'prepare';
   h += `<section class="card"><h2>1 · ชื่อไฟล์</h2>`;
   if (master.size) {
@@ -536,7 +549,7 @@ function areaStats() {
 }
 function webLive(c) {
   const T = totals(), { cur, evs } = compute(), st = areaStats();
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด</p><h1>② นับ</h1></div>${meta.status === 'prepare' ? `<span class="msg warn">ยังไม่ปล่อยภารกิจ แอปยังนับไม่ได้</span>` : ''}</div>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด</p><h1>3 · นับ</h1></div>${meta.status === 'prepare' ? `<span class="msg warn">ยังไม่ปล่อยภารกิจ แอปยังนับไม่ได้</span>` : ''}</div>`;
   h += `<div class="kpis"><div class="kpi" style="background:var(--ok);color:#fff"><span style="color:#fff">นับพบ</span><b>${N(T.found)}</b><span style="color:#e7f8ef">จาก ${N(T.total)} · ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></div>
     <div class="kpi"><span>ยังไม่พบ</span><b style="color:var(--warn-ink)">${N(T.left)}</b></div>
     <button class="kpi" data-a="inboxtab" data-v="move" style="border:none;text-align:left"><span>เจอต่างแผนก</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>ไปกล่องตรวจ →</span></button>
@@ -576,7 +589,7 @@ function webInbox(c) {
   if (S.inboxSel && !compute().cur.has(S.inboxSel)) S.inboxSel = null;
   const selCode = S.inboxSel || list[0]?.code || null;
   const open = c.move.length + c.unk.length + c.dmg.length;
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่หัวหน้าต้องตัดสิน</p><h1>③ กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · เคลียร์แล้ว ${c.cleared.length}</p></div>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่หัวหน้าต้องตัดสิน</p><h1>4 · กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · เคลียร์แล้ว ${c.cleared.length}</p></div>`;
   if (S.inboxTab === 'move') h += `<button class="btn dark" data-a="bulkapprove" ${S.inboxChecked.size ? '' : 'disabled'}>อนุมัติย้ายที่เลือก (${S.inboxChecked.size})</button>`;
   h += `</div><div class="pills">${TABS.map(([k, l, cl]) => `<button class="pill ${S.inboxTab === k ? 'on' : ''}" data-a="inboxtab" data-v="${k}">${l} [${c[k].length}]</button>`).join('')}</div><div class="row"><section class="side" style="display:flex;flex-direction:column;gap:8px">`;
   if (!list.length) h += `<div class="card"><p class="sub">ไม่มีเรื่องในแท็บนี้</p></div>`;
@@ -615,16 +628,16 @@ function flagChips(s, act) {
 function webClose(c) {
   const T = totals(), areas = meta.areas || [], unassigned = areas.filter(a => !a.shared && !a.assignee).length, open = c.move.length + c.unk.length + c.dmg.length, closed = meta.status === 'closed';
   const ck = (ok, title, sub) => `<div class="row" style="align-items:flex-start"><span class="dot" style="width:28px;height:28px;background:${ok ? 'var(--ok)' : 'var(--warn)'}">${ok ? '✓' : '!'}</span><span style="flex:1"><b>${title}</b><br><span class="sub">${sub}</span></span></div>`;
-  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>④ ปิดรอบ</h1>`;
+  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>5 · ปิดรอบ</h1>`;
   if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
   else {
     h += ck(unassigned === 0, 'ทุกพื้นที่มีคนนับ', unassigned ? `ยังไม่มีคนนับ ${unassigned} พื้นที่ (ใครก็หยิบได้)` : 'ครบ');
-    h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่ ② นับ');
+    h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 3 นับ');
     h += ck(open === 0, 'กล่องตรวจเคลียร์หมด', open ? `ค้าง ${open} เรื่อง` : 'ครบ');
     h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
     h += `<button class="btn dark" data-a="closeround">${open ? `ปิดรอบ (ยังค้าง ${open} เรื่อง)` : 'ปิดรอบ'}</button>${open ? '<p class="sub">ปิดได้ แต่เรื่องที่ค้างจะติดไปในไฟล์ส่งออกตามสถานะล่าสุด</p>' : ''}`;
   }
-  h += `</section><section class="grow" style="display:flex;flex-direction:column;gap:12px"><h1>⑤ ส่งออก</h1>${closed ? '' : '<p class="sub">ก่อนปิดรอบ ไฟล์จะเขียนว่า "ฉบับร่าง"</p>'}<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
+  h += `</section><section class="grow" style="display:flex;flex-direction:column;gap:12px"><h1>ส่งออก</h1>${closed ? '' : '<p class="sub">ก่อนปิดรอบ ไฟล์จะเขียนว่า "ฉบับร่าง"</p>'}<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
     <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:#d6ddff">XLSX · ไฟล์หลัก</span><b style="font-size:18px">ผลนับตามแม่แบบเดิม</b><span style="font-size:14px;color:#e3e8ff">สรุป · Data · Transfer · write-off · สรุป write-off · คิวป้าย · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--oth-ink)">XLSX · SAP AS02</span><b style="font-size:18px">Transfer ย้ายแผนก</b><span class="sub">อนุมัติแล้ว ${c.transfer.length + c.cleared.filter(s => s.rv.move === 'approved' && !s.flags.pendingTransfer).length} รายการ</span><button class="btn" data-a="export" data-v="transfer">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--bad-ink)">XLSX · SAP ABAVN</span><b style="font-size:18px">Write-Off</b><span class="sub">${N(T.left)} รหัสที่ยังไม่พบ</span><button class="btn" data-a="export" data-v="writeoff">ดาวน์โหลด</button></div>
@@ -646,7 +659,7 @@ function stickerList(c) {
 function webStickers(c) {
   const list = stickerList(c), { cur } = compute();
   for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>พิมพ์สติ๊กเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>6 · พิมพ์สติ๊กเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
     <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['ns', 'ยังไม่มีสติ๊กเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
     <div class="row"><section class="card grow">`;
   if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
@@ -703,7 +716,7 @@ function appView(c) {
 function appLogin() {
   const team = meta?.team || [];
   return `<div class="pbody"><div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
-    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม หัวหน้าเพิ่มได้ที่ ① เตรียม บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
+    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม หัวหน้าเพิ่มได้ที่เมนู ทีม + ตั้งค่า บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
     <div class="card"><label class="f">หรือพิมพ์ชื่อ<input class="in" id="loginName" placeholder="ชื่อของคุณ"></label><button class="btn pri" data-a="loginname">เข้าใช้งาน</button></div>
     <p class="sub">โหมดสาย USB · เลือกชื่อจากแพ็กเกจที่นำเข้า · เครื่องนี้: ${esc(dev)}</p></div>`;
 }
@@ -711,8 +724,7 @@ function myAreas() { return (meta.areas || []).filter(a => a.assignee === S.user
 function appHome(c) {
   const st = areaStats(), mine2 = myAreas(), T = totals();
   let done = 0, tot = 0; for (const a of mine2) { const x = st.get(String(a.code)); if (x) { done += x.found; tot += x.total; } }
-  const [sc, stx] = syncInfo();
-  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span><span class="sync ${sc}" style="margin:0">${stx}</span></div>`;
+  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span><span class="sync-mini">${syncHtml().replace('id="sync" ', '')}</span></div>`;
   if (meta.status === 'closed') h += `<div class="msg ok">หัวหน้าปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
   h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)} · ภารกิจของคุณ</span><div><b style="font-size:42px;line-height:1">${N(done)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(tot)} รหัส</span></div><div class="bar" style="background:#2e46c9"><i style="width:${tot ? done / tot * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></div>
     <b style="font-size:18px">พื้นที่ของฉัน</b>`;
@@ -840,7 +852,7 @@ function usbCard() {
 }
 function webUsb() {
   const info = LS.get('usbInfo-' + meta.id, {});
-  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>เชื่อมผ่านสาย USB</h1></div><div class="row">
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>7 · สาย USB</h1></div><div class="row">
     <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอม → เครื่องยิง</span><h2>ส่งทะเบียนให้เครื่องยิง</h2>
       <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องยิง: แท็บ ฉัน → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
       <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของหัวหน้า</p>
@@ -964,7 +976,7 @@ async function addMember() {
 }
 function webTeam() {
   const cfg = Store.auth.config(), lead = S.user?.role === 'lead';
-  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
+  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>8 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
     <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th>' : ''}</tr></thead><tbody>`;
   for (const u of S.team) h += `<tr><td><b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}</td><td class="mono">${esc(u.code)}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'หัวหน้า' : 'คนนับ')}</td>
@@ -1083,6 +1095,7 @@ document.addEventListener('click', async e => {
     case 'manual': S.manual = !S.manual; break;
     case 'feedf': S.feedF = v; break;
     case 'verify': await verify(); break;
+    case 'syncinfo': flash(syncInfo()[1]); return;
     case 'pick': { const g = $('#gFile'), o = PICK[v]; pickFor = v; g.accept = o[0]; g.multiple = o[1]; g.value = ''; g.click(); return; }
     case 'usbmode': { const on = v === '1'; if (on === usbMode) return; usbMode = on; LS.set('usbMode', on); S.msg.usbApp = null;
       if (on) { unsubMeta?.(); unsubMeta = null; unsubEv?.(); unsubEv = null; evRound = null; db = null; S.authed = false; serverEv = {}; S.gate = null; if (!S.user) S.user = null; } else { S.user = null; S.gate = 'boot'; render(); await connect(); }
