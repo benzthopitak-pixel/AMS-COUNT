@@ -254,13 +254,13 @@ function compute() {
       H(c, e.printed ? 'พิมพ์ป้ายใหม่แล้ว' : 'แก้ไข: ' + Object.keys(e).filter(k => !['id', 'k', 'code', 't', 'by', 'dev', 'round'].includes(k)).map(k => k === 'flags' ? 'ป้าย/โอนย้าย' : ({ cond: 'สภาพ', remark: 'Remark', room: 'ห้อง', dec: 'การตัดสินใจ', uname: 'ชื่อ' }[k] || k)).join(', '), e);
     } else if (e.k === 'del') { cur.delete(c); H(c, 'ยกเลิกผลนับ', e); }
     else if (e.k === 'rv') {
-      if (e.act === 'recount') { cur.delete(c); recount.add(c); H(c, 'หัวหน้าสั่งนับซ้ำ', e); continue; }
+      if (e.act === 'recount') { cur.delete(c); recount.add(c); H(c, 'Admin สั่งนับซ้ำ', e); continue; }
       if (!s) continue;
-      if (e.act === 'approve_move') { s.rv.move = 'approved'; s.flags.pendingTransfer = true; s.flags.reprint = true; s.dec = s.dec || 'moved'; H(c, 'หัวหน้าอนุมัติย้ายแผนก', e); }
-      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'หัวหน้า: ไม่ย้าย (ยืม)', e); }
-      if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'หัวหน้า: รับเข้าทะเบียน', e); }
-      if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'หัวหน้า: ไม่ใช่ของเรา', e); }
-      if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'หัวหน้ารับทราบสภาพ', e); }
+      if (e.act === 'approve_move') { s.rv.move = 'approved'; s.flags.pendingTransfer = true; s.flags.reprint = true; s.dec = s.dec || 'moved'; H(c, 'Admin อนุมัติย้ายแผนก', e); }
+      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'Admin: ไม่ย้าย (ยืม)', e); }
+      if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'Admin: รับเข้าทะเบียน', e); }
+      if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'Admin: ไม่ใช่ของเรา', e); }
+      if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'Admin รับทราบสภาพ', e); }
       if (e.act === 'transferred') { s.flags.pendingTransfer = false; s.flags.transferred = true; H(c, 'ทำ AS02 ใน SAP แล้ว', e); }
     }
   }
@@ -421,7 +421,7 @@ function render() {
       + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '6', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '7', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '8', 'ทีม + ตั้งค่า', 0, 99));
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
-      <div class="side-foot">${meta ? `<span class="sub">รอบปัจจุบัน</span><b>${esc(meta.name)}</b>` : '<span class="sub">ยังไม่มีรอบนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
+      <div class="side-foot">${meta ? `<span class="sub">รอบปัจจุบัน</span><b>${esc(meta.name)}</b>` : '<span class="sub">ยังไม่มีรอบนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
     html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div></header>`;
   }
@@ -436,7 +436,7 @@ function render() {
 /* ================= WEB ================= */
 function webView(c) {
   if (S.web === 'team' && !usbMode) return webTeam();
-  if (!isLead()) return meta && master.size ? webLive(c) : `<main class="wrap"><div class="card"><h2>ยังไม่มีรอบนับที่เปิดอยู่</h2><p class="sub">บัญชีคนนับดูผลบนคอมได้อย่างเดียว · งานเตรียม ตรวจ และปิดรอบเป็นของหัวหน้า</p></div></main>`;
+  if (!isLead()) return meta && master.size ? webLive(c) : `<main class="wrap"><div class="card"><h2>ยังไม่มีรอบนับที่เปิดอยู่</h2><p class="sub">บัญชีคนนับดูผลบนคอมได้อย่างเดียว · งานเตรียม ตรวจ และปิดรอบเป็นของ Admin</p></div></main>`;
   if (!meta || S.web === 'rounds') return webRounds(c);
   if (S.web === 'prepare') return webPrepare();
   if (S.web === 'live') return webLive(c);
@@ -590,7 +590,7 @@ function webInbox(c) {
   if (S.inboxSel && !compute().cur.has(S.inboxSel)) S.inboxSel = null;
   const selCode = S.inboxSel || list[0]?.code || null;
   const open = c.move.length + c.unk.length + c.dmg.length;
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่หัวหน้าต้องตัดสิน</p><h1>4 · กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · เคลียร์แล้ว ${c.cleared.length}</p></div>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่ Admin ต้องตัดสิน</p><h1>4 · กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · เคลียร์แล้ว ${c.cleared.length}</p></div>`;
   if (S.inboxTab === 'move') h += `<button class="btn dark" data-a="bulkapprove" ${S.inboxChecked.size ? '' : 'disabled'}>อนุมัติย้ายที่เลือก (${S.inboxChecked.size})</button>`;
   h += `</div><div class="pills">${TABS.map(([k, l, cl]) => `<button class="pill ${S.inboxTab === k ? 'on' : ''}" data-a="inboxtab" data-v="${k}">${l} [${c[k].length}]</button>`).join('')}</div><div class="row"><section class="side" style="display:flex;flex-direction:column;gap:8px">`;
   if (!list.length) h += `<div class="card"><p class="sub">ไม่มีเรื่องในแท็บนี้</p></div>`;
@@ -699,7 +699,7 @@ function drawSticker(cv, code) {
 function appView(c) {
   let h = `<div class="phone">`;
   if (!S.user) h += appLogin();
-  else if (!meta || meta.status === 'prepare' || !master.size) h += `<div class="pbody"><div class="card"><h2>ยังไม่มีภารกิจ</h2><p class="sub">${!meta ? 'หัวหน้ายังไม่สร้างรอบนับ' : 'หัวหน้ากำลังเตรียมรอบ ยังไม่ปล่อยภารกิจ'} · หน้านี้อัปเดตเองเมื่อพร้อม</p></div>${appMeBlock()}</div>`;
+  else if (!meta || meta.status === 'prepare' || !master.size) h += `<div class="pbody"><div class="card"><h2>ยังไม่มีภารกิจ</h2><p class="sub">${!meta ? 'Admin ยังไม่สร้างรอบนับ' : 'Admin กำลังเตรียมรอบ ยังไม่ปล่อยภารกิจ'} · หน้านี้อัปเดตเองเมื่อพร้อม</p></div>${appMeBlock()}</div>`;
   else if (S.app === 'home') h += appHome(c);
   else if (S.app === 'area') h += appArea();
   else if (S.app === 'scan') h += appScan();
@@ -717,7 +717,7 @@ function appView(c) {
 function appLogin() {
   const team = meta?.team || [];
   return `<div class="pbody"><div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
-    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม หัวหน้าเพิ่มได้ที่เมนู ทีม + ตั้งค่า บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
+    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'Admin' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม Admin เพิ่มได้ที่เมนู ทีม + ตั้งค่า บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
     <div class="card"><label class="f">หรือพิมพ์ชื่อ<input class="in" id="loginName" placeholder="ชื่อของคุณ"></label><button class="btn pri" data-a="loginname">เข้าใช้งาน</button></div>
     <p class="sub">โหมดสาย USB · เลือกชื่อจากแพ็กเกจที่นำเข้า · เครื่องนี้: ${esc(dev)}</p></div>`;
 }
@@ -726,7 +726,7 @@ function appHome(c) {
   const st = areaStats(), mine2 = myAreas(), T = totals();
   let done = 0, tot = 0; for (const a of mine2) { const x = st.get(String(a.code)); if (x) { done += x.found; tot += x.total; } }
   let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span><span class="sync-mini">${syncHtml().replace('id="sync" ', '')}</span></div>`;
-  if (meta.status === 'closed') h += `<div class="msg ok">หัวหน้าปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
+  if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
   h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)} · ภารกิจของคุณ</span><div><b style="font-size:42px;line-height:1">${N(done)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(tot)} รหัส</span></div><div class="bar" style="background:#2e46c9"><i style="width:${tot ? done / tot * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></div>
     <b style="font-size:18px">พื้นที่ของฉัน</b>`;
   if (!mine2.length) h += `<p class="sub">ยังไม่มีพื้นที่ที่มอบให้คุณ เลือกพื้นที่อื่นด้านล่างได้</p>`;
@@ -856,7 +856,7 @@ function webUsb() {
   let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>7 · สาย USB</h1></div><div class="row">
     <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอม → เครื่องยิง</span><h2>ส่งทะเบียนให้เครื่องยิง</h2>
       <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องยิง: แท็บ ฉัน → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
-      <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของหัวหน้า</p>
+      <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของ Admin</p>
       <button class="btn pri" data-a="usbpkg" ${master.size ? '' : 'disabled'}>ดาวน์โหลดแพ็กเกจ</button>${S.msg.pkg ? `<div class="msg ${S.msg.pkg[1]}">${esc(S.msg.pkg[0])}</div>` : ''}</section>
     <section class="card grow"><span class="chip c-ok" style="align-self:flex-start">ขั้นที่ 2 · เครื่องยิง → คอม</span><h2>รับผลนับจากเครื่องยิง</h2>
       <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย · คัดลอกไฟล์ <span class="mono">AMS-ผลนับ-….xlsx</span> จาก Download ของเครื่องยิงมาไว้ที่คอม</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
@@ -931,19 +931,19 @@ function gateView() {
     <label class="f">anon public key<textarea class="in mono" id="cfgKey" rows="3" placeholder="eyJhbGciOi…">${esc(cfg.key)}</textarea></label>${msg}
     <button class="btn pri" data-a="savecfg">บันทึกและเชื่อมต่อ</button>${Store.auth.configured() ? '<button class="btn" data-a="cancelcfg">ยกเลิก</button>' : ''}<p class="sub">ห้ามใส่ service_role key</p></div>
     <div class="card"><b>ไม่มีเน็ตที่นี่?</b><p class="sub">ใช้โหมดสาย USB ส่งข้อมูลผ่านไฟล์แทน</p><button class="btn" data-a="usbmode" data-v="1">ใช้โหมดสาย USB</button></div>`);
-  if (S.gate === 'inactive') return wrap(`<div class="card"><h2>รอหัวหน้าเปิดใช้บัญชี</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้เปิดใช้ · ให้หัวหน้าเปิดที่หน้า ทีม + ตั้งค่า บนคอม</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`);
-  if (S.firstRun) return wrap(`<div class="card"><h2>เริ่มใช้ครั้งแรก · สร้างบัญชีหัวหน้า</h2><p class="sub">ระบบยังไม่มีผู้ใช้ บัญชีแรกจะเป็นหัวหน้า (นำเข้าทะเบียน มอบงาน ตรวจ ปิดรอบ)</p>
+  if (S.gate === 'inactive') return wrap(`<div class="card"><h2>รอ Admin เปิดใช้บัญชี</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้เปิดใช้ · ให้ Admin เปิดที่หน้า ทีม + ตั้งค่า บนคอม</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`);
+  if (S.firstRun) return wrap(`<div class="card"><h2>เริ่มใช้ครั้งแรก · สร้างบัญชี Admin</h2><p class="sub">ระบบยังไม่มีผู้ใช้ บัญชีแรกจะเป็น Admin (นำเข้าทะเบียน มอบงาน ตรวจ ปิดรอบ)</p>
     <label class="f">ชื่อ<input class="in" id="flName" autocomplete="name"></label>
     <label class="f">รหัสพนักงาน<input class="in mono" id="flCode" autocomplete="username"></label>
     <label class="f">PIN (ตัวเลข 4–8 หลัก)<input class="in mono" id="flPin" type="password" inputmode="numeric" autocomplete="new-password"></label>${msg}
-    <button class="btn pri" data-a="firstlead" ${S.busy ? 'disabled' : ''}>สร้างบัญชีหัวหน้า</button>
+    <button class="btn pri" data-a="firstlead" ${S.busy ? 'disabled' : ''}>สร้างบัญชี Admin</button>
     <button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button></div>`);
   return wrap(`<form class="card" id="loginForm"><h2>เข้าสู่ระบบ</h2>
     <label class="f">รหัสพนักงาน<input class="in mono" id="lgCode" autocomplete="username" value="${esc(S.lgCode ?? LS.get('lastCode', ''))}"></label>
     <label class="f">PIN<input class="in mono" id="lgPin" type="password" inputmode="numeric" autocomplete="current-password"></label>${msg}
     <button class="btn pri" type="submit" ${S.busy ? 'disabled' : ''}>${S.busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button></form>
     <div class="row"><button class="btn sm" data-a="editcfg">ตั้งค่าการเชื่อมต่อ</button><button class="btn sm" data-a="usbmode" data-v="1">โหมดสาย USB</button></div>
-    <p class="sub">ลืม PIN? ให้หัวหน้าตั้งใหม่ที่หน้า ทีม + ตั้งค่า · เครื่องนี้: ${esc(dev)}</p>`);
+    <p class="sub">ลืม PIN? ให้ Admin ตั้งใหม่ที่หน้า ทีม + ตั้งค่า · เครื่องนี้: ${esc(dev)}</p>`);
 }
 async function doLogin() {
   const code = $('#lgCode')?.value.trim(), pin = $('#lgPin')?.value.trim();
@@ -980,11 +980,11 @@ function webTeam() {
   let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>8 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
     <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th>' : ''}</tr></thead><tbody>`;
   for (const u of S.team) h += `<tr><td><b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}</td><td class="mono">${esc(u.code)}</td>
-    <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'หัวหน้า' : 'คนนับ')}</td>
+    <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'Admin' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'Admin' : 'คนนับ')}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm ${u.active ? '' : 'red'}" data-a="memactive" data-v="${u.id}">${u.active ? 'ใช้งานได้' : 'ปิดใช้อยู่'}</button>` : `<span class="chip ${u.active ? 'c-ok' : 'c-gray'}">${u.active ? 'ใช้งานได้' : 'ปิดใช้'}</span>`}</td>
     ${lead ? `<td><div class="row" style="flex-wrap:nowrap"><input class="in mono" id="pin-${u.id}" type="password" inputmode="numeric" placeholder="PIN ใหม่" style="width:110px"><button class="btn sm" data-a="mempin" data-v="${u.id}">ตั้ง</button></div></td>` : ''}</tr>`;
   h += `</tbody></table></div>`;
-  if (lead) h += `<b>เพิ่มคนในทีม</b><div class="grid"><label class="f">ชื่อ<input class="in" id="nmName"></label><label class="f">รหัสพนักงาน<input class="in mono" id="nmCode"></label><label class="f">PIN เริ่มต้น<input class="in mono" id="nmPin" inputmode="numeric" placeholder="4–8 หลัก"></label><label class="f">บทบาท<select class="in" id="nmRole"><option value="counter">คนนับ</option><option value="lead">หัวหน้า</option></select></label></div>
+  if (lead) h += `<b>เพิ่มคนในทีม</b><div class="grid"><label class="f">ชื่อ<input class="in" id="nmName"></label><label class="f">รหัสพนักงาน<input class="in mono" id="nmCode"></label><label class="f">PIN เริ่มต้น<input class="in mono" id="nmPin" inputmode="numeric" placeholder="4–8 หลัก"></label><label class="f">บทบาท<select class="in" id="nmRole"><option value="counter">คนนับ</option><option value="lead">Admin</option></select></label></div>
     <button class="btn pri" data-a="addmember" style="align-self:flex-start" ${S.busy ? 'disabled' : ''}>เพิ่มเข้าทีม</button>${S.msg.team ? `<div class="msg ${S.msg.team[1]}">${esc(S.msg.team[0])}</div>` : ''}`;
   h += `</section><aside class="side" style="display:flex;flex-direction:column;gap:12px"><section class="card"><h2>การเชื่อมต่อ</h2><p class="sub">Supabase: <span class="mono">${esc(cfg.url.replace(/^https:\/\//, ''))}</span></p><p class="sub">คุณ: ${esc(S.user?.name || '')} · ${esc(S.user?.code || '')} · เครื่อง ${esc(dev)}</p>
     <div class="row"><button class="btn sm" data-a="editcfg">เปลี่ยนการเชื่อมต่อ</button><button class="btn sm red" data-a="logout">ออกจากระบบ</button></div></section>
@@ -1278,7 +1278,7 @@ function exportBook(kind) {
   }
   if (kind === 'main') {
     add('คิวพิมพ์สติ๊กเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติ๊กเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
-    add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (คนนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจหัวหน้า', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ของเรา' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
+    add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (คนนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจ Admin', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ของเรา' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
   }
   return wb;
 }
