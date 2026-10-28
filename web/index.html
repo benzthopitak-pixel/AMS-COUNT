@@ -1,0 +1,1228 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3b5bfd">
+<title>AMS Count</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script src="config.js"></script>
+<script src="lib/supabase.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="lib/qrcode.js"></script>
+<script src="store.js"></script>
+<style>
+@font-face { font-family: 'Prompt'; font-weight: 400; font-display: swap; src: url(fonts/prompt-thai-400-normal.woff2) format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Prompt'; font-weight: 500; font-display: swap; src: url(fonts/prompt-thai-500-normal.woff2) format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Prompt'; font-weight: 600; font-display: swap; src: url(fonts/prompt-thai-600-normal.woff2) format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Prompt'; font-weight: 700; font-display: swap; src: url(fonts/prompt-thai-700-normal.woff2) format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Prompt'; font-weight: 400; font-display: swap; src: url(fonts/prompt-latin-400-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2190-21FF, U+2212, U+2460-24FF, U+2713, U+2715; }
+@font-face { font-family: 'Prompt'; font-weight: 500; font-display: swap; src: url(fonts/prompt-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2190-21FF, U+2212, U+2460-24FF, U+2713, U+2715; }
+@font-face { font-family: 'Prompt'; font-weight: 600; font-display: swap; src: url(fonts/prompt-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2190-21FF, U+2212, U+2460-24FF, U+2713, U+2715; }
+@font-face { font-family: 'Prompt'; font-weight: 700; font-display: swap; src: url(fonts/prompt-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2190-21FF, U+2212, U+2460-24FF, U+2713, U+2715; }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 500; font-display: swap; src: url(fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-display: swap; src: url(fonts/jetbrains-mono-latin-700-normal.woff2) format('woff2'); }
+/* Layout: one shell, two faces. "คอม" = wide web workspace with stage pills; "เครื่องยิง" = phone column with bottom bar + center scan button.
+   Deliberately single light theme (field devices + office screens), every color set explicitly. */
+:root {
+  --ink: #121826; --muted: #5d6676; --bg: #f4f5fa; --card: #ffffff; --line: #e4e7ec;
+  --blue: #3b5bfd; --blue-soft: #eaeeff; --blue-ink: #2e46c9;
+  --lime: #d4f25a; --orange: #ff7a1a;
+  --ok: #12b76a; --ok-soft: #e7f8ef; --ok-ink: #027a48;
+  --warn: #f79009; --warn-soft: #fff1e6; --warn-ink: #b54708;
+  --bad: #f04438; --bad-soft: #fee9e7; --bad-ink: #b42318;
+  --oth: #7a5af8; --oth-soft: #f0ebff; --oth-ink: #5925dc;
+  --display: 'Prompt', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--display); font-size: 15px; line-height: 1.5; }
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.mono { font-family: var(--mono); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
+.top-in { max-width: 1240px; margin: 0 auto; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
+.logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--lime); display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; }
+.seg { display: inline-flex; background: #e9ebf3; border-radius: 999px; padding: 3px; }
+.seg button { border: none; background: transparent; padding: 7px 14px; border-radius: 999px; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { border: none; padding: 7px 13px; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: 14px; }
+.pill.on { background: var(--blue); color: #fff; font-weight: 600; }
+.pill.done { background: var(--ok-soft); color: var(--ok-ink); }
+.sync { margin-left: auto; font-size: 13px; padding: 5px 11px; border-radius: 999px; font-weight: 600; }
+.s-on { background: var(--ok-soft); color: var(--ok-ink); } .s-wait { background: var(--warn-soft); color: var(--warn-ink); } .s-off { background: #f2f4f7; color: var(--muted); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 22px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
+h1 { margin: 0; font-size: 28px; line-height: 1.2; text-wrap: balance; }
+h2 { margin: 0; font-size: 19px; line-height: 1.3; }
+.sub { color: var(--muted); font-size: 14px; margin: 0; }
+.card { background: var(--card); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.row > .grow { flex: 999 1 520px; min-width: 0; }
+.row > .side { flex: 1 1 320px; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.kpi { border-radius: 18px; padding: 14px 16px; background: var(--card); }
+.kpi b { display: block; font-size: 30px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 13px; color: var(--muted); }
+.btn { border: 1px solid #d0d5dd; background: var(--card); color: #344054; padding: 10px 16px; border-radius: 999px; font-weight: 600; min-height: 44px; }
+.btn.pri { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn.dark { background: var(--ink); color: #fff; border-color: var(--ink); }
+.btn.lime { background: var(--lime); color: var(--ink); border-color: var(--lime); }
+.btn.oth { background: var(--oth); color: #fff; border-color: var(--oth); }
+.btn.red { background: var(--card); color: var(--bad-ink); border-color: #fda29b; }
+.btn.sm { padding: 6px 12px; min-height: 36px; font-size: 13px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.c-ok { background: var(--ok-soft); color: var(--ok-ink); } .c-warn { background: var(--warn-soft); color: var(--warn-ink); }
+.c-bad { background: var(--bad-soft); color: var(--bad-ink); } .c-oth { background: var(--oth-soft); color: var(--oth-ink); }
+.c-blue { background: var(--blue-soft); color: var(--blue-ink); } .c-gray { background: #f2f4f7; color: #475467; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input.in, select.in, textarea.in { border: 1px solid #d0d5dd; border-radius: 12px; padding: 10px 12px; background: var(--card); width: 100%; min-width: 0; font-size: 15px; color: var(--ink); }
+.tbl-wrap { overflow-x: auto; border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+tr.click { cursor: pointer; } tr.click:hover { background: #f8f9fc; } tr.sel { background: var(--blue-soft); }
+.tile { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; border: none; }
+.tile b { font-size: 15px; } .tile .p { font-size: 24px; font-weight: 700; line-height: 1.2; } .tile small { font-size: 12px; }
+.bar { height: 10px; background: #eef0f6; border-radius: 6px; overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; }
+.msg { padding: 10px 14px; border-radius: 12px; font-size: 14px; background: #f2f4f7; }
+.msg.ok { background: var(--ok-soft); color: var(--ok-ink); } .msg.bad { background: var(--bad-soft); color: var(--bad-ink); } .msg.warn { background: var(--warn-soft); color: var(--warn-ink); }
+.drop { border: 2px dashed #c5cdfd; border-radius: 18px; padding: 22px; background: #f7f8ff; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* phone */
+.phone { max-width: 440px; margin: 0 auto; min-height: calc(100vh - 60px); display: flex; flex-direction: column; background: var(--bg); }
+.pbody { flex: 1 1 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; padding-bottom: 110px; }
+.bnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.bnav-in { max-width: 440px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; padding: 6px 6px 10px; }
+.bnav button { border: none; background: none; font-size: 12px; color: var(--muted); padding: 8px 2px; }
+.bnav button.on { color: var(--blue); font-weight: 600; }
+.bnav .fab { justify-self: center; width: 62px; height: 62px; margin-top: -26px; border-radius: 50%; background: var(--lime); color: var(--ink); font-weight: 700; font-size: 14px; border: 4px solid var(--card); }
+.hero { background: var(--blue); color: #fff; border-radius: 24px; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.dark { background: var(--ink); color: #fff; }
+.areahead { border-radius: 0 0 26px 26px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.cnt3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; }
+.cnt3 > * { border-radius: 14px; padding: 8px 4px; display: flex; flex-direction: column; border: none; color: inherit; }
+.cnt3 b { font-size: 22px; line-height: 1.1; }
+.tabs3 { display: flex; gap: 4px; background: #e9ebf3; border-radius: 999px; padding: 4px; }
+.tabs3 button { flex: 1 1 0; border: none; background: transparent; border-radius: 999px; padding: 8px 4px; font-size: 13px; color: #475467; }
+.tabs3 button.on { background: var(--card); color: var(--ink); font-weight: 600; }
+.li { background: var(--card); border-radius: 16px; padding: 11px 14px; display: flex; gap: 10px; align-items: center; text-align: left; border: none; width: 100%; }
+.li .t { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.li .t span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.dot { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; }
+.scanbox { border: 2px dashed var(--lime); border-radius: 20px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+#scanIn { width: 100%; border: none; border-radius: 12px; padding: 12px; font-family: var(--mono); font-size: 20px; background: #2a3242; color: #fff; text-transform: uppercase; }
+#scanIn::placeholder { color: #98a2b3; text-transform: none; }
+.rcard { background: var(--card); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.rcard.oth { border: 2px solid var(--oth); } .rcard.unk { border: 2px solid var(--bad); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tog { border: 1px solid #d0d5dd; background: var(--card); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #344054; min-height: 40px; }
+.tog[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
+.cond { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.cond button { border: none; border-radius: 14px; padding: 10px 2px; font-weight: 600; font-size: 13px; background: var(--card); min-height: 44px; }
+.cond button[aria-pressed="true"] { background: var(--ok); color: #fff; }
+.cond button.w[aria-pressed="true"] { background: var(--warn); color: #1d0e00; }
+.sheetbg { position: fixed; inset: 0; z-index: 20; background: rgb(18 24 38 / .7); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.sheet { width: 100%; max-width: 440px; background: var(--bg); border-radius: 26px 26px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
+.sticker { align-self: center; width: 300px; max-width: 100%; transform: rotate(-2.5deg); }
+.sticker canvas { width: 100%; height: auto; display: block; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.book { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mini { background: var(--card); border-radius: 12px; padding: 9px 11px; border: none; border-top: 6px solid var(--ok); text-align: left; display: flex; flex-direction: column; font-size: 12px; min-width: 0; }
+.mini b { font-family: var(--mono); font-size: 14px; } .mini span { overflow-wrap: anywhere; }
+.toast { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); z-index: 30; background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: calc(100% - 32px); }
+.confirm { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--bad-soft); color: var(--bad-ink); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div id="app"></div>
+<input type="file" id="gFile" hidden aria-hidden="true">
+
+<script>
+(() => {
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem('amt.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('amt.' + k, JSON.stringify(v)); } catch {} }
+};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const norm = s => String(s ?? '').trim().toUpperCase();
+const N = n => Number(n || 0).toLocaleString();
+const fmtT = t => t ? new Date(t).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+const hm = t => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+const Store = window.AMSStore;
+async function cap(n) { if (n === 'downloads') return Store.downloads; if (n === 'db') return S.authed ? Store.db : null; return null; }
+const isLead = () => usbMode || S.user?.role === 'lead';
+
+/* ================= state ================= */
+let dev = LS.get('dev', null); if (!dev) { dev = 'd' + Math.random().toString(36).slice(2, 7); LS.set('dev', dev); }
+const S = {
+  mode: LS.get('mode', innerWidth < 760 ? 'app' : 'web'),
+  web: 'rounds', app: 'home', user: LS.get('user', null),
+  area: LS.get('area', null), room: LS.get('room', ''), manual: false,
+  areaTab: 'left', inboxTab: 'move', inboxSel: null, inboxChecked: new Set(),
+  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: 'a4', stPaste: '',
+  cards: [], item: null, imp: null, msg: {}, closeChoice: 'writeoff', confirmReset: false, verify: null, areaPick: false, liveArea: null,
+  gate: 'boot', authed: false, team: LS.get('team', []), firstRun: false, gateMsg: null, busy: false
+};
+let meta = null;                 // round document
+let master = new Map(), altIx = new Map();
+let serverEv = {};               // docId -> items (all devices)
+let mine = [];                   // this device's events for the current round
+let dirty = new Set(), writing = false, online = false;
+let db = null, dl = null;
+const CHUNK = 350;
+
+let usbMode = LS.get('usbMode', false), usbEv = {};   // usbEv: events that arrived by cable (file), per device
+function loadMine() { usbEv = meta ? LS.get('usb-' + meta.id, {}) : {}; mine = meta ? LS.get('mine-' + meta.id, []) : []; dirty = new Set(LS.get('dirty-' + (meta?.id || ''), [])); }
+function saveMine() { if (meta) { LS.set('mine-' + meta.id, mine); LS.set('dirty-' + meta.id, [...dirty]); } }
+
+function indexMaster(rows) {
+  master = new Map(); altIx = new Map();
+  for (const r of rows) {
+    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: r[6], wo: !!r[7] });
+    if (r[4]) altIx.set(r[4], r[0]);
+  }
+}
+
+/* ================= events → current state ================= */
+function allEvents() {
+  const m = new Map();
+  for (const k in serverEv) for (const e of serverEv[k]) m.set(e.id, e);
+  for (const k in usbEv) for (const e of usbEv[k]) m.set(e.id, e);
+  for (const e of mine) m.set(e.id, e);
+  return [...m.values()].sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1));
+}
+let _cache = null, _cacheKey = '';
+function compute() {
+  const evs = allEvents();
+  const key = evs.length + ':' + (evs.at(-1)?.id || '') + ':' + Object.keys(serverEv).length + ':' + master.size;
+  if (_cache && key === _cacheKey) return _cache;
+  const cur = new Map(), recount = new Set(), hist = new Map();
+  const H = (c, txt, e) => { let h = hist.get(c); if (!h) hist.set(c, h = []); h.push({ t: e.t, by: e.by, txt }); };
+  for (const e of evs) {
+    const c = e.code; let s = cur.get(c);
+    if (e.k === 'scan') {
+      if (s) { H(c, `สแกนซ้ำที่ ${e.areaName || ''}`, e); continue; }
+      cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0 });
+      recount.delete(c); H(c, `สแกนที่ ${e.areaName}${e.room ? ' · ' + e.room : ''}${e.ns ? ' (พิมพ์รหัสเอง)' : ''}`, e);
+    } else if (!s && e.k !== 'rv') { continue; }
+    else if (e.k === 'edit') {
+      for (const f of ['cond', 'remark', 'room', 'dec', 'uname']) if (e[f] !== undefined) s[f] = e[f];
+      if (e.flags) Object.assign(s.flags, e.flags);
+      if (e.printed) { s.flags.reprint = false; s.flags.namebad = false; s.printedAt = e.t; }
+      H(c, e.printed ? 'พิมพ์ป้ายใหม่แล้ว' : 'แก้ไข: ' + Object.keys(e).filter(k => !['id', 'k', 'code', 't', 'by', 'dev', 'round'].includes(k)).map(k => k === 'flags' ? 'ป้าย/โอนย้าย' : ({ cond: 'สภาพ', remark: 'Remark', room: 'ห้อง', dec: 'การตัดสินใจ', uname: 'ชื่อ' }[k] || k)).join(', '), e);
+    } else if (e.k === 'del') { cur.delete(c); H(c, 'ยกเลิกผลนับ', e); }
+    else if (e.k === 'rv') {
+      if (e.act === 'recount') { cur.delete(c); recount.add(c); H(c, 'หัวหน้าสั่งนับซ้ำ', e); continue; }
+      if (!s) continue;
+      if (e.act === 'approve_move') { s.rv.move = 'approved'; s.flags.pendingTransfer = true; s.flags.reprint = true; s.dec = s.dec || 'moved'; H(c, 'หัวหน้าอนุมัติย้ายแผนก', e); }
+      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'หัวหน้า: ไม่ย้าย (ยืม)', e); }
+      if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'หัวหน้า: รับเข้าทะเบียน', e); }
+      if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'หัวหน้า: ไม่ใช่ของเรา', e); }
+      if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'หัวหน้ารับทราบสภาพ', e); }
+      if (e.act === 'transferred') { s.flags.pendingTransfer = false; s.flags.transferred = true; H(c, 'ทำ AS02 ใน SAP แล้ว', e); }
+    }
+  }
+  _cacheKey = key; _cache = { cur, recount, hist, evs };
+  return _cache;
+}
+const isOther = s => { const a = master.get(s.code); return !!(a && !s.shared && s.area && a.cc && String(s.area) !== String(a.cc)); };
+const isMoved = s => isOther(s) && s.dec !== 'borrowed' && s.rv.move !== 'keep';
+const counted = a => !a.wo;   // rows already written off before this round are not counted
+
+function cats() {
+  const { cur } = compute(), out = { move: [], unk: [], dmg: [], reprint: [], namebad: [], transfer: [], cleared: [] };
+  for (const s of cur.values()) {
+    const a = master.get(s.code);
+    if (isOther(s) && s.dec !== 'borrowed' && !s.rv.move) out.move.push(s);
+    if (!a && !s.rv.unk) out.unk.push(s);
+    if ((s.cond === 'ชำรุด' || s.cond === 'รอซ่อม') && !s.rv.dmg) out.dmg.push(s);
+    if (s.flags.reprint) out.reprint.push(s);
+    if (s.flags.namebad) out.namebad.push(s);
+    if (s.flags.pendingTransfer) out.transfer.push(s);
+    if (s.rv.move || s.rv.unk || s.rv.dmg) out.cleared.push(s);
+  }
+  return out;
+}
+
+/* ================= storage: Artifact database, or this browser only ================= */
+function scheduleFlush() { clearTimeout(scheduleFlush.t); scheduleFlush.t = setTimeout(flush, 700); }
+async function flush() {
+  if (!db || !meta || writing || !dirty.size) { paintSync(); return; }
+  writing = true; paintSync();
+  try {
+    for (const k of [...dirty]) {
+      const items = mine.slice(k * CHUNK, (k + 1) * CHUNK);
+      await db.doc(`ev/${meta.id}-${dev}-${k}`).set({ round: meta.id, dev, items, at: Date.now() });
+      dirty.delete(k); saveMine();
+    }
+    online = true;
+  } catch (e) { online = false; clearTimeout(flush.r); flush.r = setTimeout(flush, 8000); }
+  writing = false; paintSync(); render();
+}
+function pushEvent(e) {
+  if (!meta) return;
+  const ev = { id: dev + '-' + Date.now().toString(36) + '-' + mine.length, t: Date.now(), by: S.user?.name || '?', dev, ...e };
+  mine.push(ev); dirty.add(Math.floor((mine.length - 1) / CHUNK)); saveMine(); _cache = null;
+  scheduleFlush();
+  return ev;
+}
+function pendingCount() {
+  if (!db) return 0;
+  return mine.filter(e => !isServer(e.id)).length;
+}
+async function saveMeta(m) {
+  if (m && !usbMode && S.team.length) m = { ...m, team: S.team.filter(u => u.active).map(u => ({ name: u.name, role: u.role, code: u.code })) };
+  meta = m; LS.set('meta', m);
+  if (db) { try { if (m) await db.doc('meta/round').set(m); else await db.doc('meta/round').delete(); online = true; } catch (e) { online = false; flash('บันทึกขึ้นระบบไม่สำเร็จ ลองใหม่'); } }
+  _cache = null; render();
+}
+async function saveMaster(rows, m) {
+  indexMaster(rows); LS.set('master', rows);
+  const parts = []; let cur = [], size = 0;
+  for (const r of rows) { const n = new TextEncoder().encode(JSON.stringify(r)).length; if (size + n > 190000 && cur.length) { parts.push(cur); cur = []; size = 0; } cur.push(r); size += n; }
+  if (cur.length) parts.push(cur);
+  m.ver = 'v' + Date.now(); m.chunks = parts.length;
+  if (db) for (let i = 0; i < parts.length; i++) { flash(`กำลังส่งทะเบียนขึ้นระบบ ${i + 1}/${parts.length}`); await db.doc('master/c' + i).set({ ver: m.ver, rows: parts[i] }); }
+  LS.set('masterVer', m.ver);
+  await saveMeta(m);
+}
+let unsubEv = null, evRound = null, unsubMeta = null;
+function subscribeEvents() {
+  if (!db || !meta || evRound === meta.id) return;
+  if (unsubEv) unsubEv();
+  evRound = meta.id; serverEv = {};
+  unsubEv = db.collection('ev').where('round', '==', meta.id).onSnapshot(snap => {
+    const m = {}; for (const d of snap.docs) { const x = d.data(); if (x) m[d.id] = x.items || []; }
+    serverEv = m; online = true; _cache = null; render();
+  }, () => { online = false; paintSync(); });
+}
+async function loadMaster(m) {
+  const rows = [];
+  for (let i = 0; i < m.chunks; i++) { const d = (await db.doc('master/c' + i).get()).data(); if (!d || d.ver !== m.ver) return false; rows.push(...d.rows); }
+  indexMaster(rows); LS.set('master', rows); LS.set('masterVer', m.ver); return true;
+}
+async function loadTeam() {
+  try { S.team = await Store.auth.team(); LS.set('team', S.team); } catch {}
+}
+async function connect() {
+  dl = await cap('downloads');
+  if (usbMode) { S.gate = null; paintSync(); render(); return; }   // cable mode: no online database, files only
+  if (!Store.auth.configured()) { S.gate = 'setup'; render(); return; }
+  let sess = null;
+  try { sess = await Store.auth.session(); } catch {}
+  if (!sess) { S.gate = 'login'; S.authed = false; S.firstRun = !(await Store.auth.anyUser().catch(() => true)); render(); return; }
+  try {
+    const p = await Store.auth.profile();
+    if (!p) { S.gate = 'login'; render(); return; }
+    if (!p.active) { S.gate = 'inactive'; S.user = { id: p.id, name: p.name, code: p.code, role: p.role }; render(); return; }
+    S.user = { id: p.id, name: p.name, code: p.code, role: p.role }; LS.set('user', S.user);
+    await loadTeam();
+  } catch (e) {
+    // no internet: keep working with the account saved on this device
+    if (!S.user) { S.gate = 'login'; S.gateMsg = 'ยังไม่มีอินเทอร์เน็ต · ต้องเข้าสู่ระบบออนไลน์ครั้งแรกก่อน'; render(); return; }
+  }
+  S.gate = null; S.authed = true;
+  db = await cap('db');
+  if (!db) { paintSync(); render(); return; }
+  unsubMeta?.();
+  unsubMeta = db.doc('meta/round').onSnapshot(async s => {
+    const m = s.exists ? s.data() : null;
+    const roundChanged = (m?.id || null) !== (meta?.id || null);
+    if (m && m.ver && m.ver !== LS.get('masterVer', null)) { flash('กำลังโหลดทะเบียน…'); await loadMaster(m); }
+    meta = m; LS.set('meta', m); if (roundChanged) { loadMine(); evRound = null; }
+    subscribeEvents(); online = true; _cache = null; render(); if (dirty.size) flush();
+  }, () => { online = false; paintSync(); });
+}
+
+window.addEventListener('online', () => { if (db) flush(); });
+/* ================= boot from this browser's copy ================= */
+meta = LS.get('meta', null); indexMaster(LS.get('master', [])); loadMine();
+
+/* ================= UI shell ================= */
+function flash(t) { S.toast = t; clearTimeout(flash.t); flash.t = setTimeout(() => { S.toast = null; render(); }, 2600); render(); }
+function syncInfo() {
+  if (usbMode) { const n = mine.length - LS.get('usbOut-' + (meta?.id || ''), 0); return [n > 0 ? 's-wait' : 's-on', n > 0 ? `สาย USB · ยังไม่ส่งออก ${n}` : 'สาย USB · ส่งออกครบ']; }
+  if (!db) return ['s-wait', 'ยังไม่เชื่อมต่อ'];
+  const p = pendingCount();
+  if (!online) return ['s-wait', p ? `ออฟไลน์ · รอส่ง ${p}` : 'ออฟไลน์'];
+  if (p || writing) return ['s-wait', `กำลังส่ง ${p}`];
+  return ['s-on', '✓✓ ซิงก์แล้ว'];
+}
+function paintSync() { const el = $('#sync'); if (el) { const [c, t] = syncInfo(); el.className = 'sync ' + c; el.textContent = t; } }
+const stageOf = () => !meta ? 0 : meta.status === 'prepare' ? 1 : meta.status === 'counting' ? 2 : 4;
+
+function render() {
+  const root = $('#app'); if (!root) return;
+  const keepFocus = document.activeElement?.id;
+  const [sc, st] = syncInfo();
+  const c = meta && master.size ? cats() : null;
+  const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
+  let html = `<header class="top"><div class="top-in">
+    <span class="logo"><i>A</i>AMS Count</span>
+    <div class="seg" role="group" aria-label="เลือกหน้าจอ"><button data-a="mode" data-v="web" aria-pressed="${S.mode === 'web'}">คอม (เว็บ)</button><button data-a="mode" data-v="app" aria-pressed="${S.mode === 'app'}">เครื่องยิง (แอป)</button></div>`;
+  if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus(); return; }
+  if (S.mode === 'web' && meta && !isLead()) {
+    html += `<nav class="pills" aria-label="เมนู"><button class="pill ${S.web === 'live' ? 'on' : ''}" data-a="web" data-v="live">② นับ (ดูอย่างเดียว)</button></nav>`;
+  } else if (S.mode === 'web') {
+    const stg = stageOf();
+    const P = (v, label, n, doneAt) => `<button class="pill ${S.web === v ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}">${label}${n ? ` <b>[${n}]</b>` : ''}</button>`;
+    html += `<nav class="pills" aria-label="ช่วงของรอบนับ">${P('rounds', 'รอบนับ', 0, 99)}${P('prepare', '① เตรียม', 0, 1)}${P('live', '② นับ', 0, 99)}${P('inbox', '③ ตรวจ', inboxN, 99)}${P('close', '④⑤ ปิด + ส่งออก', 0, 99)}${P('stickers', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99)}${P('usb', 'สาย USB', 0, 99)}${usbMode ? '' : P('team', 'ทีม + ตั้งค่า', 0, 99)}</nav>`;
+  }
+  html += `<span id="sync" class="sync ${sc}">${st}</span></div></header>`;
+  html += S.mode === 'web' ? webView(c) : appView(c);
+  if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
+  root.innerHTML = html;
+  afterRender();
+  if (keepFocus && $('#' + keepFocus)) { const el = $('#' + keepFocus); el.focus(); if (el.setSelectionRange && el.value != null) try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
+}
+
+/* ================= WEB ================= */
+function webView(c) {
+  if (S.web === 'team' && !usbMode) return webTeam();
+  if (!isLead()) return meta && master.size ? webLive(c) : `<main class="wrap"><div class="card"><h2>ยังไม่มีรอบนับที่เปิดอยู่</h2><p class="sub">บัญชีคนนับดูผลบนคอมได้อย่างเดียว · งานเตรียม ตรวจ และปิดรอบเป็นของหัวหน้า</p></div></main>`;
+  if (!meta || S.web === 'rounds') return webRounds(c);
+  if (S.web === 'prepare') return webPrepare();
+  if (S.web === 'live') return webLive(c);
+  if (S.web === 'inbox') return webInbox(c);
+  if (S.web === 'close') return webClose(c);
+  if (S.web === 'stickers') return webStickers(c);
+  if (S.web === 'usb') return webUsb();
+  return webRounds(c);
+}
+function totals() {
+  const { cur } = compute(); let total = 0, found = 0;
+  for (const a of master.values()) { if (!counted(a)) continue; total++; if (cur.has(a.code)) found++; }
+  let other = 0, unk = 0; for (const s of cur.values()) { if (isOther(s)) other++; if (!master.has(s.code)) unk++; }
+  return { total, found, left: total - found, other, unk };
+}
+function webRounds(c) {
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">สวัสดี ${esc(S.user?.name || '')} · ข้อมูลซิงก์กับทุกเครื่องผ่าน Supabase</p><h1>รอบนับ</h1></div>`;
+  h += `<button class="btn pri" data-a="newround">+ สร้างรอบนับใหม่</button></div>`;
+  if (!meta) {
+    h += `<div class="card"><h2>ยังไม่มีรอบนับ</h2><p class="sub">เริ่มจากสร้างรอบนับ แล้วนำเข้าไฟล์ Excel ทะเบียนทรัพย์สิน (ไฟล์ SAP เดิมใช้ได้เลย)</p>
+      <ol class="sub" style="margin:0;padding-left:20px"><li>คอม: สร้างรอบ → นำเข้าไฟล์ → มอบพื้นที่ → ปล่อยภารกิจ</li><li>เครื่องยิง: เปิดแอป AMS Count → เข้าสู่ระบบด้วยรหัสพนักงาน + PIN → นับ</li><li>คอม: ดูผลสด → ตรวจ → ปิดรอบ → ส่งออก Excel / พิมพ์สติ๊กเกอร์</li></ol></div>`;
+  } else {
+    const T = totals(), pct = T.total ? Math.round(T.found / T.total * 100) : 0;
+    const stLabel = { prepare: ['c-blue', '① กำลังเตรียม'], counting: ['c-warn', '② กำลังนับ'], closed: ['c-ok', 'ปิดรอบแล้ว'] }[meta.status] || ['c-gray', meta.status];
+    h += `<button class="card" data-a="web" data-v="${meta.status === 'prepare' ? 'prepare' : meta.status === 'closed' ? 'close' : 'live'}" style="border:2px solid var(--blue);text-align:left;color:inherit">
+      <div class="row" style="justify-content:space-between"><span class="chip ${stLabel[0]}">${stLabel[1]}</span><span class="sub">${esc(meta.fileName || 'ยังไม่นำเข้าไฟล์')}${meta.sheet ? ' · ' + esc(meta.sheet) : ''}</span></div>
+      <b style="font-size:24px">${esc(meta.name)}</b>
+      <span class="sub">${N(T.total)} รหัสที่ต้องนับ · ${(meta.areas || []).length} พื้นที่ · ${(meta.team || []).length} คน</span>
+      <div class="bar" aria-label="นับพบ ${pct}%"><i style="width:${pct}%;background:var(--ok)"></i></div>
+      <span class="sub"><b style="color:var(--ok-ink)">${pct}%</b> นับพบ · ต่างแผนก ${N(T.other)} · ไม่อยู่ในทะเบียน ${N(T.unk)} · เรื่องรอตรวจ ${c ? c.move.length + c.unk.length + c.dmg.length : 0}</span></button>`;
+    h += `<div class="card"><h2>ลบรอบนี้</h2><p class="sub">ลบรอบนับและผลนับทั้งหมดของรอบนี้ออกจากระบบ (ทะเบียนยังเก็บไว้ใช้รอบต่อไป) · ส่งออก Excel เก็บไว้ก่อนลบ</p>${S.confirmReset ? `<div class="confirm"><b>ลบรอบนี้และผลนับทั้งหมดของทุกเครื่อง?</b><div class="row"><button class="btn red" data-a="reset">ลบเลย</button><button class="btn" data-a="noreset">ยกเลิก</button></div></div>` : `<div class="row"><button class="btn red" data-a="askreset">ลบรอบนี้</button></div>`}</div>`;
+  }
+  return h + `</main>`;
+}
+
+/* ---------- ① prepare ---------- */
+function guess(headers, words, rows) {
+  const hits = []; for (const w of words) headers.forEach((h, i) => { if (norm(h).includes(w) && !hits.includes(i)) hits.push(i); });
+  if (rows) { const f = hits.find(i => rows.filter(r => String(r[i] ?? '').trim()).length >= rows.length / 2); if (f !== undefined) return f; }
+  return hits.length ? hits[0] : -1;
+}
+function detectTpl(h) {
+  const find = f => h.findIndex(f), ccNew = find(x => norm(x).replace(/\s/g, '').includes('CC(NEW)'));
+  return { sticker: find(x => x.includes('ติดสติ') && !x.includes('ยังไม่')), nosticker: find(x => x.includes('ยังไม่ติด')), note: find(x => x.includes('หมายเหตุ')), status: find(x => norm(x) === 'STATUS'), ccNew, ccNewName: ccNew >= 0 && ccNew + 1 < h.length ? ccNew + 1 : -1 };
+}
+const cellStr = v => v instanceof Date ? `${v.getMonth() + 1}/${v.getDate()}/${v.getFullYear()}` : String(v ?? '').trim();
+function readSheet(buf, name) {
+  const wb = XLSX.read(buf, { type: 'array', codepage: 874, cellDates: true, sheets: name }), ws = wb.Sheets[name];
+  if (ws['!ref']) { const r = XLSX.utils.decode_range(ws['!ref']); if (r.e.r > 60000) r.e.r = 60000; if (r.e.c > 120) r.e.c = 120; ws['!ref'] = XLSX.utils.encode_range(r); }
+  let rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }).map(r => r.map(cellStr));
+  const hi = Math.max(0, rows.slice(0, 15).findIndex(r => r.some(c => norm(c) === 'ASSET')));
+  rows = rows.slice(hi).filter(r => r.some(c => c));
+  if (rows.length < 2) return null;
+  const width = Math.max(...rows.map(r => r.length)), keep = [];
+  for (let i = 0; i < width; i++) if (rows.some(r => r[i])) keep.push(i);
+  rows = rows.map(r => keep.map(i => r[i] ?? ''));
+  return { headers: rows[0].map((h, i) => h || 'คอลัมน์ ' + (i + 1)), rows: rows.slice(1) };
+}
+function prepareImport(name) {
+  const p = readSheet(S.imp.buf, name); if (!p) { S.imp.err = 'ชีตนี้ไม่มีข้อมูลทะเบียน'; return; }
+  const h = p.headers, b = p.rows, ex = h.findIndex(x => norm(x) === 'ASSET');
+  Object.assign(S.imp, { sheet: name, headers: h, rows: b, err: null, tpl: detectTpl(h), map: {
+    code: ex >= 0 ? ex : Math.max(0, guess(h, ['ASSET', 'รหัส', 'CODE'])), alt: guess(h, ['INVENTORY'], b), name: guess(h, ['DESC', 'ชื่อ', 'รายการ', 'NAME']),
+    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER'], b), cls: guess(h, ['ASSET CLASS', 'CLASS']) } });
+}
+function importStats() {
+  const I = S.imp, m = I.map, codes = new Map(); let wo = 0;
+  for (const r of I.rows) { const c = norm(r[m.code]); if (!c) continue; codes.set(c, (codes.get(c) || 0) + 1); if (I.tpl.status >= 0 && r[I.tpl.status] === 'Write - Off') wo++; }
+  return { codes: codes.size, rows: I.rows.length, multi: [...codes.values()].filter(v => v > 1).length, wo };
+}
+function webPrepare() {
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)}</p><h1>① เตรียมรอบนับ</h1></div>`;
+  const locked = meta.status !== 'prepare';
+  // 1 file
+  h += `<section class="card"><h2>1 · ไฟล์ทะเบียน</h2>`;
+  if (master.size && !S.imp) {
+    h += `<div class="msg ok">✓ ${esc(meta.fileName)} · ชีต ${esc(meta.sheet)} · ${N(master.size)} รหัส${meta.woCount ? ` · ไม่นับ ${meta.woCount} รหัสที่ Write-Off อยู่แล้ว` : ''}</div>`;
+    if (!locked) h += `<button class="btn sm" data-a="pick" data-v="master" style="align-self:flex-start">เปลี่ยนไฟล์</button>`;
+  } else if (!S.imp) {
+    h += `<div class="drop" data-drop="master"><b>ลากไฟล์ Excel มาวางตรงนี้</b><span class="sub">.xlsx .xls .csv · ไฟล์ Export จาก SAP ใช้ได้เลย</span><button class="btn pri" data-a="pick" data-v="master">เลือกไฟล์</button></div>`;
+  } else {
+    const I = S.imp, opts = sel => `<option value="-1">— ไม่ใช้ —</option>` + I.headers.map((x, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
+    h += `<div class="row"><b>${esc(I.fileName)}</b><label class="f" style="flex-direction:row;align-items:center;gap:8px">ชีต <select class="in" id="impSheet" style="width:auto">${I.names.map(n => `<option ${n === I.sheet ? 'selected' : ''}>${esc(n)}${I.hidden.has(n) ? ' (ซ่อน)' : ''}</option>`).join('')}</select></label></div>`;
+    if (I.err) h += `<div class="msg bad">${esc(I.err)}</div>`;
+    else {
+      const st = importStats();
+      h += `<div class="grid">${[['code', 'รหัสบนสติ๊กเกอร์ *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'Cost Center (รหัส)'], ['ccName', 'Cost Center (ชื่อ) = พื้นที่'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
+        <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รหัส จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">${st.multi} รหัสมีรายการย่อย · สแกนครั้งเดียวนับครบ</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>
+        <div class="row"><button class="btn pri" data-a="doimport">นำเข้า ${N(st.codes)} รหัส</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
+    }
+  }
+  h += `</section>`;
+  if (master.size) {
+    const team = usbMode ? (meta.team || []) : S.team.filter(u => u.active);
+    h += `<section class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2>2 · ทีม</h2>${usbMode ? '' : '<button class="btn sm" data-a="web" data-v="team">เพิ่ม / แก้ทีม</button>'}</div><div class="chips">${team.map(u => `<span class="chip ${u.role === 'lead' ? 'c-blue' : 'c-gray'}">${esc(u.name)} · ${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span>`).join('') || '<span class="sub">ยังไม่มี · เพิ่มคนนับที่หน้า ทีม + ตั้งค่า</span>'}</div></section>`;
+    const areas = meta.areas || [];
+    h += `<section class="card"><div class="row" style="justify-content:space-between"><h2>3 · พื้นที่ + ภารกิจ</h2><span class="sub">สร้างจาก Cost Center อัตโนมัติ ${areas.filter(a => !a.shared).length} พื้นที่</span></div>
+      <div class="tbl-wrap"><table><thead><tr><th>พื้นที่</th><th>CC</th><th>รหัสที่ต้องนับ</th><th>คนนับ</th></tr></thead><tbody>${areas.map((a, i) => `<tr><td><b>${esc(a.name)}</b>${a.shared ? ' <span class="chip c-oth">ส่วนกลาง</span>' : ''}</td><td class="mono">${esc(a.shared ? '—' : a.code)}</td><td>${a.shared ? '—' : N(a.count)}</td><td><select class="in" data-assign="${i}" style="min-width:150px"><option value="">ใครก็หยิบได้</option>${team.filter(u => u.role === 'counter' || u.role === 'lead').map(u => `<option ${a.assignee === u.name ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      <div class="row"><input class="in" id="newArea" placeholder="พื้นที่ส่วนกลาง เช่น ห้องประชุมชั้น 4" style="max-width:300px"><button class="btn" data-a="addarea">+ เพิ่มพื้นที่</button></div></section>`;
+    h += `<div class="row" style="justify-content:flex-end;align-items:center">${locked ? `<span class="msg ok">ปล่อยภารกิจแล้ว · แก้คนนับได้ตลอด</span>` : `<span class="sub">ทีมจะเห็นภารกิจในแอปทันที</span><button class="btn pri" data-a="release">ปล่อยภารกิจ → เริ่มนับ</button>`}</div>`;
+  }
+  return h + `</main>`;
+}
+
+/* ---------- ② live ---------- */
+function areaStats() {
+  const { cur } = compute(), st = new Map();
+  for (const a of meta.areas || []) st.set(String(a.code), { ...a, total: 0, found: 0, other: 0, here: 0 });
+  for (const a of master.values()) { if (!counted(a)) continue; const x = st.get(String(a.cc)); if (!x) continue; x.total++; if (cur.has(a.code)) x.found++; }
+  for (const s of cur.values()) { const x = st.get(String(s.area)); if (!x) continue; x.here++; if (isOther(s)) x.other++; }
+  return st;
+}
+function webLive(c) {
+  const T = totals(), { cur, evs } = compute(), st = areaStats();
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด</p><h1>② นับ</h1></div>${meta.status === 'prepare' ? `<span class="msg warn">ยังไม่ปล่อยภารกิจ แอปยังนับไม่ได้</span>` : ''}</div>`;
+  h += `<div class="kpis"><div class="kpi" style="background:var(--ok);color:#fff"><span style="color:#fff">นับพบ</span><b>${N(T.found)}</b><span style="color:#e7f8ef">จาก ${N(T.total)} · ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></div>
+    <div class="kpi"><span>ยังไม่พบ</span><b style="color:var(--warn-ink)">${N(T.left)}</b></div>
+    <button class="kpi" data-a="inboxtab" data-v="move" style="border:none;text-align:left"><span>เจอต่างแผนก</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>ไปกล่องตรวจ →</span></button>
+    <button class="kpi" data-a="inboxtab" data-v="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ไปกล่องตรวจ →</span></button></div>`;
+  h += `<div class="row"><section class="card grow"><div class="row" style="justify-content:space-between"><h2>แผนที่พื้นที่</h2><span class="sub">สีเข้ม = นับใกล้ครบ · แตะเพื่อดูรายการ</span></div><div class="grid">`;
+  for (const x of st.values()) {
+    const p = x.total ? x.found / x.total : 0;
+    const bg = x.shared ? 'var(--oth-soft)' : p >= 1 ? '#12b76a' : p >= .66 ? '#6ce9a6' : p >= .33 ? '#a6f4c5' : p > 0 ? '#d1fadf' : '#f2f4f7';
+    const fg = x.shared ? '#3e1c96' : p >= 1 ? '#ffffff' : p > 0 ? '#053321' : '#344054';
+    h += `<button class="tile" data-a="livearea" data-v="${esc(x.code)}" style="background:${bg};color:${fg};${S.liveArea === String(x.code) ? 'outline:3px solid var(--blue)' : ''}"><b>${esc(x.name)}</b><span class="p">${x.shared ? x.here : Math.round(p * 100) + '%'}</span><small>${x.shared ? 'ส่วนกลาง' : `${N(x.found)}/${N(x.total)}`}${x.other ? ` · +${x.other} แผนกอื่น` : ''} · ${esc(x.assignee || 'ใครก็ได้')}</small></button>`;
+  }
+  h += `</div>`;
+  if (S.liveArea && st.get(S.liveArea)) {
+    const x = st.get(S.liveArea), left = [...master.values()].filter(a => counted(a) && String(a.cc) === S.liveArea && !cur.has(a.code));
+    const here = [...cur.values()].filter(s => String(s.area) === S.liveArea);
+    h += `<div class="card" style="background:#f8f9fc"><h2>${esc(x.name)}</h2><div class="row"><div class="grow"><b>ยังไม่เจอ (${left.length})</b><div class="tbl-wrap" style="max-height:280px;overflow-y:auto"><table><tbody>${left.slice(0, 200).map(a => `<tr><td class="mono">${esc(a.code)}</td><td>${esc(a.name)}</td></tr>`).join('') || '<tr><td>ครบแล้ว</td></tr>'}</tbody></table></div></div>
+      <div class="side"><b>สแกนในพื้นที่นี้ (${here.length})</b><div class="tbl-wrap" style="max-height:280px;overflow-y:auto"><table><tbody>${here.map(s => `<tr class="click" data-a="openinbox" data-v="${esc(s.code)}"><td class="mono">${esc(s.code)}</td><td>${badge(s)}</td><td>${esc(s.by)}</td></tr>`).join('') || '<tr><td>—</td></tr>'}</tbody></table></div></div></div></div>`;
+  }
+  h += `</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
+  const devs = new Map(); for (const e of evs) { const d = devs.get(e.dev) || { by: e.by, n: 0, t: 0 }; d.n++; d.t = Math.max(d.t, e.t); d.by = e.by; devs.set(e.dev, d); }
+  h += `<section class="card"><h2>ทีม / เครื่อง</h2>${[...devs.entries()].map(([d, x]) => `<div class="row" style="align-items:center"><span class="dot" style="background:var(--orange);color:#1d0e00">${esc((x.by || '?').slice(0, 1))}</span><span style="flex:1"><b>${esc(x.by)}</b><br><span class="sub">เครื่อง ${esc(d)}${d === dev ? ' (เครื่องนี้)' : ''} · ${N(x.n)} รายการ · ล่าสุด ${hm(x.t)}</span></span></div>`).join('') || '<p class="sub">ยังไม่มีใครสแกน</p>'}</section>`;
+  const last = [...cur.values()].sort((a, b) => b.t - a.t).slice(0, 8);
+  h += `<section class="card"><h2>สแกนล่าสุด</h2>${last.map(s => `<button class="li" data-a="openinbox" data-v="${esc(s.code)}" style="background:#f8f9fc"><span class="t"><b class="mono">${esc(s.code)}</b><span>${esc(master.get(s.code)?.name || s.uname || 'ไม่อยู่ในทะเบียน')} · ${esc(s.areaName)}</span></span>${badge(s)}</button>`).join('') || '<p class="sub">—</p>'}</section></aside></div>`;
+  return h + `</main>`;
+}
+function badge(s) {
+  if (!master.has(s.code)) return '<span class="chip c-bad">ไม่อยู่ในทะเบียน</span>';
+  if (isOther(s)) return s.dec === 'borrowed' || s.rv.move === 'keep' ? '<span class="chip c-gray">ยืมมา</span>' : `<span class="chip c-oth">${s.rv.move === 'approved' ? 'อนุมัติย้าย' : 'ของแผนกอื่น'}</span>`;
+  if (s.cond !== 'ปกติ') return `<span class="chip c-warn">${esc(s.cond)}</span>`;
+  return '<span class="chip c-ok">พบ</span>';
+}
+
+/* ---------- ③ inbox ---------- */
+const TABS = [['move', 'ย้ายแผนก', 'c-oth'], ['unk', 'ไม่อยู่ในทะเบียน', 'c-bad'], ['dmg', 'ชำรุด / รอซ่อม', 'c-warn'], ['reprint', 'พิมพ์สติ๊กเกอร์ใหม่', 'c-blue'], ['namebad', 'ชื่อบนป้ายไม่ตรง', 'c-blue'], ['transfer', 'รอโอนย้าย', 'c-oth'], ['cleared', 'เคลียร์แล้ว', 'c-gray']];
+function webInbox(c) {
+  const list = c[S.inboxTab] || [];
+  if (S.inboxSel && !compute().cur.has(S.inboxSel)) S.inboxSel = null;
+  const selCode = S.inboxSel || list[0]?.code || null;
+  const open = c.move.length + c.unk.length + c.dmg.length;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่หัวหน้าต้องตัดสิน</p><h1>③ กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · เคลียร์แล้ว ${c.cleared.length}</p></div>`;
+  if (S.inboxTab === 'move') h += `<button class="btn dark" data-a="bulkapprove" ${S.inboxChecked.size ? '' : 'disabled'}>อนุมัติย้ายที่เลือก (${S.inboxChecked.size})</button>`;
+  h += `</div><div class="pills">${TABS.map(([k, l, cl]) => `<button class="pill ${S.inboxTab === k ? 'on' : ''}" data-a="inboxtab" data-v="${k}">${l} [${c[k].length}]</button>`).join('')}</div><div class="row"><section class="side" style="display:flex;flex-direction:column;gap:8px">`;
+  if (!list.length) h += `<div class="card"><p class="sub">ไม่มีเรื่องในแท็บนี้</p></div>`;
+  for (const s of list.slice(0, 150)) {
+    const a = master.get(s.code);
+    h += `<div class="li" style="${s.code === selCode ? 'outline:2px solid var(--blue)' : ''}">${S.inboxTab === 'move' ? `<input type="checkbox" data-a="check" data-v="${esc(s.code)}" ${S.inboxChecked.has(s.code) ? 'checked' : ''} aria-label="เลือก ${esc(s.code)}" style="width:20px;height:20px;accent-color:var(--oth)">` : ''}
+      <button data-a="inboxsel" data-v="${esc(s.code)}" style="all:unset;cursor:pointer;flex:1;min-width:0;display:flex;flex-direction:column" class="t"><b class="mono">${esc(s.code)}</b><span>${esc(a?.name || s.uname || '(ไม่มีชื่อ)')}</span><span>${a && isOther(s) ? `${esc(a.ccName)} → พบที่ ${esc(s.areaName)} · ${decLabel(s.dec)}` : `${esc(s.areaName)} · ${esc(s.by)}`}</span></button></div>`;
+  }
+  h += `</section><section class="card grow">${selCode ? inboxDetail(selCode) : '<p class="sub">เลือกเรื่องทางซ้าย</p>'}</section></div></main>`;
+  return h;
+}
+const decLabel = d => ({ moved: 'คนนับ: ย้ายมาแล้ว', borrowed: 'คนนับ: ยืมมา', unsure: 'คนนับ: ไม่แน่ใจ' }[d] || 'ยังไม่ระบุ');
+function inboxDetail(code) {
+  const { cur, hist } = compute(), s = cur.get(code), a = master.get(code);
+  if (!s) return '<p class="sub">ไม่มีผลนับ</p>';
+  let h = `<div class="row" style="justify-content:space-between"><b class="mono" style="font-size:22px">${esc(code)}</b>${badge(s)}</div><div style="font-size:17px">${esc(a?.name || s.uname || '(คนนับไม่ได้กรอกชื่อ)')}${a ? ` · Class ${esc(a.cls)}` : ''}</div>`;
+  if (a) h += `<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;text-align:center"><div class="card" style="background:#f4f5fa;padding:12px"><span class="sub">ในทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">${esc(a.cc)}</span></div><b style="color:var(--oth)">${isOther(s) ? '→' : '='}</b><div class="card" style="background:${isOther(s) ? 'var(--oth-soft)' : 'var(--ok-soft)'};padding:12px"><span class="sub">พบจริงที่</span><b>${esc(s.areaName)}</b><span class="sub">${esc(s.room || '')}</span></div></div>`;
+  h += `<p class="sub">${esc(s.by)} · ${fmtT(s.t)} · สภาพ <b>${esc(s.cond)}</b>${s.remark ? ' · ' + esc(s.remark) : ''}${s.ns ? ' · พิมพ์รหัสเอง (ไม่มีสติ๊กเกอร์)' : ''}</p>`;
+  const B = (act, label, cls) => `<button class="btn ${cls || ''}" data-a="rv" data-act="${act}" data-v="${esc(code)}">${label}</button>`;
+  h += `<div class="row">`;
+  if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมชั่วคราว)') + B('recount', 'สั่งนับซ้ำ');
+  if (!a && !s.rv.unk) h += B('unk_accept', 'รับเข้าทะเบียน', 'pri') + B('unk_reject', 'ไม่ใช่ของเรา');
+  if ((s.cond === 'ชำรุด' || s.cond === 'รอซ่อม') && !s.rv.dmg) h += B('dmg_ack', 'รับทราบสภาพ', 'pri');
+  if (s.flags.pendingTransfer) h += B('transferred', 'ทำ AS02 ใน SAP แล้ว', 'oth');
+  if (!isOther(s) || s.rv.move) h += B('recount', 'สั่งนับซ้ำ');
+  h += `</div><div><span class="sub">ป้าย + การโอนย้าย (แตะเพื่อเปิด/ปิด)</span><div class="chips" style="margin-top:6px">${flagChips(s, 'leadflag')}</div></div>`;
+  h += `<div class="card" style="background:#f8f9fc;padding:12px"><b>ประวัติ</b>${(hist.get(code) || []).map(x => `<span class="sub">${fmtT(x.t)} · ${esc(x.by)} · ${esc(x.txt)}</span>`).join('')}</div>`;
+  return h;
+}
+function flagChips(s, act) {
+  return [['reprint', 'ต้องพิมพ์สติ๊กเกอร์ใหม่'], ['namebad', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ'], ['transferred', 'มีการโอนย้ายแล้ว'], ['pendingTransfer', 'รอโอนย้าย']]
+    .map(([k, l]) => `<button class="tog" aria-pressed="${!!s.flags[k]}" data-a="${act}" data-f="${k}" data-v="${esc(s.code)}">${s.flags[k] ? '✓ ' : ''}${l}</button>`).join('');
+}
+
+/* ---------- ④⑤ close + export ---------- */
+function webClose(c) {
+  const T = totals(), areas = meta.areas || [], unassigned = areas.filter(a => !a.shared && !a.assignee).length, open = c.move.length + c.unk.length + c.dmg.length, closed = meta.status === 'closed';
+  const ck = (ok, title, sub) => `<div class="row" style="align-items:flex-start"><span class="dot" style="width:28px;height:28px;background:${ok ? 'var(--ok)' : 'var(--warn)'}">${ok ? '✓' : '!'}</span><span style="flex:1"><b>${title}</b><br><span class="sub">${sub}</span></span></div>`;
+  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>④ ปิดรอบ</h1>`;
+  if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
+  else {
+    h += ck(unassigned === 0, 'ทุกพื้นที่มีคนนับ', unassigned ? `ยังไม่มีคนนับ ${unassigned} พื้นที่ (ใครก็หยิบได้)` : 'ครบ');
+    h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่ ② นับ');
+    h += ck(open === 0, 'กล่องตรวจเคลียร์หมด', open ? `ค้าง ${open} เรื่อง` : 'ครบ');
+    h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
+    h += `<button class="btn dark" data-a="closeround">${open ? `ปิดรอบ (ยังค้าง ${open} เรื่อง)` : 'ปิดรอบ'}</button>${open ? '<p class="sub">ปิดได้ แต่เรื่องที่ค้างจะติดไปในไฟล์ส่งออกตามสถานะล่าสุด</p>' : ''}`;
+  }
+  h += `</section><section class="grow" style="display:flex;flex-direction:column;gap:12px"><h1>⑤ ส่งออก</h1>${closed ? '' : '<p class="sub">ก่อนปิดรอบ ไฟล์จะเขียนว่า "ฉบับร่าง"</p>'}<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
+    <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:#d6ddff">XLSX · ไฟล์หลัก</span><b style="font-size:18px">ผลนับตามแม่แบบเดิม</b><span style="font-size:14px;color:#e3e8ff">สรุป · Data · Transfer · write-off · สรุป write-off · คิวป้าย · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main">ดาวน์โหลด</button></div>
+    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--oth-ink)">XLSX · SAP AS02</span><b style="font-size:18px">Transfer ย้ายแผนก</b><span class="sub">อนุมัติแล้ว ${c.transfer.length + c.cleared.filter(s => s.rv.move === 'approved' && !s.flags.pendingTransfer).length} รายการ</span><button class="btn" data-a="export" data-v="transfer">ดาวน์โหลด</button></div>
+    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--bad-ink)">XLSX · SAP ABAVN</span><b style="font-size:18px">Write-Off</b><span class="sub">${N(T.left)} รหัสที่ยังไม่พบ</span><button class="btn" data-a="export" data-v="writeoff">ดาวน์โหลด</button></div>
+    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--blue-ink)">PDF</span><b style="font-size:18px">สติ๊กเกอร์ QR</b><span class="sub">คิวพิมพ์ ${c.reprint.length + c.namebad.length} ดวง</span><button class="btn" data-a="web" data-v="stickers">ไปหน้าพิมพ์</button></div></div>
+    ${S.msg.exp ? `<div class="msg ${S.msg.exp[1]}">${esc(S.msg.exp[0])}</div>` : ''}</section></div></main>`;
+  return h;
+}
+
+/* ---------- stickers ---------- */
+function stickerList(c) {
+  const { cur } = compute();
+  if (S.stTab === 'reprint') return c.reprint.map(s => s.code);
+  if (S.stTab === 'namebad') return c.namebad.map(s => s.code);
+  if (S.stTab === 'moved') return [...cur.values()].filter(s => s.rv.move === 'approved').map(s => s.code);
+  if (S.stTab === 'ns') return [...cur.values()].filter(s => s.ns).map(s => s.code);
+  if (S.stTab === 'paste') { const out = []; for (const t of S.stPaste.split(/[\s,;]+/)) { const c2 = resolve(t); if (c2 && master.has(c2) && !out.includes(c2)) out.push(c2); } return out; }
+  return [];
+}
+function webStickers(c) {
+  const list = stickerList(c), { cur } = compute();
+  for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>พิมพ์สติ๊กเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
+    <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['ns', 'ยังไม่มีสติ๊กเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
+    <div class="row"><section class="card grow">`;
+  if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
+  h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
+  for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
+    h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
+  h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติ๊กเกอร์"></canvas></div>
+    <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option></select></label>
+    <div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>
+    <button class="btn lime" data-a="stdone" ${S.stSel.size ? '' : 'disabled'}>บันทึกว่าติดแล้ว</button>${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
+  return h;
+}
+function labelCC(code) {
+  const a = master.get(code), s = compute().cur.get(code);
+  if (s && s.rv.move === 'approved') return { code: s.area, name: s.areaName };
+  return { code: a?.cc || '', name: a?.ccName || '' };
+}
+function dmy(s) { const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return `${m[2].padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`; const m2 = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m2 ? `${m2[1]}/${m2[2]}/${m2[3]}` : String(s || ''); }
+function capDate(a) { const i = meta?.headers ? meta.headers.findIndex(h => norm(h).includes('CAPITALIZED')) : -1; return i >= 0 && a.raws[0] ? dmy(a.raws[0][i]) : ''; }
+function drawSticker(cv, code) {
+  const ctx = cv?.getContext?.('2d'); if (!ctx) return;
+  const a = master.get(code) || { name: '', cc: '', ccName: '', raws: [] }, cc = labelCC(code), W = cv.width, H = cv.height;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#121826'; ctx.textBaseline = 'top';
+  const fs = Math.round(H * 0.105), pad = Math.round(H * 0.09), qs = Math.round(H * 0.66), tw = W - qs - pad * 3;
+  ctx.font = `500 ${fs}px Prompt, sans-serif`;
+  const lines = [`No. : ${code}`, `Date : ${capDate(a)}`, `CC : ${cc.code}`, `HO: ${cc.name}`, a.name];
+  lines.forEach((t, i) => { let s = String(t); while (s.length > 1 && ctx.measureText(s).width > tw) s = s.slice(0, -2) + '…'; ctx.fillText(s, pad, pad + i * fs * 1.45); });
+  if (typeof qrcode === 'function') {
+    const q = qrcode(0, 'M'); q.addData(String(code)); q.make();
+    const n = q.getModuleCount(), m = Math.floor(qs / n), x0 = W - pad - n * m, y0 = Math.round((H - n * m) / 2);
+    for (let r = 0; r < n; r++) for (let c2 = 0; c2 < n; c2++) if (q.isDark(r, c2)) ctx.fillRect(x0 + c2 * m, y0 + r * m, m, m);
+  }
+}
+
+/* ================= APP ================= */
+function appView(c) {
+  let h = `<div class="phone">`;
+  if (!S.user) h += appLogin();
+  else if (!meta || meta.status === 'prepare' || !master.size) h += `<div class="pbody"><div class="card"><h2>ยังไม่มีภารกิจ</h2><p class="sub">${!meta ? 'หัวหน้ายังไม่สร้างรอบนับ' : 'หัวหน้ากำลังเตรียมรอบ ยังไม่ปล่อยภารกิจ'} · หน้านี้อัปเดตเองเมื่อพร้อม</p></div>${appMeBlock()}</div>`;
+  else if (S.app === 'home') h += appHome(c);
+  else if (S.app === 'area') h += appArea();
+  else if (S.app === 'scan') h += appScan();
+  else if (S.app === 'feed') h += appFeed();
+  else if (S.app === 'me') h += `<div class="pbody">${appMeBlock()}</div>`;
+  h += `</div>`;
+  if (S.user && meta && meta.status !== 'prepare') {
+    const B = (v, l) => `<button class="${S.app === v ? 'on' : ''}" data-a="app" data-v="${v}">${l}</button>`;
+    h += `<nav class="bnav" aria-label="เมนูแอป"><div class="bnav-in">${B('home', 'ภารกิจ')}${B('area', 'พื้นที่')}<button class="fab" data-a="app" data-v="scan" aria-label="สแกน">สแกน</button>${B('feed', 'ผลนับ')}${B('me', 'ฉัน')}</div></nav>`;
+  }
+  if (S.item) h += itemSheet(S.item);
+  if (S.areaPick) h += areaPicker();
+  return h;
+}
+function appLogin() {
+  const team = meta?.team || [];
+  return `<div class="pbody"><div class="hero"><b style="font-size:26px">AMS Count</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
+    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม หัวหน้าเพิ่มได้ที่ ① เตรียม บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
+    <div class="card"><label class="f">หรือพิมพ์ชื่อ<input class="in" id="loginName" placeholder="ชื่อของคุณ"></label><button class="btn pri" data-a="loginname">เข้าใช้งาน</button></div>
+    <p class="sub">โหมดสาย USB · เลือกชื่อจากแพ็กเกจที่นำเข้า · เครื่องนี้: ${esc(dev)}</p></div>`;
+}
+function myAreas() { return (meta.areas || []).filter(a => a.assignee === S.user.name); }
+function appHome(c) {
+  const st = areaStats(), mine2 = myAreas(), T = totals();
+  let done = 0, tot = 0; for (const a of mine2) { const x = st.get(String(a.code)); if (x) { done += x.found; tot += x.total; } }
+  const [sc, stx] = syncInfo();
+  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span><span class="sync ${sc}" style="margin:0">${stx}</span></div>`;
+  if (meta.status === 'closed') h += `<div class="msg ok">หัวหน้าปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
+  h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)} · ภารกิจของคุณ</span><div><b style="font-size:42px;line-height:1">${N(done)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(tot)} รหัส</span></div><div class="bar" style="background:#2e46c9"><i style="width:${tot ? done / tot * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></div>
+    <b style="font-size:18px">พื้นที่ของฉัน</b>`;
+  if (!mine2.length) h += `<p class="sub">ยังไม่มีพื้นที่ที่มอบให้คุณ เลือกพื้นที่อื่นด้านล่างได้</p>`;
+  for (const a of mine2) h += areaCard(a, st.get(String(a.code)));
+  h += `<button class="li" data-a="areapick" style="border:2px dashed #c5cdfd;background:transparent;justify-content:center;color:var(--blue);font-weight:600">+ นับพื้นที่อื่น</button></div>`;
+  return h;
+}
+function areaCard(a, x) {
+  const p = x && x.total ? x.found / x.total : 0;
+  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><b style="font-size:17px">${esc(a.name)}</b><span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · เจอของแผนกอื่น ${x.other}` : ''}</span></button>`;
+}
+function areaPicker() {
+  const st = areaStats();
+  return `<div class="sheetbg" data-a="closepick"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between"><h2>ตอนนี้คุณอยู่ที่ไหน?</h2><button class="btn sm" data-a="closepick">ปิด</button></div><p class="sub">เลือกพื้นที่ที่ยืนนับจริง ไม่ใช่แผนกในทะเบียน</p>
+    ${(meta.areas || []).map(a => areaCard(a, st.get(String(a.code)))).join('')}</div></div>`;
+}
+function appArea() {
+  if (!S.area) return `<div class="pbody"><div class="card"><h2>ยังไม่ได้เลือกพื้นที่</h2><button class="btn pri" data-a="areapick">เลือกพื้นที่ที่อยู่ตอนนี้</button></div></div>`;
+  const { cur, recount } = compute(), code = String(S.area.code);
+  const left = S.area.shared ? [] : [...master.values()].filter(a => counted(a) && String(a.cc) === code && !cur.has(a.code));
+  const foundHere = [...cur.values()].filter(s => String(s.area) === code);
+  const own = foundHere.filter(s => !isOther(s)), oth = foundHere.filter(s => isOther(s));
+  // own items found elsewhere
+  const elsewhere = new Map(); for (const s of cur.values()) { const a = master.get(s.code); if (a && String(a.cc) === code && String(s.area) !== code) elsewhere.set(s.code, s.areaName); }
+  const list = S.areaTab === 'left' ? left : S.areaTab === 'found' ? own : oth;
+  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:var(--lime);font-weight:600">คุณอยู่ที่นี่</span><br><b style="font-size:21px">${esc(S.area.name)}</b>${S.area.shared ? '' : ` <span class="mono" style="font-size:13px;color:#c7cbd4">${esc(code)}</span>`}</span><button class="btn sm lime" data-a="areapick">เปลี่ยน</button></div>
+    <label class="f" style="color:#c7cbd4">ห้อง / จุดย่อย<input class="in" id="roomIn" value="${esc(S.room)}" placeholder="เช่น ห้องธุรการ ชั้น 2" style="background:#2a3242;border-color:#2a3242;color:#fff"></label>
+    <div class="cnt3"><button data-a="areatab" data-v="found" style="background:var(--ok);color:#fff"><b>${own.length}</b><span style="font-size:12px">เจอแล้ว</span></button><button data-a="areatab" data-v="left" style="background:var(--warn);color:#1d0e00"><b>${S.area.shared ? '—' : left.length}</b><span style="font-size:12px">ยังไม่เจอ</span></button><button data-a="areatab" data-v="other" style="background:var(--oth);color:#fff"><b>${oth.length}</b><span style="font-size:12px">ของแผนกอื่น</span></button></div></div>
+    <div class="pbody"><div class="tabs3">${[['left', 'ยังไม่เจอ'], ['found', 'เจอแล้ว'], ['other', 'แผนกอื่น']].map(([k, l]) => `<button class="${S.areaTab === k ? 'on' : ''}" data-a="areatab" data-v="${k}">${l}</button>`).join('')}</div>`;
+  for (const x of list.slice(0, 80)) {
+    const c2 = x.code, a = master.get(c2);
+    h += `<button class="li" data-a="openitem" data-v="${esc(c2)}"><span class="t"><b class="mono">${esc(c2)}</b><span>${esc(a?.name || x.uname || '')}${a?.raws?.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}${elsewhere.has(c2) ? ` · <b style="color:var(--oth-ink)">เจอที่ ${esc(elsewhere.get(c2))}</b>` : ''}${recount.has(c2) ? ' · <b style="color:var(--warn-ink)">สั่งนับซ้ำ</b>' : ''}${S.areaTab === 'other' ? ` · ของ ${esc(a?.ccName)}` : ''}</span></span></button>`;
+  }
+  if (list.length > 80) h += `<p class="sub" style="text-align:center">+ อีก ${list.length - 80} รายการ</p>`;
+  if (!list.length) h += `<p class="sub" style="text-align:center">ไม่มีรายการ</p>`;
+  h += `<button class="btn lime" data-a="app" data-v="scan" style="font-size:17px;padding:14px">สแกนในพื้นที่นี้</button></div>`;
+  return h;
+}
+function appScan() {
+  if (!S.area) return appArea();
+  const closed = meta.status === 'closed', { cur } = compute(), st = areaStats().get(String(S.area.code));
+  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#c7cbd4">กำลังนับที่</span><br><b>${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:var(--lime);font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span></div>
+    <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:var(--lime)">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มยิงข้างเครื่อง'}</b>
+    <input id="scanIn" ${S.manual ? 'inputmode="text"' : 'inputmode="none"'} placeholder="${S.manual ? 'เลข Asset' : 'ยิงสติ๊กเกอร์ QR / บาร์โค้ด'}" aria-label="รหัสที่สแกน" enterkeyhint="done" ${closed ? 'disabled' : ''}>
+    <span style="font-size:12px;color:#c7cbd4">ยิงต่อได้เลย ไม่ต้องกดบันทึก · บนคอมพิมพ์รหัสแล้ว Enter ได้</span></form></div><div class="pbody">`;
+  for (const card of S.cards.slice(0, 25)) {
+    const s = cur.get(card.code), a = master.get(card.code);
+    if (card.dup) { h += `<div class="rcard"><div class="row" style="align-items:center"><span class="dot" style="background:var(--warn);color:#1d0e00">2</span><span class="t" style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--warn-ink)">นับซ้ำ · ${esc(card.dupBy)} นับไปแล้ว ${hm(card.dupT)}</span></span><button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">แก้</button></div></div>`; continue; }
+    if (!s) { h += `<div class="rcard" style="opacity:.6"><b class="mono">${esc(card.code)}</b><span class="sub">ยกเลิกแล้ว</span></div>`; continue; }
+    const tick = pendingCount() && mine.some(e => e.code === card.code && !isServer(e.id)) ? '<span class="chip c-warn">รอส่ง</span>' : db ? '<span class="chip c-ok">✓✓</span>' : '';
+    if (!a) {
+      h += `<div class="rcard unk"><div class="row" style="align-items:center"><span class="dot" style="background:var(--bad)">?</span><span style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--bad-ink)">ไม่อยู่ในทะเบียน</span></span>${tick}</div>
+        <div class="row"><input class="in" id="un-${esc(card.code)}" value="${esc(s.uname)}" placeholder="ชื่อ / ลักษณะของ" style="flex:1"><button class="btn sm" data-a="uname" data-v="${esc(card.code)}">บันทึก</button></div><div class="row"><button class="btn sm red" data-a="undo" data-v="${esc(card.code)}">ข้าม (สแกนผิด)</button></div></div>`;
+    } else if (isOther(s)) {
+      const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="dec" data-d="${d}" data-v="${esc(card.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
+      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ของ ${esc(a.ccName)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)} · อยู่ที่นี่เพราะ?</span><div class="chips">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
+    } else {
+      h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span></span>${tick}</button>`;
+    }
+  }
+  if (!S.cards.length) h += `<p class="sub" style="text-align:center">ผลการสแกนจะขึ้นเป็นการ์ดที่นี่<br>ไม่มีสติ๊กเกอร์? กดปุ่มด้านล่างเพื่อพิมพ์รหัสเอง</p>`;
+  h += `<button class="btn" data-a="manual" style="border-style:dashed">${S.manual ? 'กลับไปใช้ปุ่มยิง' : 'ไม่มีสติ๊กเกอร์? พิมพ์รหัสเอง'}</button></div>`;
+  return h;
+}
+let _srvIds = null, _srvRef = null;
+const isServer = id => { if (_srvRef !== serverEv) { _srvRef = serverEv; _srvIds = new Set(); for (const k in serverEv) for (const e of serverEv[k]) _srvIds.add(e.id); } return _srvIds.has(id); };
+function itemSheet(code) {
+  const { cur, hist } = compute(), s = cur.get(code), a = master.get(code);
+  let h = `<div class="sheetbg" data-a="closeitem"><div class="sheet" data-stop="1"><div class="sticker"><canvas id="itemSticker" width="560" height="296" aria-label="ป้ายดิจิทัล ${esc(code)}"></canvas></div>
+    <div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:17px">${esc(a?.name || s?.uname || code)}</b>${s ? badge(s) : '<span class="chip c-warn">ยังไม่พบ</span>'}</div>`;
+  if (a) h += `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><div class="card" style="padding:10px 12px;gap:0"><span class="sub">ในทะเบียน</span><b>${esc(a.ccName)}</b></div><div class="card" style="padding:10px 12px;gap:0;background:${s && isOther(s) ? 'var(--oth-soft)' : s ? 'var(--ok-soft)' : '#fff'}"><span class="sub">พบที่</span><b>${s ? esc(s.areaName) : '—'}</b></div></div>`;
+  if (s) {
+    h += `<span class="sub">สภาพ</span><div class="cond">${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(x => `<button class="${x === 'ปกติ' ? '' : 'w'}" aria-pressed="${s.cond === x}" data-a="cond" data-c="${x}" data-v="${esc(code)}">${x}</button>`).join('')}</div>
+      <span class="sub">ป้าย + การโอนย้าย (เลือกได้หลายข้อ)</span><div class="chips">${flagChips(s, 'appflag')}</div>
+      <div class="row"><input class="in" id="remarkIn" value="${esc(s.remark)}" placeholder="Remark" style="flex:1"><button class="btn sm" data-a="remark" data-v="${esc(code)}">บันทึก</button></div>
+      <p class="sub">นับโดย ${esc(s.by)} · ${fmtT(s.t)}${s.room ? ' · ' + esc(s.room) : ''}</p>
+      <div class="row"><button class="btn dark" data-a="closeitem" style="flex:1">เสร็จ</button>${s.dev === dev ? `<button class="btn red" data-a="undo" data-v="${esc(code)}">ยกเลิกผลนับ</button>` : ''}</div>`;
+  } else {
+    h += `<p class="sub">ยังไม่มีใครสแกนรายการนี้${(hist.get(code) || []).length ? ' (เคยถูกยกเลิก / สั่งนับซ้ำ)' : ''}</p><div class="row"><button class="btn pri" data-a="markfound" data-v="${esc(code)}" style="flex:1">บันทึกว่าพบที่นี่</button><button class="btn" data-a="closeitem">ปิด</button></div>`;
+  }
+  return h + `</div></div>`;
+}
+function appFeed() {
+  const { cur } = compute(); let list = [...cur.values()].filter(s => s.by === S.user.name).sort((a, b) => b.t - a.t);
+  const today = new Date().toDateString(), nToday = list.filter(s => new Date(s.t).toDateString() === today).length, nRe = list.filter(s => s.flags.reprint || s.flags.namebad).length;
+  if (S.feedF === 'pending') list = list.filter(s => mine.some(e => e.code === s.code && !isServer(e.id)));
+  if (S.feedF === 'other') list = list.filter(isOther);
+  if (S.feedF === 'dmg') list = list.filter(s => s.cond !== 'ปกติ');
+  let h = `<div class="pbody"><b style="font-size:23px">สมุดสติ๊กเกอร์</b><div class="cnt3 dark" style="border-radius:20px;padding:12px"><div><b style="color:var(--lime)">${cur.size ? [...cur.values()].filter(s => s.by === S.user.name).length : 0}</b><span style="font-size:12px;color:#c7cbd4">สะสมแล้ว</span></div><div><b>${nToday}</b><span style="font-size:12px;color:#c7cbd4">วันนี้</span></div><div><b>${nRe}</b><span style="font-size:12px;color:#c7cbd4">ป้ายต้องพิมพ์ใหม่</span></div></div>
+    <div class="chips">${[['all', 'ทั้งหมด'], ['pending', 'รอส่ง'], ['other', 'ของแผนกอื่น'], ['dmg', 'ชำรุด']].map(([k, l]) => `<button class="tog" aria-pressed="${S.feedF === k}" data-a="feedf" data-v="${k}">${l}</button>`).join('')}</div><div class="book">`;
+  for (const s of list.slice(0, 120)) {
+    const a = master.get(s.code), col = !a ? 'var(--bad)' : isOther(s) ? 'var(--oth)' : s.cond !== 'ปกติ' ? 'var(--warn)' : 'var(--ok)';
+    h += `<button class="mini" data-a="openitem" data-v="${esc(s.code)}" style="border-top-color:${col}"><b>${esc(s.code)}</b><span>${esc(a?.name || s.uname || 'ไม่อยู่ในทะเบียน')}</span><span class="sub" style="font-size:11px">${esc(s.areaName)} · ${hm(s.t)}</span></button>`;
+  }
+  h += `</div>${list.length ? '' : '<p class="sub" style="text-align:center">ยังไม่มีรายการ</p>'}</div>`;
+  return h;
+}
+function appMeBlock() {
+  const mineSent = db ? mine.filter(e => isServer(e.id)).length : mine.length, p = pendingCount();
+  return `<div class="card"><div class="row" style="align-items:center"><span class="dot" style="width:48px;height:48px;background:var(--orange);color:#1d0e00">${esc(S.user?.name?.slice(0, 1) || '?')}</span><span style="flex:1"><b style="font-size:19px">${esc(S.user?.name || '-')}</b><br><span class="sub">เครื่อง ${esc(dev)}</span></span></div></div>
+    ${usbCard()}
+    ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
+    <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
+    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(window.AndroidBridge?.appVersion?.() || 'เว็บ')} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
+    <div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ReaderConfig → Output → Keyboard Emulation · Suffix = Enter · เปิด QR Code + Code 128</p></div>
+    <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
+}
+
+/* ================= USB cable: files through the scanner's Download folder ================= */
+function usbCard() {
+  const out = LS.get('usbOut-' + (meta?.id || ''), 0), n = mine.length - out;
+  let h = `<div class="card" style="${usbMode ? 'border:2px solid var(--blue)' : ''}"><div class="row" style="justify-content:space-between;align-items:center"><b>เชื่อมต่อแบบไหน</b></div>
+    <div class="seg" role="group" aria-label="โหมดเชื่อมต่อ" style="align-self:flex-start"><button data-a="usbmode" data-v="0" aria-pressed="${!usbMode}">ออนไลน์ (เน็ต)</button><button data-a="usbmode" data-v="1" aria-pressed="${usbMode}">สาย USB (ไม่ใช้เน็ต)</button></div>`;
+  if (!usbMode) return h + `<p class="sub">ใช้สาย USB เมื่อในพื้นที่ไม่มีเน็ต · ผลนับจะส่งเป็นไฟล์ผ่านโฟลเดอร์ Download ของเครื่อง</p></div>`;
+  h += `<p class="sub">1) คอม: หน้า "สาย USB" → ดาวน์โหลดแพ็กเกจ → ต่อสาย แล้ววางไฟล์ไว้ใน Download ของเครื่องยิง</p>
+    <button class="btn" data-a="pick" data-v="pkg">นำเข้าแพ็กเกจจากเครื่อง (.json)</button>
+    ${meta ? `<p class="sub">ตอนนี้: <b>${esc(meta.name)}</b> · ${N(master.size)} รหัส</p>` : ''}
+    <p class="sub">2) นับเสร็จ กดส่งออก ไฟล์จะไปอยู่ที่ Download → ต่อสาย แล้วคัดลอกไปคอม</p>
+    <div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ผลนับในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${out}</b><span style="font-size:11px">ส่งออกแล้ว</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${Math.max(0, n)}</b><span style="font-size:11px">ยังไม่ส่งออก</span></div></div>
+    <button class="btn pri" data-a="usbreport" ${meta && mine.length ? '' : 'disabled'}>ส่งออกผลนับ (Report)</button>`;
+  if (S.msg.usbApp) h += `<div class="msg ${S.msg.usbApp[1]}">${esc(S.msg.usbApp[0])}</div>`;
+  return h + `</div>`;
+}
+function webUsb() {
+  const info = LS.get('usbInfo-' + meta.id, {});
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>เชื่อมผ่านสาย USB</h1></div><div class="row">
+    <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอม → เครื่องยิง</span><h2>ส่งทะเบียนให้เครื่องยิง</h2>
+      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องยิง: แท็บ ฉัน → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
+      <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของหัวหน้า</p>
+      <button class="btn pri" data-a="usbpkg" ${master.size ? '' : 'disabled'}>ดาวน์โหลดแพ็กเกจ</button>${S.msg.pkg ? `<div class="msg ${S.msg.pkg[1]}">${esc(S.msg.pkg[0])}</div>` : ''}</section>
+    <section class="card grow"><span class="chip c-ok" style="align-self:flex-start">ขั้นที่ 2 · เครื่องยิง → คอม</span><h2>รับผลนับจากเครื่องยิง</h2>
+      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย · คัดลอกไฟล์ <span class="mono">AMS-ผลนับ-….xlsx</span> จาก Download ของเครื่องยิงมาไว้ที่คอม</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
+      <div class="drop" data-drop="usb"><b>ลากไฟล์ผลนับจากเครื่องยิงมาวางตรงนี้</b><span class="sub">.xlsx ที่แอปส่งออก · เปิดดูใน Excel ได้ด้วย (ชีต ผลนับ)</span><button class="btn pri" data-a="pick" data-v="usb">เลือกไฟล์ (หลายไฟล์ได้)</button></div>
+      ${S.msg.usb ? `<div class="msg ${S.msg.usb[1]}">${S.msg.usb[0].map(esc).join('<br>')}</div>` : ''}
+      <div class="tbl-wrap"><table><thead><tr><th>คนนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
+  return h;
+}
+const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo]);
+async function exportPackage() {
+  const pkg = { kind: 'ams-package', v: 1, at: Date.now(), meta: { ...meta, status: meta.status === 'closed' ? 'closed' : 'counting' }, rows: rowsOfMaster(), events: allEvents() };
+  return save(`AMS-แพ็กเกจ-${meta.id}.json`, new TextEncoder().encode(JSON.stringify(pkg)), 'application/json');
+}
+async function importPackage(file) {
+  let pkg; try { pkg = JSON.parse(await file.text()); } catch { return ['ไฟล์นี้ไม่ใช่แพ็กเกจ AMS (.json)', 'bad']; }
+  if (pkg?.kind !== 'ams-package' || !pkg.meta?.id || !Array.isArray(pkg.rows)) return ['ไฟล์นี้ไม่ใช่แพ็กเกจ AMS', 'bad'];
+  meta = pkg.meta; LS.set('meta', meta); indexMaster(pkg.rows); LS.set('master', pkg.rows); LS.set('masterVer', meta.ver);
+  loadMine();
+  const others = {}; let n = 0;
+  for (const e of pkg.events || []) if (e && e.id && e.dev !== dev) { (others[e.dev] ||= []).push(e); n++; }
+  usbEv = others; LS.set('usb-' + meta.id, usbEv); _cache = null;
+  return [`นำเข้าแล้ว: ${meta.name} · ${N(master.size)} รหัส · ผลนับเครื่องอื่น ${N(n)} รายการ`, 'ok'];
+}
+async function exportReport() {
+  const { cur } = compute(), wb = XLSX.utils.book_new();
+  const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ']];
+  for (const s of [...cur.values()].filter(s => s.dev === dev).sort((a, b) => a.t - b.t)) {
+    const a = master.get(s.code);
+    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.transferred ? 'มีการโอนย้ายแล้ว' : s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t)]);
+  }
+  const raw = [['AMS Count USB', 1, meta.id, dev, S.user?.name || '', Date.now(), mine.length]]; let buf = [], len = 0;
+  for (const e of mine) { const j = JSON.stringify(e); if (len + j.length > 30000 && buf.length) { raw.push(['[' + buf.join(',') + ']']); buf = []; len = 0; } buf.push(j); len += j.length + 1; }
+  if (buf.length) raw.push(['[' + buf.join(',') + ']']);
+  const ws = XLSX.utils.aoa_to_sheet(view); ws['!cols'] = view[0].map((_, i) => ({ wch: i === 1 ? 36 : 14 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'ผลนับ'); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(raw), '_ams');
+  wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
+  const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+  const r = await save(`AMS-ผลนับ-${S.user?.name || 'ไม่ระบุ'}-${dev}-${stamp}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  if (r[1] === 'ok') LS.set('usbOut-' + meta.id, mine.length);
+  return r;
+}
+async function importReports(files) {
+  const out = [], info = LS.get('usbInfo-' + meta.id, {}); let bad = false;
+  for (const f of files) {
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }), ws = wb.Sheets['_ams'];
+      if (!ws) { out.push(`${f.name}: ไม่ใช่ไฟล์ผลนับจากแอป`); bad = true; continue; }
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }), [tag, , round, d, by] = rows[0] || [];
+      if (tag !== 'AMS Count USB' || !/^[\w-]{1,40}$/.test(String(d))) { out.push(`${f.name}: รูปแบบไฟล์ไม่ถูกต้อง`); bad = true; continue; }
+      if (round !== meta.id) { out.push(`${f.name}: เป็นของรอบนับอื่น ไม่ได้นำเข้า`); bad = true; continue; }
+      const items = [];
+      for (const r of rows.slice(1)) for (const e of JSON.parse(r[0] || '[]')) if (e && typeof e.id === 'string' && typeof e.code === 'string' && ['scan', 'edit', 'del', 'rv'].includes(e.k)) items.push({ ...e, round: meta.id, dev: String(d) });
+      const prev = usbEv[d] || [], ids = new Set(prev.map(e => e.id)), fresh = items.filter(e => !ids.has(e.id));
+      usbEv[d] = [...prev, ...fresh].sort((a, b) => a.t - b.t);
+      info[d] = { by: String(by || '?'), n: usbEv[d].length, at: Date.now(), file: f.name };
+      if (db) for (let k = 0; k * CHUNK < usbEv[d].length; k++) await db.doc(`ev/${meta.id}-${d}-u${k}`).set({ round: meta.id, dev: String(d), items: usbEv[d].slice(k * CHUNK, (k + 1) * CHUNK), at: Date.now(), via: 'usb' });
+      out.push(`${f.name}: ${by} · ${N(items.length)} รายการ (ใหม่ ${N(fresh.length)})`);
+    } catch (e) { out.push(`${f.name}: อ่านไม่ได้ (${e.message})`); bad = true; }
+  }
+  LS.set('usb-' + meta.id, usbEv); LS.set('usbInfo-' + meta.id, info); _cache = null;
+  S.msg.usb = [out, bad ? 'warn' : 'ok'];
+}
+
+/* ================= sign-in, setup, team ================= */
+function gateView() {
+  const cfg = Store.auth.config(), msg = S.gateMsg ? `<div class="msg bad">${esc(S.gateMsg)}</div>` : '';
+  const wrap = inner => `<div class="phone" style="min-height:100vh;justify-content:center"><div class="pbody" style="padding-bottom:40px">
+    <div class="hero"><b style="font-size:28px">AMS Count</b><span>ระบบตรวจนับทรัพย์สิน</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
+  if (S.gate === 'boot') return wrap(`<div class="card"><p class="sub">กำลังเชื่อมต่อ…</p></div>`);
+  if (S.gate === 'setup') return wrap(`<div class="card"><h2>ตั้งค่าการเชื่อมต่อ</h2><p class="sub">ใส่ค่าจาก Supabase → Project Settings → API (ทำครั้งเดียวต่อเครื่อง)</p>
+    <label class="f">Project URL<input class="in mono" id="cfgUrl" value="${esc(cfg.url)}" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
+    <label class="f">anon public key<textarea class="in mono" id="cfgKey" rows="3" placeholder="eyJhbGciOi…">${esc(cfg.key)}</textarea></label>${msg}
+    <button class="btn pri" data-a="savecfg">บันทึกและเชื่อมต่อ</button>${Store.auth.configured() ? '<button class="btn" data-a="cancelcfg">ยกเลิก</button>' : ''}<p class="sub">ห้ามใส่ service_role key</p></div>
+    <div class="card"><b>ไม่มีเน็ตที่นี่?</b><p class="sub">ใช้โหมดสาย USB ส่งข้อมูลผ่านไฟล์แทน</p><button class="btn" data-a="usbmode" data-v="1">ใช้โหมดสาย USB</button></div>`);
+  if (S.gate === 'inactive') return wrap(`<div class="card"><h2>รอหัวหน้าเปิดใช้บัญชี</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้เปิดใช้ · ให้หัวหน้าเปิดที่หน้า ทีม + ตั้งค่า บนคอม</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`);
+  if (S.firstRun) return wrap(`<div class="card"><h2>เริ่มใช้ครั้งแรก · สร้างบัญชีหัวหน้า</h2><p class="sub">ระบบยังไม่มีผู้ใช้ บัญชีแรกจะเป็นหัวหน้า (นำเข้าทะเบียน มอบงาน ตรวจ ปิดรอบ)</p>
+    <label class="f">ชื่อ<input class="in" id="flName" autocomplete="name"></label>
+    <label class="f">รหัสพนักงาน<input class="in mono" id="flCode" autocomplete="username"></label>
+    <label class="f">PIN (ตัวเลข 4–8 หลัก)<input class="in mono" id="flPin" type="password" inputmode="numeric" autocomplete="new-password"></label>${msg}
+    <button class="btn pri" data-a="firstlead" ${S.busy ? 'disabled' : ''}>สร้างบัญชีหัวหน้า</button>
+    <button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button></div>`);
+  return wrap(`<form class="card" id="loginForm"><h2>เข้าสู่ระบบ</h2>
+    <label class="f">รหัสพนักงาน<input class="in mono" id="lgCode" autocomplete="username" value="${esc(S.lgCode ?? LS.get('lastCode', ''))}"></label>
+    <label class="f">PIN<input class="in mono" id="lgPin" type="password" inputmode="numeric" autocomplete="current-password"></label>${msg}
+    <button class="btn pri" type="submit" ${S.busy ? 'disabled' : ''}>${S.busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button></form>
+    <div class="row"><button class="btn sm" data-a="editcfg">ตั้งค่าการเชื่อมต่อ</button><button class="btn sm" data-a="usbmode" data-v="1">โหมดสาย USB</button></div>
+    <p class="sub">ลืม PIN? ให้หัวหน้าตั้งใหม่ที่หน้า ทีม + ตั้งค่า · เครื่องนี้: ${esc(dev)}</p>`);
+}
+async function doLogin() {
+  const code = $('#lgCode')?.value.trim(), pin = $('#lgPin')?.value.trim();
+  if (!code || !pin) { S.gateMsg = 'ใส่รหัสพนักงานและ PIN'; render(); return; }
+  S.lgCode = code; S.busy = true; S.gateMsg = null; render();
+  try { await Store.auth.login(code, pin); LS.set('lastCode', code); S.busy = false; S.gate = 'boot'; render(); await connect(); }
+  catch (e) { S.busy = false; S.gateMsg = /invalid/i.test(e.message) ? 'รหัสพนักงานหรือ PIN ไม่ถูกต้อง' : /fetch|network/i.test(e.message) ? 'เชื่อมต่อไม่ได้ · ตรวจเน็ตแล้วลองใหม่' : e.message; render(); }
+}
+async function doFirstLead() {
+  const name = $('#flName').value.trim(), code = $('#flCode').value.trim(), pin = $('#flPin').value.trim();
+  if (!name || !code) { S.gateMsg = 'ใส่ชื่อและรหัสพนักงาน'; render(); return; }
+  if (!/^\d{4,8}$/.test(pin)) { S.gateMsg = 'PIN ต้องเป็นตัวเลข 4–8 หลัก'; render(); return; }
+  S.busy = true; S.gateMsg = null; render();
+  try { await Store.auth.firstLead(name, code, pin); LS.set('lastCode', code); S.busy = false; S.firstRun = false; S.gate = 'boot'; render(); await connect(); }
+  catch (e) { S.busy = false; S.gateMsg = e.message; render(); }
+}
+async function teamOp(fn, ok) {
+  try { await fn(); await loadTeam(); if (meta && isLead()) await saveMeta({ ...meta }); flash(ok); } catch (e) { flash('ไม่สำเร็จ: ' + e.message); }
+  render();
+}
+async function addMember() {
+  const name = $('#nmName').value.trim(), code = $('#nmCode').value.trim(), pin = $('#nmPin').value.trim(), role = $('#nmRole').value;
+  if (!name || !code) { S.msg.team = ['ใส่ชื่อและรหัสพนักงาน', 'bad']; render(); return; }
+  if (!/^[A-Za-z0-9._-]{2,30}$/.test(code)) { S.msg.team = ['รหัสพนักงานใช้ได้เฉพาะตัวอักษรอังกฤษ ตัวเลข . _ -', 'bad']; render(); return; }
+  if (!/^\d{4,8}$/.test(pin)) { S.msg.team = ['PIN ต้องเป็นตัวเลข 4–8 หลัก', 'bad']; render(); return; }
+  if (S.team.some(u => u.code.toLowerCase() === code.toLowerCase())) { S.msg.team = ['รหัสพนักงานนี้มีอยู่แล้ว', 'bad']; render(); return; }
+  S.busy = true; render();
+  try { await Store.auth.addMember(name, code, pin, role); await loadTeam(); if (meta) await saveMeta({ ...meta }); S.msg.team = [`เพิ่ม ${name} แล้ว · เข้าสู่ระบบด้วยรหัส ${code} + PIN ที่ตั้งไว้`, 'ok']; }
+  catch (e) { S.msg.team = [/registered|exists/i.test(e.message) ? 'รหัสพนักงานนี้เคยสมัครไว้แล้ว' : 'เพิ่มไม่สำเร็จ: ' + e.message, 'bad']; }
+  S.busy = false; render();
+}
+function webTeam() {
+  const cfg = Store.auth.config(), lead = S.user?.role === 'lead';
+  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
+    <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th>' : ''}</tr></thead><tbody>`;
+  for (const u of S.team) h += `<tr><td><b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}</td><td class="mono">${esc(u.code)}</td>
+    <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'หัวหน้า' : 'คนนับ')}</td>
+    <td>${lead && u.id !== S.user?.id ? `<button class="btn sm ${u.active ? '' : 'red'}" data-a="memactive" data-v="${u.id}">${u.active ? 'ใช้งานได้' : 'ปิดใช้อยู่'}</button>` : `<span class="chip ${u.active ? 'c-ok' : 'c-gray'}">${u.active ? 'ใช้งานได้' : 'ปิดใช้'}</span>`}</td>
+    ${lead ? `<td><div class="row" style="flex-wrap:nowrap"><input class="in mono" id="pin-${u.id}" type="password" inputmode="numeric" placeholder="PIN ใหม่" style="width:110px"><button class="btn sm" data-a="mempin" data-v="${u.id}">ตั้ง</button></div></td>` : ''}</tr>`;
+  h += `</tbody></table></div>`;
+  if (lead) h += `<b>เพิ่มคนในทีม</b><div class="grid"><label class="f">ชื่อ<input class="in" id="nmName"></label><label class="f">รหัสพนักงาน<input class="in mono" id="nmCode"></label><label class="f">PIN เริ่มต้น<input class="in mono" id="nmPin" inputmode="numeric" placeholder="4–8 หลัก"></label><label class="f">บทบาท<select class="in" id="nmRole"><option value="counter">คนนับ</option><option value="lead">หัวหน้า</option></select></label></div>
+    <button class="btn pri" data-a="addmember" style="align-self:flex-start" ${S.busy ? 'disabled' : ''}>เพิ่มเข้าทีม</button>${S.msg.team ? `<div class="msg ${S.msg.team[1]}">${esc(S.msg.team[0])}</div>` : ''}`;
+  h += `</section><aside class="side" style="display:flex;flex-direction:column;gap:12px"><section class="card"><h2>การเชื่อมต่อ</h2><p class="sub">Supabase: <span class="mono">${esc(cfg.url.replace(/^https:\/\//, ''))}</span></p><p class="sub">คุณ: ${esc(S.user?.name || '')} · ${esc(S.user?.code || '')} · เครื่อง ${esc(dev)}</p>
+    <div class="row"><button class="btn sm" data-a="editcfg">เปลี่ยนการเชื่อมต่อ</button><button class="btn sm red" data-a="logout">ออกจากระบบ</button></div></section>
+    <section class="card"><h2>ติดตั้งแอปบนเครื่องยิง</h2><p class="sub">เปิดหน้าติดตั้งบนเครื่องยิง หรือยิง QR นี้</p><div class="sticker" style="transform:none;width:180px"><canvas id="installQr" width="360" height="360" aria-label="QR หน้าติดตั้งแอป"></canvas></div><a class="btn" href="install.html" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">เปิดหน้าติดตั้งแอป</a></section></aside></div></main>`;
+  return h;
+}
+
+/* ================= actions ================= */
+let audio;
+function beep(kind) {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const tones = { ok: [[1320, .08]], dup: [[880, .08], [880, .08]], unk: [[300, .25]], oth: [[1320, .08], [660, .12]] }[kind] || [[1000, .05]];
+    let at = audio.currentTime;
+    for (const [f, d] of tones) { const o = audio.createOscillator(), g = audio.createGain(); o.frequency.value = f; o.type = 'square'; g.gain.value = .06; o.connect(g).connect(audio.destination); o.start(at); o.stop(at + d); at += d + .05; }
+  } catch {}
+  try { navigator.vibrate?.(kind === 'ok' ? 40 : [80, 60, 80]); } catch {}
+}
+function resolve(raw) {
+  const t = norm(raw); if (!t) return '';
+  const first = t.split(/[|;,\s]+/)[0], base = first.split('-')[0];
+  for (const c of [t, first, base]) { if (master.has(c)) return c; if (altIx.has(c)) return altIx.get(c); }
+  return first;
+}
+function doScan(raw) {
+  const code = resolve(raw); if (!code || !S.area) return;
+  if (meta.status !== 'counting') { flash('รอบนี้ยังนับไม่ได้'); return; }
+  const prev = compute().cur.get(code);
+  if (prev) { beep('dup'); S.cards.unshift({ code, dup: true, dupBy: prev.by, dupT: prev.t }); render(); return; }
+  pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual });
+  const s = compute().cur.get(code);
+  beep(!master.has(code) ? 'unk' : isOther(s) ? 'oth' : 'ok');
+  S.cards.unshift({ code }); render();
+}
+function edit(code, fields) { pushEvent({ k: 'edit', code, round: meta.id, ...fields }); render(); }
+function save(name, data, mime) {
+  if (dl) return dl.save({ filename: name, data, type: mime }).then(r => ['บันทึกไฟล์แล้ว: ' + name + (r?.where ? ' · ' + r.where : ''), 'ok']).catch(e => e?.code === 'declined' ? ['ยกเลิกการบันทึก', ''] : ['บันทึกไม่สำเร็จ (' + (e?.code || e) + ')', 'bad']);
+  try { const blob = data instanceof Blob ? data : new Blob([data], { type: mime }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 1000); return Promise.resolve(['ดาวน์โหลดแล้ว: ' + name, 'ok']); }
+  catch { return Promise.resolve(['ดาวน์โหลดไม่ได้ในหน้านี้', 'bad']); }
+}
+
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-a]'); if (!t) return;
+  if (t.dataset.a.startsWith('close') && e.target.closest('[data-stop]') && e.target.closest('[data-a]') !== t) return;
+  if ((t.dataset.a === 'closeitem' || t.dataset.a === 'closepick') && t.classList.contains('sheetbg') && e.target !== t) return;
+  const a = t.dataset.a, v = t.dataset.v;
+  switch (a) {
+    case 'mode': S.mode = v; LS.set('mode', v); break;
+    case 'web': S.web = v; S.msg = {}; break;
+    case 'app': S.app = v; if (v === 'scan' && !S.area) { S.app = 'area'; S.areaPick = true; } break;
+    case 'newround': {
+      if (meta && meta.status !== 'closed' && !confirmNew) { confirmNew = true; flash('มีรอบที่ยังไม่ปิด กดอีกครั้งเพื่อสร้างรอบใหม่ (รอบเดิมจะถูกแทนที่)'); return; }
+      confirmNew = false;
+      const keep = master.size ? (meta?.areas || []).map(x => ({ ...x, assignee: null })) : [];
+      await saveMeta({ id: 'r' + Date.now(), name: 'ตรวจนับ ' + new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }), status: 'prepare', createdAt: Date.now(), team: meta?.team || [], areas: keep, fileName: meta?.fileName || '', sheet: meta?.sheet || '', headers: meta?.headers || null, tpl: meta?.tpl || null, ver: meta?.ver, chunks: meta?.chunks, woCount: meta?.woCount || 0 });
+      loadMine(); evRound = null; subscribeEvents(); S.web = 'prepare'; S.cards = []; break;
+    }
+    case 'askreset': S.confirmReset = true; break;
+    case 'noreset': S.confirmReset = false; break;
+    case 'reset': S.confirmReset = false; if (meta) { LS.set('mine-' + meta.id, []); if (db) try { await Store.db.deleteRound(meta.id); } catch (e) { flash('ลบผลนับบนระบบไม่สำเร็จ: ' + e.message); return; } } await saveMeta(null); mine = []; serverEv = {}; S.cards = []; S.web = 'rounds'; flash('ลบรอบแล้ว'); return;
+    case 'doimport': await doImport(); return;
+    case 'cancelimport': S.imp = null; break;
+    case 'adduser': { const n = $('#newUser').value.trim(); if (!n) return; const team = [...(meta.team || [])]; if (!team.some(u => u.name === n)) team.push({ name: n, role: $('#newRole').value }); await saveMeta({ ...meta, team }); return; }
+    case 'addarea': { const n = $('#newArea').value.trim(); if (!n) return; const areas = [...(meta.areas || []), { code: 'S' + Date.now().toString(36), name: n, count: 0, assignee: null, shared: true }]; await saveMeta({ ...meta, areas }); return; }
+    case 'release': await saveMeta({ ...meta, status: 'counting', releasedAt: Date.now() }); S.web = 'live'; flash('ปล่อยภารกิจแล้ว · เปิดแท็บ "เครื่องยิง (แอป)" เพื่อเริ่มนับ'); return;
+    case 'livearea': S.liveArea = S.liveArea === v ? null : v; break;
+    case 'inboxtab': S.web = 'inbox'; S.inboxTab = v; S.inboxSel = null; S.inboxChecked.clear(); break;
+    case 'inboxsel': S.inboxSel = v; break;
+    case 'openinbox': S.web = 'inbox'; { const s = compute().cur.get(v), c = cats(); S.inboxTab = (Object.keys(c).find(k => c[k].some(x => x.code === v))) || 'cleared'; S.inboxSel = v; } break;
+    case 'check': t.checked ? S.inboxChecked.add(v) : S.inboxChecked.delete(v); render(); return;
+    case 'bulkapprove': for (const code of S.inboxChecked) pushEvent({ k: 'rv', act: 'approve_move', code, round: meta.id }); flash(`อนุมัติย้าย ${S.inboxChecked.size} รายการ`); S.inboxChecked.clear(); break;
+    case 'rv': pushEvent({ k: 'rv', act: t.dataset.act, code: v, round: meta.id }); flash('บันทึกแล้ว'); break;
+    case 'leadflag': case 'appflag': { const s = compute().cur.get(v); if (!s) return; const f = t.dataset.f; edit(v, { flags: { [f]: !s.flags[f] } }); return; }
+    case 'leftchoice': S.closeChoice = t.value; return;
+    case 'closeround': await saveMeta({ ...meta, status: 'closed', closedAt: Date.now(), leftChoice: S.closeChoice }); flash('ปิดรอบแล้ว'); return;
+    case 'reopen': await saveMeta({ ...meta, status: 'counting', closedAt: null }); return;
+    case 'export': S.msg.exp = await exportFile(v); break;
+    case 'sttab': S.stTab = v; break;
+    case 'stsel': t.checked ? S.stSel.add(v) : S.stSel.delete(v); render(); return;
+    case 'stall': { const list = stickerList(cats()); if (t.checked) list.forEach(x => S.stSel.add(x)); else S.stSel.clear(); render(); return; }
+    case 'stpdf': S.msg.st = await stickerPdf(v === 'test'); break;
+    case 'stdone': for (const code of S.stSel) { if (compute().cur.has(code)) pushEvent({ k: 'edit', code, round: meta.id, printed: true }); } S.msg.st = [`บันทึกว่าติดแล้ว ${S.stSel.size} ดวง`, 'ok']; S.stSel.clear(); break;
+    case 'login': S.user = meta.team[+v]; LS.set('user', S.user); break;
+    case 'loginname': { const n = $('#loginName').value.trim(); if (!n) return; S.user = { name: n, role: 'counter' }; LS.set('user', S.user); if (meta) { const team = [...(meta.team || [])]; if (!team.some(u => u.name === n)) { team.push(S.user); await saveMeta({ ...meta, team }); } } break; }
+    case 'logout': S.user = null; LS.set('user', null); S.app = 'home';
+      if (!usbMode) { unsubMeta?.(); unsubMeta = null; unsubEv?.(); unsubEv = null; evRound = null; db = null; S.authed = false; serverEv = {}; await Store.auth.logout(); S.gate = 'login'; }
+      break;
+    case 'dologin': await doLogin(); return;
+    case 'firstlead': await doFirstLead(); return;
+    case 'savecfg': { const u = $('#cfgUrl').value.trim(), k = $('#cfgKey').value.trim(); if (!/^https:\/\/.+/.test(u) || k.length < 20) { S.gateMsg = 'ใส่ Project URL (https://…supabase.co) และ anon key ให้ครบ'; break; } Store.auth.setConfig(u, k); S.gateMsg = null; S.gate = 'boot'; render(); await connect(); return; }
+    case 'editcfg': S.gate = 'setup'; break;
+    case 'cancelcfg': S.gateMsg = null; S.gate = S.authed ? null : 'login'; break;
+    case 'addmember': await addMember(); return;
+    case 'memrole': { const u = S.team.find(x => x.id === v); if (!u) return; await teamOp(() => Store.auth.updateMember(v, { role: u.role === 'lead' ? 'counter' : 'lead' }), 'เปลี่ยนบทบาทแล้ว'); return; }
+    case 'memactive': { const u = S.team.find(x => x.id === v); if (!u) return; if (u.id === S.user?.id) { flash('ปิดใช้บัญชีตัวเองไม่ได้'); return; } await teamOp(() => Store.auth.updateMember(v, { active: !u.active }), u.active ? 'ปิดใช้แล้ว' : 'เปิดใช้แล้ว'); return; }
+    case 'mempin': { const pin = ($('#pin-' + v)?.value || '').trim(); const u = S.team.find(x => x.id === v); if (!/^\d{4,8}$/.test(pin)) { flash('PIN ต้องเป็นตัวเลข 4–8 หลัก'); return; } await teamOp(() => Store.auth.setPin(v, u.code, pin), `ตั้ง PIN ใหม่ให้ ${u.name} แล้ว`); return; }
+    case 'areapick': S.areaPick = true; break;
+    case 'closepick': S.areaPick = false; break;
+    case 'setarea': { const ar = (meta.areas || []).find(x => String(x.code) === v); S.area = { code: String(ar.code), name: ar.name, shared: !!ar.shared }; LS.set('area', S.area); S.areaPick = false; S.app = 'area'; S.areaTab = 'left'; break; }
+    case 'areatab': S.areaTab = v; break;
+    case 'openitem': S.item = v; break;
+    case 'closeitem': S.item = null; break;
+    case 'dec': edit(v, { dec: t.dataset.d }); return;
+    case 'uname': edit(v, { uname: $('#un-' + CSS.escape(v)).value.trim() }); flash('บันทึกชื่อแล้ว'); return;
+    case 'undo': pushEvent({ k: 'del', code: v, round: meta.id }); S.item = null; flash('ยกเลิกผลนับแล้ว'); break;
+    case 'cond': edit(v, { cond: t.dataset.c }); return;
+    case 'remark': edit(v, { remark: $('#remarkIn').value.trim() }); flash('บันทึก Remark แล้ว'); return;
+    case 'markfound': if (!S.area) { flash('เลือกพื้นที่ก่อน'); S.areaPick = true; break; } pushEvent({ k: 'scan', code: v, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: true }); flash('บันทึกว่าพบแล้ว'); break;
+    case 'manual': S.manual = !S.manual; break;
+    case 'feedf': S.feedF = v; break;
+    case 'verify': await verify(); break;
+    case 'pick': { const g = $('#gFile'), o = PICK[v]; pickFor = v; g.accept = o[0]; g.multiple = o[1]; g.value = ''; g.click(); return; }
+    case 'usbmode': { const on = v === '1'; if (on === usbMode) return; usbMode = on; LS.set('usbMode', on); S.msg.usbApp = null;
+      if (on) { unsubMeta?.(); unsubMeta = null; unsubEv?.(); unsubEv = null; evRound = null; db = null; S.authed = false; serverEv = {}; S.gate = null; if (!S.user) S.user = null; } else { S.user = null; S.gate = 'boot'; render(); await connect(); }
+      _cache = null; break; }
+    case 'usbpkg': S.msg.pkg = await exportPackage(); break;
+    case 'usbreport': S.msg.usbApp = await exportReport(); break;
+  }
+  render();
+});
+let confirmNew = false, pickFor = null;
+const PICK = { master: ['.xlsx,.xls,.csv', false], pkg: ['.json,application/json', false], usb: ['.xlsx', true] };
+async function onMasterFile(f) {
+  const buf = await f.arrayBuffer();
+  try {
+    const book = XLSX.read(buf, { type: 'array', sheetRows: 15 }), hidden = new Set((book.Workbook?.Sheets || []).filter(x => x.Hidden).map(x => x.name));
+    let best = book.SheetNames.find(n => !hidden.has(n)) || book.SheetNames[0], score = 0;
+    for (const n of book.SheetNames) { if (hidden.has(n)) continue; const rows = XLSX.utils.sheet_to_json(book.Sheets[n], { header: 1, defval: '' }), hr = rows.find(r => r.some(c => norm(c) === 'ASSET')), sc = hr ? hr.filter(c => String(c).trim()).length : 0; if (sc > score) { score = sc; best = n; } }
+    S.imp = { buf, fileName: f.name, names: book.SheetNames, hidden }; prepareImport(best);
+  } catch (err) { S.imp = { buf, fileName: f.name, names: [], hidden: new Set(), err: 'อ่านไฟล์ไม่ได้: ' + err.message }; }
+}
+async function onFiles(why, files) {
+  if (!files.length) return;
+  if (why === 'master') await onMasterFile(files[0]);
+  if (why === 'pkg') { S.msg.usbApp = await importPackage(files[0]); S.app = 'me'; }
+  if (why === 'usb') { flash('กำลังอ่านไฟล์…'); await importReports(files); }
+  render();
+}
+// file inputs live outside the re-rendered UI, so a live update can't swap them out while the picker is open
+document.addEventListener('dragover', e => { if (e.target.closest?.('[data-drop]')) e.preventDefault(); });
+document.addEventListener('drop', e => { const z = e.target.closest?.('[data-drop]'); if (!z) return; e.preventDefault(); onFiles(z.dataset.drop, [...(e.dataTransfer?.files || [])]); });
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.id === 'gFile' && t.files.length) { const files = [...t.files], why = pickFor; pickFor = null; t.value = ''; await onFiles(why, files); }
+  if (t.id === 'impSheet') { prepareImport(t.value.replace(/ \(ซ่อน\)$/, '')); render(); }
+  if (t.dataset.map) { S.imp.map[t.dataset.map] = +t.value; render(); }
+  if (t.dataset.assign !== undefined) { const areas = [...meta.areas]; areas[+t.dataset.assign] = { ...areas[+t.dataset.assign], assignee: t.value || null }; await saveMeta({ ...meta, areas }); }
+  if (t.id === 'roomIn') { S.room = t.value.trim(); LS.set('room', S.room); }
+  if (t.id === 'stSize') { S.stSize = t.value; }
+
+});
+document.addEventListener('input', e => { if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
+document.addEventListener('submit', e => { if (e.target.id === 'loginForm') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'scanForm') { e.preventDefault(); const i = $('#scanIn'); const v = i.value; i.value = ''; doScan(v); setTimeout(() => $('#scanIn')?.focus(), 0); } });
+// Android back button: close sheet → go to home tab → leave app
+window.AMSBack = () => {
+  if (S.item || S.areaPick) { S.item = null; S.areaPick = false; render(); return true; }
+  if (S.mode === 'app' && S.user && S.app !== 'home') { S.app = 'home'; render(); return true; }
+  if (S.mode === 'web' && S.web !== 'rounds' && S.web !== 'live') { S.web = isLead() ? 'rounds' : 'live'; render(); return true; }
+  return false;
+};
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && (S.item || S.areaPick)) { S.item = null; S.areaPick = false; render(); } });
+
+async function doImport() {
+  const I = S.imp, m = I.map, g = (r, i) => i >= 0 ? String(r[i] ?? '').trim() : '';
+  const out = new Map(), cc = {}, statusIx = I.tpl.status;
+  for (const r of I.rows) {
+    const code = norm(r[m.code]); if (!code) continue;
+    const wo = statusIx >= 0 && r[statusIx] === 'Write - Off';
+    if (g(r, m.ccName) && !cc[g(r, m.cc)]) cc[g(r, m.cc)] = g(r, m.ccName);
+    const ex = out.get(code); if (ex) { ex[5].push(r); continue; }
+    out.set(code, [code, g(r, m.name), g(r, m.ccName), g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], g(r, m.cc), wo]);
+  }
+  const rows = [...out.values()], counts = {};
+  for (const r of rows) if (!r[7]) counts[r[6]] = (counts[r[6]] || 0) + 1;
+  const prev = new Map((meta.areas || []).map(a => [String(a.code), a]));
+  const areas = Object.entries(cc).filter(([k]) => k).sort((a, b) => a[1].localeCompare(b[1])).map(([code, name]) => ({ code, name, count: counts[code] || 0, assignee: prev.get(code)?.assignee || null, shared: false }));
+  for (const a of meta.areas || []) if (a.shared) areas.push(a);
+  const woCount = rows.filter(r => r[7]).length;
+  S.imp = null; flash('กำลังนำเข้า…');
+  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, tpl: I.tpl, areas, woCount });
+  flash(`นำเข้าแล้ว ${N(rows.length)} รหัส · ${areas.length} พื้นที่`);
+}
+async function verify() {
+  if (!db) { S.verify = [`ผลนับในเครื่องนี้ ${mine.length} รายการ · ยังไม่ได้เชื่อมฐานข้อมูลออนไลน์`, 'warn']; return; }
+  await flush();
+  try {
+    const snap = await db.collection('ev').where('round', '==', meta.id).where('dev', '==', dev).get();
+    const ids = new Set(); for (const d of snap.docs) for (const x of d.data().items || []) ids.add(x.id);
+    const miss = mine.filter(x => !ids.has(x.id));
+    S.verify = miss.length ? [`ยังไม่ถึงระบบ ${miss.length} รายการ · กดอีกครั้ง`, 'bad'] : [`ครบ ✓ ในเครื่อง ${mine.length} = บนระบบ ${ids.size} · ${fmtT(Date.now())}`, 'ok'];
+    if (miss.length) { mine.forEach((_, i) => dirty.add(Math.floor(i / CHUNK))); saveMine(); flush(); }
+  } catch (e) { S.verify = ['ตรวจไม่ได้ตอนนี้ (ออฟไลน์?)', 'bad']; }
+}
+
+/* ================= exports ================= */
+const toCell = v => typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && !/^-?0\d/.test(v) && v.length < 16 ? Number(v) : v;
+function exportBook(kind) {
+  const { cur } = compute(), wb = XLSX.utils.book_new(), h = meta.headers || [], t = meta.tpl || {}, draft = meta.status !== 'closed', wo = meta.leftChoice !== 'recount';
+  const add = (name, rows, wide) => { const ws = XLSX.utils.aoa_to_sheet(rows.map(r => r.map(toCell))); ws['!cols'] = (rows.find(r => r.length > 3) || rows[0] || []).map((_, i) => ({ wch: wide?.includes(i) ? 38 : 14 })); XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); };
+  const ix = re => h.findIndex(x => re.test(norm(x)));
+  const ci = { cap: ix(/CAPITALIZED/), acq: ix(/ACQUIS|CUM\.ACQ/), dep: ix(/ACCUM/), book: ix(/BOOK VAL|END BOOK/) };
+  const sumIdx = (a, i) => i < 0 ? '' : Math.round(a.raws.reduce((n, r) => n + (Number(String(r[i]).replace(/,/g, '')) || 0), 0) * 100) / 100;
+  const moved = [...cur.values()].filter(s => master.has(s.code) && isMoved(s));
+  const left = [...master.values()].filter(a => counted(a) && !cur.has(a.code));
+  if (kind === 'main' || kind === 'summary') {
+    const by = new Map();
+    for (const a of master.values()) { if (!counted(a)) continue; const s = cur.get(a.code), e = by.get(a.ccName) || { code: a.cc, total: 0, found: 0, moved: 0, dmg: 0, re: 0 }; e.total++; if (s) { e.found++; if (isMoved(s)) e.moved++; if (s.cond !== 'ปกติ') e.dmg++; if (s.flags.reprint || s.flags.namebad) e.re++; } by.set(a.ccName, e); }
+    const sum = [[`สรุปผลตรวจนับ · ${meta.name}${draft ? ' · ฉบับร่าง' : ''}`], [], ['Cost Center', 'Department', 'รหัสที่ต้องนับ', 'นับพบ', 'ยังไม่พบ', 'ย้ายแผนก', 'ชำรุด / รอซ่อม / ไม่ใช้งาน', 'ต้องพิมพ์ป้ายใหม่', '% นับพบ']];
+    for (const [k, e] of [...by].sort((x, y) => String(x[1].code).localeCompare(String(y[1].code)))) sum.push([e.code, k, e.total, e.found, e.total - e.found, e.moved, e.dmg, e.re, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%']);
+    sum.push([], ['ไม่อยู่ในทะเบียน', [...cur.values()].filter(s => !master.has(s.code)).length], ['ไม่นับ (Write-Off เดิม)', meta.woCount || 0], ['ส่งออกเมื่อ', new Date().toLocaleString('th-TH')]);
+    add('สรุป', sum, [1]);
+  }
+  if (kind === 'main') {
+    const tplCols = ['sticker', 'nosticker', 'note', 'status', 'ccNew', 'ccNewName'].some(k => t[k] >= 0);
+    const extra = ['ผลการนับ', 'พื้นที่ที่พบ', 'ห้อง / Location', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'เครื่อง'];
+    const data = [[...h, ...extra]];
+    for (const a of master.values()) {
+      const s = cur.get(a.code), mv = s && isMoved(s);
+      for (const raw of a.raws.length ? a.raws : [[]]) {
+        const r = [...raw]; while (r.length < h.length) r.push('');
+        if (a.wo) { data.push([...r, 'ตัดจำหน่ายแล้ว (ไม่นับ)']); continue; }
+        if (tplCols) {
+          if (t.sticker >= 0) r[t.sticker] = s && !s.ns ? 'CHECK' : '';
+          if (t.nosticker >= 0) r[t.nosticker] = s && s.ns ? 'CHECK' : '';
+          if (t.note >= 0) r[t.note] = s ? [s.room, s.cond !== 'ปกติ' ? s.cond : '', s.remark].filter(Boolean).join(' · ') : 'ไม่พบ';
+          if (t.status >= 0) r[t.status] = !s ? (wo ? 'Write - Off' : 'ไม่พบ (นับซ้ำ)') : mv ? 'เปลี่ยน Cost center' : 'CC เดิม';
+          if (t.ccNew >= 0) r[t.ccNew] = s ? (mv ? s.area : a.cc) : '';
+          if (t.ccNewName >= 0) r[t.ccNewName] = s ? (mv ? s.areaName : a.ccName) : '';
+        }
+        data.push([...r, !s ? 'ไม่พบ' : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? `${s.shared ? '' : s.area + ' '}${s.areaName}` : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.transferred ? 'มีการโอนย้ายแล้ว' : s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '']);
+      }
+    }
+    add('Data ' + (meta.sheet || 'ผลนับ'), data, [6]);
+  }
+  if (kind === 'main' || kind === 'transfer') {
+    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, s.code, '(blank)', a.name, s.area, s.areaName, s.rv.move === 'approved' ? (s.flags.transferred ? 'มีการโอนย้ายแล้ว' : 'รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
+  }
+  if ((kind === 'main' || kind === 'writeoff')) {
+    const rows = left.sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code)).map(a => [a.cc, a.ccName, a.code, '(blank)', a.name, a.raws[0] && ci.cap >= 0 ? a.raws[0][ci.cap] : '', sumIdx(a, ci.acq), sumIdx(a, ci.dep), sumIdx(a, ci.book)]);
+    add('write-off', [['Status', wo ? 'Write - Off' : 'ไม่พบ (รอนับซ้ำ)', '', '', 'T-Code : ABAVN'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'Capitalized on', 'Acquis.val.', 'Accum.dep.', 'Book val.']].concat(rows), [4]);
+    const g = new Map(); for (const r of rows) { const e = g.get(r[0]) || [r[0], r[1], 0, 0, 0, 0]; e[2]++; e[3] += +r[6] || 0; e[4] += +r[7] || 0; e[5] += +r[8] || 0; g.set(r[0], e); }
+    for (const e of g.values()) for (const i of [3, 4, 5]) e[i] = Math.round(e[i] * 100) / 100;
+    add('สรุป write-off', [[], ['สรุป ขออนุมัติ Write - Off'], ['Cost Center', 'Department', 'List', 'Asset Cost', 'Accum.dep._Net', ' Book value_Net', 'Status', 'Remark']].concat([...g.values()].map(e => [...e, 'Loss', 'ขออนุมัติ write - off'])), [1]);
+  }
+  if (kind === 'main') {
+    add('คิวพิมพ์สติ๊กเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติ๊กเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
+    add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (คนนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจหัวหน้า', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ของเรา' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
+  }
+  return wb;
+}
+async function exportFile(kind) {
+  if (!meta || !master.size) return ['ยังไม่มีทะเบียน', 'bad'];
+  try {
+    const wb = exportBook(kind), data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const nm = { main: 'ผลตรวจนับ', transfer: 'Transfer-AS02', writeoff: 'WriteOff-ABAVN' }[kind];
+    return await save(`AMS-${nm}${meta.status === 'closed' ? '' : '-ฉบับร่าง'}-${new Date().toISOString().slice(0, 10)}.xlsx`, new Uint8Array(data), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } catch (e) { return ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; }
+}
+async function stickerPdf(test) {
+  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ ลองรีเฟรช', 'bad'];
+  try { await document.fonts?.load('500 20px Prompt'); } catch {}
+  const codes = [...S.stSel].slice(0, test ? 1 : 2000), { jsPDF } = window.jspdf;
+  const roll = S.stSize === 'roll', w = roll ? 50 : 70, hgt = roll ? 25 : 37.125;
+  const pdf = roll ? new jsPDF({ unit: 'mm', format: [w, hgt], orientation: 'l' }) : new jsPDF({ unit: 'mm', format: 'a4' });
+  const cv = document.createElement('canvas'); cv.width = Math.round(w * 12); cv.height = Math.round(hgt * 12);
+  codes.forEach((code, i) => {
+    drawSticker(cv, code);
+    const img = cv.toDataURL('image/png');
+    if (roll) { if (i) pdf.addPage([w, hgt], 'l'); pdf.addImage(img, 'PNG', 0, 0, w, hgt, undefined, 'FAST'); }
+    else { const k = i % 24; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % 3) * w, Math.floor(k / 3) * hgt, w, hgt, undefined, 'FAST'); }
+  });
+  return await save(`AMS-สติ๊กเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
+}
+
+function afterRender() {
+  const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
+  const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
+  const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
+  if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus();
+}
+document.fonts?.ready?.then(() => render());
+render(); connect();
+})();
+</script>
+</body>
+</html>

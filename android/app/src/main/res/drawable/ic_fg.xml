@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- lime tile + letter A, inside the adaptive-icon safe zone -->
+    <path android:fillColor="#D4F25A" android:pathData="M42,30h24a12,12 0 0 1 12,12v24a12,12 0 0 1 -12,12h-24a12,12 0 0 1 -12,-12v-24a12,12 0 0 1 12,-12z"/>
+    <path android:strokeColor="#121826" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M42,68 L54,42 L66,68 M46.6,59 L61.4,59"/>
+</vector>

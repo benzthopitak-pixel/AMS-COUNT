@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+}
+
+// ตัวเลขเวอร์ชันมาจาก GitHub Actions (ทุกครั้งที่ build เพิ่มขึ้นเอง) · build เองในเครื่องจะเป็น 1
+def buildNo = (System.getenv('AMS_BUILD_NUMBER') ?: '1') as Integer
+def keystoreFile = System.getenv('AMS_KEYSTORE_FILE')
+
+android {
+    namespace 'com.ams.count'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.ams.count'
+        minSdk 24
+        targetSdk 34
+        versionCode buildNo
+        versionName "1.0.${buildNo}"
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreFile) {
+                storeFile file(keystoreFile)
+                storePassword System.getenv('AMS_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('AMS_KEY_ALIAS') ?: 'ams-count'
+                keyPassword System.getenv('AMS_KEY_PASSWORD') ?: System.getenv('AMS_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystoreFile) signingConfig signingConfigs.release
+        }
+    }
+
+    // หน้าจอแอปคือโฟลเดอร์ web/ ชุดเดียวกับเว็บบนคอม → คัดลอกเข้า assets/www ตอน build
+    sourceSets {
+        main.assets.srcDirs += "$buildDir/generated/webassets"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.register('copyWeb', Copy) {
+    from("$rootDir/../web") { exclude 'install.html', 'download/**' }
+    into "$buildDir/generated/webassets/www"
+}
+preBuild.dependsOn copyWeb
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
