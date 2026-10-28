@@ -377,7 +377,7 @@ function render() {
   } else if (S.mode === 'web') {
     const stg = stageOf();
     const P = (v, label, n, doneAt) => `<button class="pill ${S.web === v ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}">${label}${n ? ` <b>[${n}]</b>` : ''}</button>`;
-    html += `<nav class="pills" aria-label="ช่วงของรอบนับ">${P('rounds', 'รอบนับ', 0, 99)}${P('prepare', '① เตรียม', 0, 1)}${P('live', '② นับ', 0, 99)}${P('inbox', '③ ตรวจ', inboxN, 99)}${P('close', '④⑤ ปิด + ส่งออก', 0, 99)}${P('stickers', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99)}${P('usb', 'สาย USB', 0, 99)}${usbMode ? '' : P('team', 'ทีม + ตั้งค่า', 0, 99)}</nav>`;
+    html += `<nav class="pills" aria-label="ช่วงของรอบนับ">${P('rounds', 'เพิ่มข้อมูลตรวจนับ', 0, 99)}${P('prepare', '① เตรียม', 0, 1)}${P('live', '② นับ', 0, 99)}${P('inbox', '③ ตรวจ', inboxN, 99)}${P('close', '④⑤ ปิด + ส่งออก', 0, 99)}${P('stickers', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99)}${P('usb', 'สาย USB', 0, 99)}${usbMode ? '' : P('team', 'ทีม + ตั้งค่า', 0, 99)}</nav>`;
   }
   html += `<span id="sync" class="sync ${sc}">${st}</span></div></header>`;
   html += S.mode === 'web' ? webView(c) : appView(c);
@@ -408,23 +408,34 @@ function totals() {
   return { total, found, left: total - found, other, unk };
 }
 function webRounds(c) {
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">สวัสดี ${esc(S.user?.name || '')} · ข้อมูลซิงก์กับทุกเครื่องผ่าน Supabase</p><h1>รอบนับ</h1></div>`;
-  h += `<button class="btn pri" data-a="newround">+ สร้างรอบนับใหม่</button></div>`;
-  if (!meta) {
-    h += `<div class="card"><h2>ยังไม่มีรอบนับ</h2><p class="sub">เริ่มจากสร้างรอบนับ แล้วนำเข้าไฟล์ Excel ทะเบียนทรัพย์สิน (ไฟล์ SAP เดิมใช้ได้เลย)</p>
-      <ol class="sub" style="margin:0;padding-left:20px"><li>คอม: สร้างรอบ → นำเข้าไฟล์ → มอบพื้นที่ → ปล่อยภารกิจ</li><li>เครื่องยิง: เปิดแอป AMS Count → เข้าสู่ระบบด้วยรหัสพนักงาน + PIN → นับ</li><li>คอม: ดูผลสด → ตรวจ → ปิดรอบ → ส่งออก Excel / พิมพ์สติ๊กเกอร์</li></ol></div>`;
-  } else {
+  let h = `<main class="wrap"><h1>เพิ่มข้อมูลตรวจนับ</h1>`;
+  if (meta && meta.status !== 'closed' && !S.imp) {
     const T = totals(), pct = T.total ? Math.round(T.found / T.total * 100) : 0;
-    const stLabel = { prepare: ['c-blue', '① กำลังเตรียม'], counting: ['c-warn', '② กำลังนับ'], closed: ['c-ok', 'ปิดรอบแล้ว'] }[meta.status] || ['c-gray', meta.status];
-    h += `<button class="card" data-a="web" data-v="${meta.status === 'prepare' ? 'prepare' : meta.status === 'closed' ? 'close' : 'live'}" style="border:2px solid var(--blue);text-align:left;color:inherit">
-      <div class="row" style="justify-content:space-between"><span class="chip ${stLabel[0]}">${stLabel[1]}</span><span class="sub">${esc(meta.fileName || 'ยังไม่นำเข้าไฟล์')}${meta.sheet ? ' · ' + esc(meta.sheet) : ''}</span></div>
-      <b style="font-size:24px">${esc(meta.name)}</b>
-      <span class="sub">${N(T.total)} รหัสที่ต้องนับ · ${(meta.areas || []).length} พื้นที่ · ${(meta.team || []).length} คน</span>
+    const stLabel = { prepare: ['c-blue', 'รอมอบหมายคนนับ'], counting: ['c-warn', 'กำลังนับ'] }[meta.status] || ['c-gray', meta.status];
+    h += `<button class="card" data-a="web" data-v="${meta.status === 'prepare' ? 'prepare' : 'live'}" style="border:2px solid var(--blue);text-align:left;color:inherit">
+      <div class="row" style="justify-content:space-between;align-items:center"><span class="chip ${stLabel[0]}">${stLabel[1]}</span><span class="sub">ทำต่อ →</span></div>
+      <b style="font-size:22px">${esc(meta.name)}</b>
+      <span class="sub">ชื่อไฟล์: ${esc(meta.fileName || '-')} · ${N(T.total)} รายการ · ${(meta.areas || []).filter(a => !a.shared).length} แผนก</span>
       <div class="bar" aria-label="นับพบ ${pct}%"><i style="width:${pct}%;background:var(--ok)"></i></div>
-      <span class="sub"><b style="color:var(--ok-ink)">${pct}%</b> นับพบ · ต่างแผนก ${N(T.other)} · ไม่อยู่ในทะเบียน ${N(T.unk)} · เรื่องรอตรวจ ${c ? c.move.length + c.unk.length + c.dmg.length : 0}</span></button>`;
-    h += `<div class="card"><h2>ลบรอบนี้</h2><p class="sub">ลบรอบนับและผลนับทั้งหมดของรอบนี้ออกจากระบบ (ทะเบียนยังเก็บไว้ใช้รอบต่อไป) · ส่งออก Excel เก็บไว้ก่อนลบ</p>${S.confirmReset ? `<div class="confirm"><b>ลบรอบนี้และผลนับทั้งหมดของทุกเครื่อง?</b><div class="row"><button class="btn red" data-a="reset">ลบเลย</button><button class="btn" data-a="noreset">ยกเลิก</button></div></div>` : `<div class="row"><button class="btn red" data-a="askreset">ลบรอบนี้</button></div>`}</div>`;
+      <span class="sub"><b style="color:var(--ok-ink)">${pct}%</b> นับพบ · เรื่องรอตรวจ ${c ? c.move.length + c.unk.length + c.dmg.length : 0}</span></button>`;
   }
+  h += `<section class="card">${importBlock()}</section>`;
+  if (meta && !S.imp) h += `<div class="row" style="justify-content:flex-end">${S.confirmReset ? `<div class="confirm"><b>ลบ "${esc(meta.name)}" และผลนับทั้งหมด?</b><span>ทะเบียนที่นำเข้าก็จะหายด้วย · ส่งออก Excel เก็บไว้ก่อน</span><div class="row"><button class="btn red" data-a="reset">ลบเลย</button><button class="btn" data-a="noreset">ยกเลิก</button></div></div>` : `<button class="btn sm red" data-a="askreset">ลบข้อมูลรอบนี้</button>`}</div>`;
   return h + `</main>`;
+}
+function importBlock() {
+  const busyRound = meta && meta.status === 'counting';
+  if (!S.imp) return `<div class="drop" data-drop="master"><b style="font-size:18px">ลากไฟล์ Excel มาวางตรงนี้</b><span class="sub">.xlsx .xls .csv</span><button class="btn pri" data-a="pick" data-v="master">เลือกไฟล์</button></div>`;
+  const I = S.imp, opts = sel => `<option value="-1">— ไม่ใช้ —</option>` + I.headers.map((x, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  let h = `<div class="row" style="justify-content:space-between;align-items:center"><span>ชื่อไฟล์: <b>${esc(I.fileName)}</b></span><label class="f" style="flex-direction:row;align-items:center;gap:8px">ชีต <select class="in" id="impSheet" style="width:auto">${I.names.map(n => `<option ${n === I.sheet ? 'selected' : ''}>${esc(n)}${I.hidden.has(n) ? ' (ซ่อน)' : ''}</option>`).join('')}</select></label></div>`;
+  if (I.err) return h + `<div class="msg bad">${esc(I.err)}</div><div class="row"><button class="btn" data-a="cancelimport">เลือกไฟล์ใหม่</button></div>`;
+  const st = importStats(), fresh = !meta || meta.status !== 'prepare';
+  if (fresh) h += `<label class="f">ชื่อรอบตรวจนับ<input class="in" id="impRound" value="${esc(I.roundName)}" maxlength="80"></label>`;
+  h += `<div class="grid">${[['code', 'เลข Asset (บนสติ๊กเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
+    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">${st.multi} รายการมีรายการย่อย · สแกนครั้งเดียวนับครบ</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
+  if (busyRound) h += `<div class="msg warn">มีรอบ "${esc(meta.name)}" กำลังนับอยู่ · นำเข้าไฟล์นี้จะเริ่มรอบใหม่แทน (ส่งออก Excel รอบเดิมเก็บไว้ก่อน)</div>`;
+  h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างรอบใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
+  return h;
 }
 
 /* ---------- ① prepare ---------- */
@@ -465,33 +476,20 @@ function importStats() {
 function webPrepare() {
   let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)}</p><h1>① เตรียมรอบนับ</h1></div>`;
   const locked = meta.status !== 'prepare';
-  // 1 file
-  h += `<section class="card"><h2>1 · ไฟล์ทะเบียน</h2>`;
-  if (master.size && !S.imp) {
-    h += `<div class="msg ok">✓ ${esc(meta.fileName)} · ชีต ${esc(meta.sheet)} · ${N(master.size)} รหัส${meta.woCount ? ` · ไม่นับ ${meta.woCount} รหัสที่ Write-Off อยู่แล้ว` : ''}</div>`;
+  h += `<section class="card"><h2>1 · ชื่อไฟล์</h2>`;
+  if (master.size) {
+    h += `<div class="msg ok">ชื่อไฟล์: <b>${esc(meta.fileName)}</b> · ชีต ${esc(meta.sheet)} · ${N(master.size)} รายการ${meta.woCount ? ` · ไม่นับ ${meta.woCount} รายการที่ Write-Off อยู่แล้ว` : ''}</div>`;
     if (!locked) h += `<button class="btn sm" data-a="pick" data-v="master" style="align-self:flex-start">เปลี่ยนไฟล์</button>`;
-  } else if (!S.imp) {
-    h += `<div class="drop" data-drop="master"><b>ลากไฟล์ Excel มาวางตรงนี้</b><span class="sub">.xlsx .xls .csv · ไฟล์ Export จาก SAP ใช้ได้เลย</span><button class="btn pri" data-a="pick" data-v="master">เลือกไฟล์</button></div>`;
-  } else {
-    const I = S.imp, opts = sel => `<option value="-1">— ไม่ใช้ —</option>` + I.headers.map((x, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
-    h += `<div class="row"><b>${esc(I.fileName)}</b><label class="f" style="flex-direction:row;align-items:center;gap:8px">ชีต <select class="in" id="impSheet" style="width:auto">${I.names.map(n => `<option ${n === I.sheet ? 'selected' : ''}>${esc(n)}${I.hidden.has(n) ? ' (ซ่อน)' : ''}</option>`).join('')}</select></label></div>`;
-    if (I.err) h += `<div class="msg bad">${esc(I.err)}</div>`;
-    else {
-      const st = importStats();
-      h += `<div class="grid">${[['code', 'รหัสบนสติ๊กเกอร์ *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'Cost Center (รหัส)'], ['ccName', 'Cost Center (ชื่อ) = พื้นที่'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
-        <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รหัส จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">${st.multi} รหัสมีรายการย่อย · สแกนครั้งเดียวนับครบ</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>
-        <div class="row"><button class="btn pri" data-a="doimport">นำเข้า ${N(st.codes)} รหัส</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
-    }
-  }
+  } else h += `<p class="sub">ยังไม่ได้นำเข้าไฟล์</p><button class="btn pri" data-a="web" data-v="rounds" style="align-self:flex-start">ไปหน้าเพิ่มข้อมูลตรวจนับ</button>`;
   h += `</section>`;
   if (master.size) {
     const team = usbMode ? (meta.team || []) : S.team.filter(u => u.active);
-    h += `<section class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2>2 · ทีม</h2>${usbMode ? '' : '<button class="btn sm" data-a="web" data-v="team">เพิ่ม / แก้ทีม</button>'}</div><div class="chips">${team.map(u => `<span class="chip ${u.role === 'lead' ? 'c-blue' : 'c-gray'}">${esc(u.name)} · ${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span>`).join('') || '<span class="sub">ยังไม่มี · เพิ่มคนนับที่หน้า ทีม + ตั้งค่า</span>'}</div></section>`;
     const areas = meta.areas || [];
-    h += `<section class="card"><div class="row" style="justify-content:space-between"><h2>3 · พื้นที่ + ภารกิจ</h2><span class="sub">สร้างจาก Cost Center อัตโนมัติ ${areas.filter(a => !a.shared).length} พื้นที่</span></div>
-      <div class="tbl-wrap"><table><thead><tr><th>พื้นที่</th><th>CC</th><th>รหัสที่ต้องนับ</th><th>คนนับ</th></tr></thead><tbody>${areas.map((a, i) => `<tr><td><b>${esc(a.name)}</b>${a.shared ? ' <span class="chip c-oth">ส่วนกลาง</span>' : ''}</td><td class="mono">${esc(a.shared ? '—' : a.code)}</td><td>${a.shared ? '—' : N(a.count)}</td><td><select class="in" data-assign="${i}" style="min-width:150px"><option value="">ใครก็หยิบได้</option>${team.filter(u => u.role === 'counter' || u.role === 'lead').map(u => `<option ${a.assignee === u.name ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
-      <div class="row"><input class="in" id="newArea" placeholder="พื้นที่ส่วนกลาง เช่น ห้องประชุมชั้น 4" style="max-width:300px"><button class="btn" data-a="addarea">+ เพิ่มพื้นที่</button></div></section>`;
-    h += `<div class="row" style="justify-content:flex-end;align-items:center">${locked ? `<span class="msg ok">ปล่อยภารกิจแล้ว · แก้คนนับได้ตลอด</span>` : `<span class="sub">ทีมจะเห็นภารกิจในแอปทันที</span><button class="btn pri" data-a="release">ปล่อยภารกิจ → เริ่มนับ</button>`}</div>`;
+    h += `<section class="card"><div class="row" style="justify-content:space-between"><h2>2 · มอบหมายคนนับ</h2><span class="sub">${areas.filter(a => !a.shared).length} แผนก จาก Cost Center ในไฟล์</span></div>
+      <p class="sub">เลือกคนนับให้แต่ละแผนก คนนับจะเห็นแผนกของตัวเองในเครื่องยิง · ปล่อยเป็น "ใครก็นับได้" ถ้าไม่ต้องการกำหนด · เพิ่มคนนับได้ที่หน้า ทีม + ตั้งค่า</p>
+      <div class="tbl-wrap"><table><thead><tr><th>แผนก</th><th>รหัส Cost Center</th><th>จำนวนทรัพย์สิน</th><th>คนนับ</th></tr></thead><tbody>${areas.map((a, i) => `<tr><td><b>${esc(a.name)}</b>${a.shared ? ' <span class="chip c-oth">ส่วนกลาง</span>' : ''}</td><td class="mono">${esc(a.shared ? '—' : a.code)}</td><td>${a.shared ? '—' : N(a.count)}</td><td><select class="in" data-assign="${i}" style="min-width:150px"><option value="">ใครก็นับได้</option>${team.filter(u => u.role === 'counter' || u.role === 'lead').map(u => `<option ${a.assignee === u.name ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      <div class="row"><input class="in" id="newArea" placeholder="พื้นที่ที่ไม่มีในไฟล์ เช่น ห้องประชุมชั้น 4" style="max-width:300px"><button class="btn" data-a="addarea">+ เพิ่มพื้นที่</button></div></section>`;
+    h += `<div class="row" style="justify-content:flex-end;align-items:center">${locked ? `<span class="msg ok">เริ่มนับแล้ว · เปลี่ยนคนนับได้ตลอด</span>` : `<span class="sub">เครื่องยิงจะเริ่มนับได้ทันที</span><button class="btn pri" data-a="release">เริ่มนับ</button>`}</div>`;
   }
   return h + `</main>`;
 }
@@ -1075,7 +1073,7 @@ async function onMasterFile(f) {
 }
 async function onFiles(why, files) {
   if (!files.length) return;
-  if (why === 'master') await onMasterFile(files[0]);
+  if (why === 'master') { await onMasterFile(files[0]); S.web = 'rounds'; if (S.imp && !S.imp.roundName) S.imp.roundName = 'ตรวจนับ ' + new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }); }
   if (why === 'pkg') { S.msg.usbApp = await importPackage(files[0]); S.app = 'me'; }
   if (why === 'usb') { flash('กำลังอ่านไฟล์…'); await importReports(files); }
   render();
@@ -1091,6 +1089,7 @@ document.addEventListener('change', async e => {
   if (t.dataset.assign !== undefined) { const areas = [...meta.areas]; areas[+t.dataset.assign] = { ...areas[+t.dataset.assign], assignee: t.value || null }; await saveMeta({ ...meta, areas }); }
   if (t.id === 'roomIn') { S.room = t.value.trim(); LS.set('room', S.room); }
   if (t.id === 'stSize') { S.stSize = t.value; }
+  if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
 
 });
 document.addEventListener('input', e => { if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
@@ -1153,13 +1152,21 @@ async function doImport() {
   }
   const rows = [...out.values()], counts = {};
   for (const r of rows) if (!r[7]) counts[r[6]] = (counts[r[6]] || 0) + 1;
+  const fresh = !meta || meta.status !== 'prepare';
+  if (fresh) {
+    const nm = ($('#impRound')?.value || I.roundName || '').trim() || 'ตรวจนับ ' + new Date().toLocaleDateString('th-TH');
+    meta = { id: 'r' + Date.now(), name: nm, status: 'prepare', createdAt: Date.now(), team: meta?.team || [], areas: [] };
+    loadMine(); evRound = null; S.cards = []; S.liveArea = null;
+  }
   const prev = new Map((meta.areas || []).map(a => [String(a.code), a]));
   const areas = Object.entries(cc).filter(([k]) => k).sort((a, b) => a[1].localeCompare(b[1])).map(([code, name]) => ({ code, name, count: counts[code] || 0, assignee: prev.get(code)?.assignee || null, shared: false }));
   for (const a of meta.areas || []) if (a.shared) areas.push(a);
   const woCount = rows.filter(r => r[7]).length;
   S.imp = null; flash('กำลังนำเข้า…');
   await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, tpl: I.tpl, areas, woCount });
-  flash(`นำเข้าแล้ว ${N(rows.length)} รหัส · ${areas.length} พื้นที่`);
+  if (fresh) subscribeEvents();
+  S.web = 'prepare';
+  flash(`นำเข้าแล้ว ${N(rows.length)} รายการ · ${areas.length} แผนก`);
 }
 async function verify() {
   if (!db) { S.verify = [`ผลนับในเครื่องนี้ ${mine.length} รายการ · ยังไม่ได้เชื่อมฐานข้อมูลออนไลน์`, 'warn']; return; }
