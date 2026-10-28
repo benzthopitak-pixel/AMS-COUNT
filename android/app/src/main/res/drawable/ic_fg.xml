@@ -1,8 +1,11 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- lime tile + letter A, inside the adaptive-icon safe zone -->
-    <path android:fillColor="#D4F25A" android:pathData="M42,30h24a12,12 0 0 1 12,12v24a12,12 0 0 1 -12,12h-24a12,12 0 0 1 -12,-12v-24a12,12 0 0 1 12,-12z"/>
-    <path android:strokeColor="#121826" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
-        android:pathData="M42,68 L54,42 L66,68 M46.6,59 L61.4,59"/>
+    <!-- company mark, scaled into the adaptive-icon safe zone -->
+    <group android:translateX="22.8" android:translateY="29.9" android:scaleX="0.62" android:scaleY="0.62">
+        <path android:fillColor="#057FC4" android:strokeColor="#FFFFFF" android:strokeWidth="1.18" android:pathData="M100.06,0.6 L63,0.59 L50.34,13.56 L37.66,0.62 L0.59,0.62 L0.59,77.1 L100.06,77.1 L100.06,0.6 Z"/>
+        <path android:fillColor="#FFD040" android:pathData="M18.47,1.17c-8.42,0-15.23,4.64-15.23,10.36S10.05,21.9,18.47,21.9,33.7,17.26,33.7,11.53,26.88,1.17,18.47,1.17Z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M92.42,41a25,25,0,0,0-8.33-14.15,19.53,19.53,0,0,0-13.33-4.61,18.33,18.33,0,0,0-7.71,2,16.64,16.64,0,0,0-3,2.13c-.84.77-2.4,2.05-2.74,3.17V24.74H36.35V77.09H57.29V62.59A19,19,0,0,0,59,64.71a17.48,17.48,0,0,0,14.8,5.13,20.61,20.61,0,0,0,10.12-4.23,24.1,24.1,0,0,0,5.89-7.19A25.35,25.35,0,0,0,92.42,41ZM64.07,57.1a7.53,7.53,0,0,1-6.78-3.8l0-14.23a7.66,7.66,0,0,1,6.8-3.77c5.07,0,9.82,4.85,9.82,10.9C73.89,52,69.15,57.07,64.07,57.1Z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M7.87,24.57 h21.22 v43.18 h-21.22 Z"/>
+    </group>
 </vector>

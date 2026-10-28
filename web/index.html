@@ -47,7 +47,10 @@ button { cursor: pointer; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
 .top-in { max-width: 1240px; margin: 0 auto; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
-.logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--lime); display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; }
+.logo img { width: 36px; height: 28px; display: block; }
+.brand { background: var(--card); border-radius: 24px; padding: 22px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.brand img { width: 120px; height: auto; }
+.brand b { font-size: 22px; line-height: 1.2; } .brand span { color: var(--muted); font-size: 14px; }
 .seg { display: inline-flex; background: #e9ebf3; border-radius: 999px; padding: 3px; }
 .seg button { border: none; background: transparent; padding: 7px 14px; border-radius: 999px; font-size: 14px; color: var(--muted); }
 .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
@@ -403,11 +406,11 @@ function render() {
     if (meta && !isLead()) items = I('live', '②', 'นับ (ดูอย่างเดียว)', 0, 99);
     else items = I('rounds', '+', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('prepare', '①', 'เตรียม', 0, 1) + I('live', '②', 'นับ', 0, 99) + I('inbox', '③', 'ตรวจ', inboxN, 99) + I('close', '④', 'ปิด + ส่งออก', 0, 99)
       + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '▦', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '⇄', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '⚙', 'ทีม + ตั้งค่า', 0, 99));
-    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><i>A</i>AMS Count</span><span id="sync" class="sync ${sc}">${st}</span></div>
+    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span><span id="sync" class="sync ${sc}">${st}</span></div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">รอบปัจจุบัน</span><b>${esc(meta.name)}</b>` : '<span class="sub">ยังไม่มีรอบนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
-    html += `<header class="top"><div class="top-in"><span class="logo"><i>A</i>AMS Count</span><span id="sync" class="sync ${sc}">${st}</span></div></header>`;
+    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span><span id="sync" class="sync ${sc}">${st}</span></div></header>`;
   }
   html += S.mode === 'web' ? webView(c) + '</div></div>' : appView(c);
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
@@ -699,7 +702,7 @@ function appView(c) {
 }
 function appLogin() {
   const team = meta?.team || [];
-  return `<div class="pbody"><div class="hero"><b style="font-size:26px">AMS Count</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
+  return `<div class="pbody"><div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
     ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'หัวหน้า' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม หัวหน้าเพิ่มได้ที่ ① เตรียม บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
     <div class="card"><label class="f">หรือพิมพ์ชื่อ<input class="in" id="loginName" placeholder="ชื่อของคุณ"></label><button class="btn pri" data-a="loginname">เข้าใช้งาน</button></div>
     <p class="sub">โหมดสาย USB · เลือกชื่อจากแพ็กเกจที่นำเข้า · เครื่องนี้: ${esc(dev)}</p></div>`;
@@ -908,7 +911,7 @@ async function importReports(files) {
 function gateView() {
   const cfg = Store.auth.config(), msg = S.gateMsg ? `<div class="msg bad">${esc(S.gateMsg)}</div>` : '';
   const wrap = inner => `<div class="phone" style="min-height:100vh;justify-content:center"><div class="pbody" style="padding-bottom:40px">
-    <div class="hero"><b style="font-size:28px">AMS Count</b><span>ระบบตรวจนับทรัพย์สิน</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
+    <div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>ระบบตรวจนับทรัพย์สิน</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
   if (S.gate === 'boot') return wrap(`<div class="card"><p class="sub">กำลังเชื่อมต่อ…</p></div>`);
   if (S.gate === 'setup') return wrap(`<div class="card"><h2>ตั้งค่าการเชื่อมต่อ</h2><p class="sub">ใส่ค่าจาก Supabase → Project Settings → API (ทำครั้งเดียวต่อเครื่อง)</p>
     <label class="f">Project URL<input class="in mono" id="cfgUrl" value="${esc(cfg.url)}" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
