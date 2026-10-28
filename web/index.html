@@ -169,6 +169,10 @@ tr.click { cursor: pointer; } tr.click:hover { background: #f8f9fc; } tr.sel { b
   .nav-item { width: auto; white-space: nowrap; padding: 8px 12px; min-height: 40px; }
   .nav-sep, .side-foot { display: none; }
 }
+.dupbg { position: fixed; inset: 0; z-index: 40; background: rgb(18 24 38 / .55); display: flex; align-items: center; justify-content: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+.duppop { width: 100%; max-width: 340px; background: var(--card); border-radius: 24px; padding: 22px 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; border-top: 8px solid var(--warn); }
+.duppop b#dupH { font-size: 24px; color: var(--warn-ink); }
+.dupicon { width: 56px; height: 56px; border-radius: 50%; background: var(--warn); color: #1d0e00; font-size: 32px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -689,6 +693,9 @@ function appView(c) {
   }
   if (S.item) h += itemSheet(S.item);
   if (S.areaPick) h += areaPicker();
+  if (S.search && !S.item) h += searchSheet();
+  if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
+    h += `<div class="dupbg" data-a="closedup" role="alertdialog" aria-labelledby="dupH"><div class="duppop"><span class="dupicon" aria-hidden="true">!</span><b id="dupH">ตรวจนับซ้ำ</b><span class="mono" style="font-size:20px;font-weight:700">${esc(d.code)}</span>${a ? `<span>${esc(a.name)}</span>` : ''}<span class="sub">นับไปแล้วโดย ${esc(d.by)} · ${hm(d.t)}${d.where ? ' · ' + esc(d.where) : ''}</span><button class="btn dark" data-a="closedup" style="align-self:stretch">ตกลง</button></div></div>`; }
   return h;
 }
 function appLogin() {
@@ -763,8 +770,8 @@ function appScan() {
       h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span></span>${tick}</button>`;
     }
   }
-  if (!S.cards.length) h += `<p class="sub" style="text-align:center">ผลการสแกนจะขึ้นเป็นการ์ดที่นี่<br>ไม่มีสติ๊กเกอร์? กดปุ่มด้านล่างเพื่อพิมพ์รหัสเอง</p>`;
-  h += `<button class="btn" data-a="manual" style="border-style:dashed">${S.manual ? 'กลับไปใช้ปุ่มยิง' : 'ไม่มีสติ๊กเกอร์? พิมพ์รหัสเอง'}</button></div>`;
+  if (!S.cards.length) h += `<p class="sub" style="text-align:center">ผลการสแกนจะขึ้นเป็นการ์ดที่นี่<br>ไม่มีสติ๊กเกอร์? กดปุ่มด้านล่างเพื่อค้นหารายการ</p>`;
+  h += `<button class="btn" data-a="opensearch" style="border-style:dashed">ไม่มีสติ๊กเกอร์? ค้นหารายการ</button></div>`;
   return h;
 }
 let _srvIds = null, _srvRef = null;
@@ -968,6 +975,31 @@ function webTeam() {
   return h;
 }
 
+/* ---------- search (item without a sticker) ---------- */
+function searchHits() {
+  const q = norm(S.search.q), { cur } = compute(), here = String(S.area?.code || '');
+  let list = [...master.values()].filter(a => counted(a));
+  if (!S.search.all) list = list.filter(a => !cur.has(a.code));
+  if (q) list = list.filter(a => a.code.includes(q) || norm(a.name).includes(q) || (a.alt && a.alt.includes(q)) || norm(a.ccName).includes(q));
+  else list = list.filter(a => String(a.cc) === here);
+  list.sort((a, b) => (String(b.cc) === here) - (String(a.cc) === here) || a.code.localeCompare(b.code));
+  return { total: list.length, list: list.slice(0, 60) };
+}
+function searchSheet() {
+  const { cur } = compute(), r = searchHits(), q = S.search.q.trim();
+  let h = `<div class="sheetbg" data-a="closesearch"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between;align-items:center"><h2>ค้นหารายการ</h2><button class="btn sm" data-a="closesearch">ปิด</button></div>
+    <input class="in" id="srchIn" value="${esc(S.search.q)}" placeholder="เลข Asset หรือชื่อ เช่น โต๊ะ, 51000" autocomplete="off" inputmode="text" aria-label="ค้นหาเลข Asset หรือชื่อ">
+    <div class="tabs3"><button class="${S.search.all ? '' : 'on'}" data-a="srchall" data-v="0">ยังไม่ได้นับ</button><button class="${S.search.all ? 'on' : ''}" data-a="srchall" data-v="1">ทั้งหมด</button></div>
+    <span class="sub">${q ? `พบ ${N(r.total)} รายการ` : `${S.area ? 'แผนก ' + esc(S.area.name) + ' · ' : ''}${N(r.total)} รายการ · พิมพ์เพื่อค้นหาทุกแผนก`}${r.total > r.list.length ? ` · แสดง ${r.list.length} รายการแรก` : ''}</span>`;
+  for (const a of r.list) {
+    const s = cur.get(a.code);
+    h += `<button class="li" data-a="openitem" data-v="${esc(a.code)}"><span class="t"><b class="mono">${esc(a.code)}</b><span>${esc(a.name)}</span><span>${esc(a.ccName)}${a.raws.length > 1 ? ` · ${a.raws.length} แถว` : ''}</span></span>${s ? '<span class="chip c-ok">นับแล้ว</span>' : '<span class="chip c-warn">ยังไม่นับ</span>'}</button>`;
+  }
+  if (!r.list.length) h += `<p class="sub" style="text-align:center">ไม่พบรายการ</p>`;
+  if (q && !master.has(resolve(q)) && (!r.total || q.length >= 7)) h += `<button class="btn" data-a="srchsave" style="border-style:dashed">ไม่มีในทะเบียน · บันทึกรหัส "${esc(q.toUpperCase())}" ว่าพบที่นี่</button>`;
+  return h + `</div></div>`;
+}
+
 /* ================= actions ================= */
 let audio;
 function beep(kind) {
@@ -989,7 +1021,8 @@ function doScan(raw) {
   const code = resolve(raw); if (!code || !S.area) return;
   if (meta.status === 'closed') { flash('รอบนี้ปิดแล้ว'); return; }
   const prev = compute().cur.get(code);
-  if (prev) { beep('dup'); S.cards.unshift({ code, dup: true, dupBy: prev.by, dupT: prev.t }); render(); return; }
+  if (prev) { beep('dup'); S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return; }
+  S.dupPop = null;
   pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual });
   const s = compute().cur.get(code);
   beep(!master.has(code) ? 'unk' : isOther(s) ? 'oth' : 'ok');
@@ -1005,7 +1038,7 @@ function save(name, data, mime) {
 document.addEventListener('click', async e => {
   const t = e.target.closest('[data-a]'); if (!t) return;
   if (t.dataset.a.startsWith('close') && e.target.closest('[data-stop]') && e.target.closest('[data-a]') !== t) return;
-  if ((t.dataset.a === 'closeitem' || t.dataset.a === 'closepick') && t.classList.contains('sheetbg') && e.target !== t) return;
+  if ((t.dataset.a === 'closeitem' || t.dataset.a === 'closepick' || t.dataset.a === 'closesearch') && t.classList.contains('sheetbg') && e.target !== t) return;
   const a = t.dataset.a, v = t.dataset.v;
   switch (a) {
     case 'mode': S.mode = v; LS.set('mode', v); break;
@@ -1068,7 +1101,12 @@ document.addEventListener('click', async e => {
     case 'undo': pushEvent({ k: 'del', code: v, round: meta.id }); S.item = null; flash('ยกเลิกผลนับแล้ว'); break;
     case 'cond': edit(v, { cond: t.dataset.c }); return;
     case 'remark': edit(v, { remark: $('#remarkIn').value.trim() }); flash('บันทึก Remark แล้ว'); return;
-    case 'markfound': if (!S.area) { flash('เลือกพื้นที่ก่อน'); S.areaPick = true; break; } pushEvent({ k: 'scan', code: v, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: true }); flash('บันทึกว่าพบแล้ว'); break;
+    case 'markfound': if (!S.area) { flash('เลือกแผนกก่อน'); S.areaPick = true; break; } pushEvent({ k: 'scan', code: v, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: true }); S.cards.unshift({ code: v }); S.item = null; S.search = null; S.app = 'scan'; flash('บันทึกว่าพบแล้ว · ติด "ต้องพิมพ์สติ๊กเกอร์ใหม่" ให้แล้ว'); break;
+    case 'opensearch': S.search = { q: '', all: false }; break;
+    case 'closesearch': S.search = null; break;
+    case 'srchall': S.search.all = v === '1'; break;
+    case 'srchsave': { const q = S.search.q.trim(); if (!q) return; S.search = null; S.manual = true; doScan(q); S.manual = false; return; }
+    case 'closedup': clearTimeout(S.dupT); S.dupPop = null; break;
     case 'manual': S.manual = !S.manual; break;
     case 'feedf': S.feedF = v; break;
     case 'verify': await verify(); break;
@@ -1114,7 +1152,7 @@ document.addEventListener('change', async e => {
   if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
 
 });
-document.addEventListener('input', e => { if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
+document.addEventListener('input', e => { if (e.target.id === 'srchIn' && S.search) { S.search.q = e.target.value; clearTimeout(window._sq); window._sq = setTimeout(render, 150); return; } if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
 document.addEventListener('submit', e => { if (e.target.id === 'loginForm') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'scanForm') { e.preventDefault(); const i = $('#scanIn'); const v = i.value; i.value = ''; doScan(v); setTimeout(() => $('#scanIn')?.focus(), 0); } });
 // ---------- scanner input ----------
 // 1) Android app receives the scan as an Intent (CipherLab "Intent" output) → window.AMSScan(code)
@@ -1155,7 +1193,8 @@ document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 
 
 // Android back button: close sheet → go to home tab → leave app
 window.AMSBack = () => {
-  if (S.item || S.areaPick) { S.item = null; S.areaPick = false; render(); return true; }
+  if (S.dupPop) { S.dupPop = null; render(); return true; }
+  if (S.item || S.areaPick || S.search) { if (S.item) S.item = null; else { S.areaPick = false; S.search = null; } render(); return true; }
   if (S.mode === 'app' && S.user && S.app !== 'home') { S.app = 'home'; render(); return true; }
   if (S.mode === 'web' && S.web !== 'rounds' && S.web !== 'live') { S.web = isLead() ? 'rounds' : 'live'; render(); return true; }
   return false;
@@ -1286,7 +1325,8 @@ function afterRender() {
   const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
   const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
-  if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus();
+  if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && !S.search && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus();
+  if (S.search && !S.item && document.activeElement?.id !== 'srchIn') { const si = $('#srchIn'); if (si) { si.focus(); try { si.setSelectionRange(si.value.length, si.value.length); } catch {} } }
 }
 document.fonts?.ready?.then(() => render());
 render(); connect();
