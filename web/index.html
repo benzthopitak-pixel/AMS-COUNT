@@ -477,7 +477,7 @@ function importBlock() {
   const st = importStats(), fresh = !meta || meta.status !== 'prepare';
   if (fresh) h += `<label class="f">ชื่อรอบตรวจนับ<input class="in" id="impRound" value="${esc(I.roundName)}" maxlength="80"></label>`;
   h += `<div class="grid">${[['code', 'เลข Asset (บนสติ๊กเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
-    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">${st.multi} รายการมีรายการย่อย · สแกนครั้งเดียวนับครบ</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
+    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">เลข Asset ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · ยิงครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
   if (busyRound) h += `<div class="msg warn">มีรอบ "${esc(meta.name)}" กำลังนับอยู่ · นำเข้าไฟล์นี้จะเริ่มรอบใหม่แทน (ส่งออก Excel รอบเดิมเก็บไว้ก่อน)</div>`;
   h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างรอบใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
   return h;
@@ -516,7 +516,8 @@ function prepareImport(name) {
 function importStats() {
   const I = S.imp, m = I.map, codes = new Map(); let wo = 0;
   for (const r of I.rows) { const c = norm(r[m.code]); if (!c) continue; codes.set(c, (codes.get(c) || 0) + 1); if (I.tpl.status >= 0 && r[I.tpl.status] === 'Write - Off') wo++; }
-  return { codes: codes.size, rows: I.rows.length, multi: [...codes.values()].filter(v => v > 1).length, wo };
+  const rep = [...codes.values()].filter(v => v > 1);
+  return { codes: codes.size, rows: I.rows.length, multi: rep.length, multiRows: rep.reduce((a, b) => a + b, 0), wo };
 }
 function webPrepare() {
   let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)}</p><h1>2 · เตรียมรอบนับ</h1></div>`;
