@@ -532,8 +532,8 @@ function webPrepare() {
     const team = usbMode ? (meta.team || []) : S.team.filter(u => u.active);
     const areas = meta.areas || [];
     h += `<section class="card"><div class="row" style="justify-content:space-between"><h2>2 · มอบหมายคนนับ</h2><span class="sub">${areas.filter(a => !a.shared).length} แผนก จาก Cost Center ในไฟล์</span></div>
-      <p class="sub">เลือกคนนับให้แต่ละแผนก คนนับจะเห็นแผนกของตัวเองในเครื่องยิง · ปล่อยเป็น "ใครก็นับได้" ถ้าไม่ต้องการกำหนด · เพิ่มคนนับได้ที่หน้า ทีม + ตั้งค่า</p>
-      <div class="tbl-wrap"><table><thead><tr><th>แผนก</th><th>รหัส Cost Center</th><th>จำนวนทรัพย์สิน</th><th>คนนับ</th></tr></thead><tbody>${areas.map((a, i) => `<tr><td><b>${esc(a.name)}</b>${a.shared ? ' <span class="chip c-oth">ส่วนกลาง</span>' : ''}</td><td class="mono">${esc(a.shared ? '—' : a.code)}</td><td>${a.shared ? '—' : N(a.count)}</td><td><select class="in" data-assign="${i}" style="min-width:150px"><option value="">ใครก็นับได้</option>${team.filter(u => u.role === 'counter' || u.role === 'lead').map(u => `<option ${a.assignee === u.name ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      <p class="sub">เลือกคนนับให้แต่ละแผนก คนนับจะเห็นแผนกของตัวเองในเครื่องยิง · เลือก "ไม่ระบุผู้ตรวจนับ" ถ้าไม่ต้องการกำหนด (ทุกคนนับแผนกนั้นได้) · เพิ่มคนนับได้ที่หน้า ทีม + ตั้งค่า</p>
+      <div class="tbl-wrap"><table><thead><tr><th>แผนก</th><th>รหัส Cost Center</th><th>จำนวนทรัพย์สิน</th><th>คนนับ</th></tr></thead><tbody>${areas.map((a, i) => `<tr><td><b>${esc(a.name)}</b>${a.shared ? ' <span class="chip c-oth">ส่วนกลาง</span>' : ''}</td><td class="mono">${esc(a.shared ? '—' : a.code)}</td><td>${a.shared ? '—' : N(a.count)}</td><td><select class="in" data-assign="${i}" style="min-width:150px"><option value="">ไม่ระบุผู้ตรวจนับ</option>${team.filter(u => u.role === 'counter' || u.role === 'lead').map(u => `<option ${a.assignee === u.name ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
       <div class="row"><input class="in" id="newArea" placeholder="พื้นที่ที่ไม่มีในไฟล์ เช่น ห้องประชุมชั้น 4" style="max-width:300px"><button class="btn" data-a="addarea">+ เพิ่มพื้นที่</button></div></section>`;
     h += `<div class="row" style="justify-content:flex-end;align-items:center">${locked ? `<span class="msg ok">เริ่มนับแล้ว · เปลี่ยนคนนับได้ตลอด</span>` : `<span class="sub">เครื่องยิงจะเริ่มนับได้ทันที</span><button class="btn pri" data-a="release">เริ่มนับ</button>`}</div>`;
   }
@@ -560,7 +560,7 @@ function webLive(c) {
     const p = x.total ? x.found / x.total : 0;
     const bg = x.shared ? 'var(--oth-soft)' : p >= 1 ? '#12b76a' : p >= .66 ? '#6ce9a6' : p >= .33 ? '#a6f4c5' : p > 0 ? '#d1fadf' : '#f2f4f7';
     const fg = x.shared ? '#3e1c96' : p >= 1 ? '#ffffff' : p > 0 ? '#053321' : '#344054';
-    h += `<button class="tile" data-a="livearea" data-v="${esc(x.code)}" style="background:${bg};color:${fg};${S.liveArea === String(x.code) ? 'outline:3px solid var(--blue)' : ''}"><b>${esc(x.name)}</b><span class="p">${x.shared ? x.here : Math.round(p * 100) + '%'}</span><small>${x.shared ? 'ส่วนกลาง' : `${N(x.found)}/${N(x.total)}`}${x.other ? ` · +${x.other} แผนกอื่น` : ''} · ${esc(x.assignee || 'ใครก็ได้')}</small></button>`;
+    h += `<button class="tile" data-a="livearea" data-v="${esc(x.code)}" style="background:${bg};color:${fg};${S.liveArea === String(x.code) ? 'outline:3px solid var(--blue)' : ''}"><b>${esc(x.name)}</b><span class="p">${x.shared ? x.here : Math.round(p * 100) + '%'}</span><small>${x.shared ? 'ส่วนกลาง' : `${N(x.found)}/${N(x.total)}`}${x.other ? ` · +${x.other} แผนกอื่น` : ''} · ${esc(x.assignee || 'ไม่ระบุผู้ตรวจนับ')}</small></button>`;
   }
   h += `</div>`;
   if (S.liveArea && st.get(S.liveArea)) {
@@ -632,7 +632,7 @@ function webClose(c) {
   let h = `<main class="wrap"><div class="row"><section class="card side"><h1>5 · ปิดรอบ</h1>`;
   if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
   else {
-    h += ck(unassigned === 0, 'ทุกพื้นที่มีคนนับ', unassigned ? `ยังไม่มีคนนับ ${unassigned} พื้นที่ (ใครก็หยิบได้)` : 'ครบ');
+    h += ck(unassigned === 0, 'ทุกพื้นที่มีคนนับ', unassigned ? `ไม่ระบุผู้ตรวจนับ ${unassigned} แผนก` : 'ครบ');
     h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 3 นับ');
     h += ck(open === 0, 'กล่องตรวจเคลียร์หมด', open ? `ค้าง ${open} เรื่อง` : 'ครบ');
     h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
