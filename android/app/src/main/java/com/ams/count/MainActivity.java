@@ -5,8 +5,11 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
@@ -29,7 +32,10 @@ import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 import androidx.webkit.WebViewCompat;
 
+import org.json.JSONObject;
+
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 
@@ -111,7 +117,56 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(START_URL);
 
+        web.setFocusable(true);
+        web.setFocusableInTouchMode(true);
+        web.requestFocus();
         warnIfOldWebView();
+    }
+
+    /* ---------- รับรหัสจากเครื่องยิงแบบ Intent (ReaderConfig → Data Output → Intent) ---------- */
+    private static final String[] SCAN_ACTIONS = {
+            "com.ams.count.SCAN",                                   // ตั้งเองใน ReaderConfig (แนะนำ)
+            "com.cipherlab.barcodebaseapi.PASS_DATA_2_APP",         // ค่าเริ่มต้นของ CipherLab
+            "com.cipherlab.barcode.ACTION_DATA"
+    };
+    private final BroadcastReceiver scanReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String code = pickBarcode(intent);
+            if (code == null || code.trim().isEmpty() || web == null) return;
+            web.evaluateJavascript("window.AMSScan && window.AMSScan(" + JSONObject.quote(code.trim()) + ")", null);
+        }
+    };
+
+    /** หาข้อความบาร์โค้ดใน extras: ใช้ key ที่ชื่อเหมือนข้อมูลก่อน แล้วค่อยเอา String ตัวแรกที่เจอ */
+    private static String pickBarcode(Intent intent) {
+        Bundle b = intent.getExtras();
+        if (b == null) return intent.getDataString();
+        String first = null;
+        for (String k : b.keySet()) {
+            Object v = b.get(k);
+            String s = v instanceof String ? (String) v : v instanceof byte[] ? new String((byte[]) v, StandardCharsets.UTF_8) : null;
+            if (s == null || s.isEmpty()) continue;
+            String key = k.toLowerCase();
+            if (key.equals("data") || key.contains("decoder_data") || key.contains("barcode") || key.contains("data_string") || key.contains("decode")) return s;
+            if (first == null && !key.contains("type") && !key.contains("symbol") && !key.contains("length")) first = s;
+        }
+        return first;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        IntentFilter f = new IntentFilter();
+        for (String a : SCAN_ACTIONS) f.addAction(a);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(scanReceiver, f, Context.RECEIVER_EXPORTED);
+        else registerReceiver(scanReceiver, f);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        try { unregisterReceiver(scanReceiver); } catch (Exception ignored) { }
     }
 
     /** หน้าจอแอปต้องใช้ Android System WebView เวอร์ชัน 90 ขึ้นไป · ถ้าเก่ากว่าให้อัปเดตก่อน */

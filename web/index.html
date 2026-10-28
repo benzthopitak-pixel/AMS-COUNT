@@ -364,7 +364,7 @@ const stageOf = () => !meta ? 0 : meta.status === 'prepare' ? 1 : meta.status ==
 
 function render() {
   const root = $('#app'); if (!root) return;
-  const keepFocus = document.activeElement?.id;
+  const keepFocus = document.activeElement?.id, keepVal = keepFocus && 'value' in document.activeElement ? document.activeElement.value : null, scanVal = $('#scanIn')?.value || '';
   const [sc, st] = syncInfo();
   const c = meta && master.size ? cats() : null;
   const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
@@ -384,7 +384,8 @@ function render() {
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
   root.innerHTML = html;
   afterRender();
-  if (keepFocus && $('#' + keepFocus)) { const el = $('#' + keepFocus); el.focus(); if (el.setSelectionRange && el.value != null) try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
+  if (scanVal && $('#scanIn')) $('#scanIn').value = scanVal;
+  if (keepFocus && $('#' + keepFocus)) { const el = $('#' + keepFocus); if (keepVal != null && el.value !== undefined && el.type !== 'file' && el.tagName !== 'SELECT' && el.type !== 'checkbox' && el.type !== 'radio') el.value = keepVal; el.focus(); if (el.setSelectionRange && el.value != null) try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
 }
 
 /* ================= WEB ================= */
@@ -787,7 +788,8 @@ function appMeBlock() {
     ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
     <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(window.AndroidBridge?.appVersion?.() || 'เว็บ')} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
-    <div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ReaderConfig → Output → Keyboard Emulation · Suffix = Enter · เปิด QR Code + Code 128</p></div>
+    <div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">ไม่มีอะไรขึ้นเลย = ReaderConfig ยังไม่ได้ตั้งให้ส่งข้อมูลเข้าแอป (ดูวิธีด้านล่าง)</p></div>
+    <div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ReaderConfig → Data Output → <b>Keyboard Emulation</b> (หรือ <b>Intent</b>: Action = <span class="mono">com.ams.count.SCAN</span> · Extra = <span class="mono">data</span>) · Suffix = Enter · เปิด QR Code + Code 128</p></div>
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
 }
 
@@ -1093,6 +1095,43 @@ document.addEventListener('change', async e => {
 });
 document.addEventListener('input', e => { if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
 document.addEventListener('submit', e => { if (e.target.id === 'loginForm') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'scanForm') { e.preventDefault(); const i = $('#scanIn'); const v = i.value; i.value = ''; doScan(v); setTimeout(() => $('#scanIn')?.focus(), 0); } });
+// ---------- scanner input ----------
+// 1) Android app receives the scan as an Intent (CipherLab "Intent" output) → window.AMSScan(code)
+// 2) Keyboard Emulation while the scan box isn't focused → collect keys here
+// 3) Keyboard Emulation without Enter suffix → submit after a short pause
+const scanLog = [];
+function logScan(how, v) { scanLog.unshift({ t: Date.now(), how, v: String(v).slice(0, 60) }); scanLog.length = Math.min(scanLog.length, 8); if (S.app === 'me') render(); }
+function routeScan(code) {
+  code = String(code || '').replace(/[\r\n\t]+/g, '').trim(); if (!code) return;
+  if (S.mode !== 'app' || !S.user || !meta) { flash('ได้รับรหัส ' + code + ' · เข้าหน้าแอปแล้วเลือกพื้นที่ก่อน'); return; }
+  if (!S.area) { flash('ได้รับรหัส ' + code + ' · เลือกพื้นที่ที่อยู่ตอนนี้ก่อน'); S.app = 'area'; S.areaPick = true; render(); return; }
+  if (S.item) S.item = null;
+  if (S.app !== 'scan') S.app = 'scan';
+  doScan(code);
+}
+window.AMSScan = code => { logScan('Intent', code); routeScan(code); return true; };
+let keyBuf = '', keyT = 0, keyTimer = null;
+document.addEventListener('keydown', e => {
+  const a = document.activeElement, typing = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT') && a.id !== 'scanIn';
+  if (typing || S.mode !== 'app' || !S.user || S.gate) return;   // never record keys typed into other boxes (PIN, names)
+  if (e.key && (e.key.length === 1 || e.key === 'Enter')) logScan('ปุ่ม ' + (a?.id === 'scanIn' ? 'ช่องสแกน' : 'นอกช่องสแกน'), e.key === 'Enter' ? '⏎ Enter' : e.key);
+  if (a && a.id === 'scanIn') {
+    // no Enter suffix configured: send automatically when the burst stops
+    if (!S.manual && e.key.length === 1) { clearTimeout(keyTimer); keyTimer = setTimeout(() => { const i = $('#scanIn'); if (i && i.value.trim().length >= 3) { const v = i.value; i.value = ''; logScan('ส่งอัตโนมัติ', v); doScan(v); } }, 350); }
+    if (e.key === 'Enter') clearTimeout(keyTimer);
+    return;
+  }
+  const now = Date.now();
+  if (now - keyT > 600) keyBuf = '';
+  keyT = now;
+  if (e.key === 'Enter') { if (keyBuf.length >= 3) { e.preventDefault(); const v = keyBuf; keyBuf = ''; routeScan(v); } return; }
+  if (e.key.length === 1) {
+    keyBuf += e.key;
+    clearTimeout(keyTimer); keyTimer = setTimeout(() => { if (keyBuf.length >= 4) { const v = keyBuf; keyBuf = ''; routeScan(v); } keyBuf = ''; }, 350);
+  }
+}, true);
+document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick) setTimeout(() => { const a = document.activeElement; if (!a || a === document.body) $('#scanIn')?.focus(); }, 50); });
+
 // Android back button: close sheet → go to home tab → leave app
 window.AMSBack = () => {
   if (S.item || S.areaPick) { S.item = null; S.areaPick = false; render(); return true; }
