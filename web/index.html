@@ -166,7 +166,7 @@ const isLead = () => usbMode || S.user?.role === 'lead';
 /* ================= state ================= */
 let dev = LS.get('dev', null); if (!dev) { dev = 'd' + Math.random().toString(36).slice(2, 7); LS.set('dev', dev); }
 const S = {
-  mode: LS.get('mode', innerWidth < 760 ? 'app' : 'web'),
+  mode: window.AndroidBridge || new URLSearchParams(location.search).get('mode') === 'app' ? 'app' : 'web',
   web: 'rounds', app: 'home', user: LS.get('user', null),
   area: LS.get('area', null), room: LS.get('room', ''), manual: false,
   areaTab: 'left', inboxTab: 'move', inboxSel: null, inboxChecked: new Set(),
@@ -370,7 +370,7 @@ function render() {
   const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
   let html = `<header class="top"><div class="top-in">
     <span class="logo"><i>A</i>AMS Count</span>
-    <div class="seg" role="group" aria-label="เลือกหน้าจอ"><button data-a="mode" data-v="web" aria-pressed="${S.mode === 'web'}">คอม (เว็บ)</button><button data-a="mode" data-v="app" aria-pressed="${S.mode === 'app'}">เครื่องยิง (แอป)</button></div>`;
+`;
   if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus(); return; }
   if (S.mode === 'web' && meta && !isLead()) {
     html += `<nav class="pills" aria-label="เมนู"><button class="pill ${S.web === 'live' ? 'on' : ''}" data-a="web" data-v="live">② นับ (ดูอย่างเดียว)</button></nav>`;
