@@ -702,7 +702,7 @@ function myAreas() { return (meta.areas || []).filter(a => a.assignee === S.user
 function appHome(c) {
   const st = areaStats(), T = totals(), { cur } = compute();
   const mineN = [...cur.values()].filter(x => x.by === S.user.name).length;
-  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span><span class="sync-mini">${syncHtml().replace('id="sync" ', '')}</span></div>`;
+  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span></div>`;
   if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
   h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
     <b style="font-size:18px">เลือกแผนกที่จะนับ</b>`;
