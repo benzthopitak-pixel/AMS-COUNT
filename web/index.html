@@ -287,7 +287,7 @@ function compute() {
       if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'Admin: รับเข้าทะเบียน', e); }
       if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'Admin: ไม่ใช่ของเรา', e); }
       if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'Admin รับทราบสภาพ', e); }
-      if (e.act === 'transferred') { s.flags.pendingTransfer = false; s.flags.transferred = true; H(c, 'ทำ AS02 ใน SAP แล้ว', e); }
+      if (e.act === 'transferred') { s.flags.pendingTransfer = false; s.flags.transferred = true; H(c, 'โอนย้ายแล้ว', e); }
     }
   }
   _cacheKey = key; _cache = { cur, recount, hist, evs, ccDone, lost };
@@ -605,7 +605,7 @@ function reportData(kind) {
     return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
   }
   const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
-    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.flags.transferred ? 'โอนแล้ว (AS02)' : s2.rv.move === 'approved' ? 'อนุมัติแล้ว · รอโอน' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
+    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.flags.transferred ? 'โอนแล้ว' : s2.rv.move === 'approved' ? 'อนุมัติแล้ว · รอโอน' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
   return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'คนนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
 }
 function editDialog(code) {
@@ -950,7 +950,6 @@ function inboxDetail(code) {
   if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมชั่วคราว)') + B('recount', 'สั่งนับซ้ำ');
   if (!a && !s.rv.unk) h += B('unk_accept', 'รับเข้าทะเบียน', 'pri') + B('unk_reject', 'ไม่ใช่ของเรา');
   if ((s.cond === 'ชำรุด' || s.cond === 'รอซ่อม') && !s.rv.dmg) h += B('dmg_ack', 'รับทราบสภาพ', 'pri');
-  if (s.flags.pendingTransfer) h += B('transferred', 'ทำ AS02 ใน SAP แล้ว', 'oth');
   if (!isOther(s) || s.rv.move) h += B('recount', 'สั่งนับซ้ำ');
   h += `</div><div><span class="sub">ป้าย + การโอนย้าย (แตะเพื่อเปิด/ปิด)</span><div class="chips" style="margin-top:6px">${flagChips(s, 'leadflag')}</div></div>`;
   h += `<div class="card" style="background:#f8f9fc;padding:12px"><b>ประวัติ</b>${(hist.get(code) || []).map(x => `<span class="sub">${fmtT(x.t)} · ${esc(x.by)} · ${esc(x.txt)}</span>`).join('')}</div>`;
