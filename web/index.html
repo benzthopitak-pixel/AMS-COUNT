@@ -559,8 +559,8 @@ function render() {
     const stg = stageOf();
     const I = (v, num, label, n, doneAt) => { const on = S.web === v || (v === 'live' && S.web === 'cc'); return `<button class="nav-item ${on ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}" ${on ? 'aria-current="page"' : ''}><span class="nav-num">${num}</span><span class="nav-label">${label}</span>${n ? `<span class="nav-badge">${n}</span>` : ''}</button>`; };
     let items;
-    if (meta && !isLead()) items = I('live', '2', 'นับ (ดูได้อย่างเดียว)', 0, 99);
-    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิดงาน', 0, 99) + I('export', '5', 'ส่งรายงาน', 0, 99)
+    if (meta && !isLead()) items = I('live', '2', 'ตรวจนับ (ดูได้อย่างเดียว)', 0, 99);
+    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'ตรวจนับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิดงาน', 0, 99) + I('export', '5', 'ส่งรายงาน', 0, 99)
       + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '6', 'พิมพ์สติกเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '7', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '8', 'ทีม + ตั้งค่า', 0, 99));
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
@@ -600,7 +600,7 @@ function webView(c) {
   return webRounds(c);
 }
 /* ---------- 3 · summary reports: on screen, Excel and PDF ---------- */
-const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['bw', 'รายการยืมมา'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)'], ['pv', 'Pivot (สร้างเอง)']];
+const REP_TABS = [['dash', 'ภาพรวม (Dashboard)'], ['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['bw', 'รายการยืมมา'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)'], ['pv', 'Pivot (สร้างเอง)']];
 // custom report: group by any column of the imported file, pick the columns to print
 const RES_F = [['r:res', 'ผลการนับ'], ['r:cond', 'สภาพ'], ['r:area', 'CC ที่พบ'], ['r:areaName', 'ชื่อ CC ที่พบ'], ['r:by', 'ผู้นับ'], ['r:t', 'เวลานับ'], ['r:src', 'วิธีตรวจนับ'], ['r:qr', 'QR'], ['r:remark', 'Remark']];
 function crFields() { return (meta.headers || []).map((h, i) => ['h:' + i, h]).concat(RES_F); }
@@ -700,15 +700,16 @@ const bulkMoveBox = (ccF, where) => { const n = pendingMoves(ccF).length; if (!n
   return S.confirmBulk === where ? `<div class="confirm"><b>อนุมัติย้ายแผนกทั้งหมด ${n} รายการ?</b><span>ทุกรายการจะเป็น "รอโอนย้าย" และเข้าคิวพิมพ์ QR ใหม่ · รายการที่ผู้ตรวจนับแจ้งว่า "ยืมมา" ไม่รวม</span><div class="row"><button class="btn oth" data-a="bulkmove" data-v="${esc(ccF)}">ยืนยันอนุมัติ ${n} รายการ</button><button class="btn" data-a="nobulk">ยกเลิก</button></div></div>`
     : `<button class="btn oth" data-a="askbulk" data-v="${where}">✓ อนุมัติย้ายทั้งหมด (${n})</button>`; };
 function webReport() {
-  const tab = S.repTab || 'sum', d = reportData(tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
-  const n = Object.fromEntries(REP_TABS.filter(([k]) => k !== 'pv' && k !== 'cr').map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
+  const tab = S.repTab || 'dash', d = reportData(tab === 'dash' ? 'sum' : tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  const n = Object.fromEntries(REP_TABS.filter(([k]) => k !== 'pv' && k !== 'cr' && k !== 'dash').map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
   let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด${meta.status === 'closed' ? '' : ' · ฉบับร่าง (ยังไม่ปิดรอบ)'}</p><h1>3 · สรุปผล</h1></div>
     <div class="row"><button class="btn" data-a="repdl" data-v="xlsx">⬇ Excel</button><button class="btn pri" data-a="repdl" data-v="pdf">⬇ PDF</button></div></div>
-    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l}${k === 'cr' || k === 'pv' ? '' : ` [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]`}</button>`).join('')}</div>
-    <select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select></div>
+    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l}${k === 'cr' || k === 'pv' || k === 'dash' ? '' : ` [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]`}</button>`).join('')}</div>
+    ${tab === 'dash' ? '' : `<select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select>`}</div>
     ${tab === 'pv' ? `<section class="card" style="gap:8px"><span class="sub">ลากหัวข้อจากด้านซ้ายไปวางเป็นแถว (ซ้าย) หรือคอลัมน์ (บน) · เลือกวิธีคำนวณ เช่น จำนวน / ผลรวม · คลิก ▾ ที่หัวข้อเพื่อกรอง · ระบบจำรูปแบบไว้ให้ครั้งหน้า</span><div class="row"><button class="btn sm" data-a="pvreset">เริ่มใหม่</button></div><div id="pivotBox" class="pv-wrap"><p class="sub">กำลังโหลดเครื่องมือ Pivot…</p></div></section>` : ''}
     ${tab === 'cr' ? crPanel() : ''}${tab === 'mv' ? `<div class="row" style="justify-content:flex-end">${bulkMoveBox(S.repCC || '', 'rep')}</div>` : ''}
 ${tab === 'pv' ? '' : `    <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`}`;
+  if (tab === 'dash') return h.replace(/<section class="card"><h2>[^]*$/, '') + dashboard() + (S.msg.rep ? `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>` : '') + `</main>`;
   if (tab === 'pv') return h + (S.msg.rep ? `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>` : '') + `</main>`;
   for (const r of d.rows.slice(0, 1000)) { const tot = (tab === 'sum' || d.totRow) && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
   h += `</tbody></table></div>${d.rows.length > 1000 ? `<p class="sub">แสดง 1,000 จาก ${N(d.rows.length)} · ไฟล์ที่ดาวน์โหลดมีครบ</p>` : ''}${d.rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>`;
@@ -857,20 +858,19 @@ function webLive(c) {
     if (!a) unkHere.set(String(s2.area), (unkHere.get(String(s2.area)) || 0) + 1);
     if (needsDecision(s2)) dec.set(String(s2.area), (dec.get(String(s2.area)) || 0) + 1);
   }
-  const q = norm(S.ccQ || '');
+  const q = '';
   let rows = [...st.values()].filter(x => !q || norm(x.code).includes(q) || norm(x.name).includes(q));
   const sorters = { code: (a, b) => String(a.code).localeCompare(String(b.code)), left: (a, b) => (b.total - b.found) - (a.total - a.found), pct: (a, b) => (a.total ? a.found / a.total : 1) - (b.total ? b.found / b.total : 1) };
   rows.sort(sorters[S.ccSort || 'code']);
   const decAll = [...dec.values()].reduce((x, y) => x + y, 0);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด</p><h1>2 · นับ</h1></div><button class="btn" data-a="opencc" data-v="*">ดูทุกรายการ →</button></div>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด</p><h1>2 · ตรวจนับ</h1></div><button class="btn" data-a="opencc" data-v="*">ดูทุกรายการ →</button></div>`;
   h += `<div class="kpis"><button class="kpi" data-a="opencc" data-v="*" data-t="done" style="border:none;text-align:left;background:var(--ok);color:#fff"><span style="color:#fff">ตรวจแล้ว</span><b>${N(T.found)}</b><span style="color:#e7f8ef">จาก ${N(T.total)} · ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="left" style="border:none;text-align:left"><span>รอตรวจ</span><b style="color:var(--warn-ink)">${N(T.left)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="move" style="border:none;text-align:left"><span>ต้องย้าย CC</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>${decAll ? `รอตัดสิน ${decAll} เรื่อง →` : 'ดูรายการ →'}</span></button>
  <button class="kpi" data-a="opencc" data-v="*" data-t="borrow" style="border:none;text-align:left"><span>ยืมมา (ไม่ย้าย CC)</span><b style="color:var(--muted)">${N(T.borrow)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ดูรายการ →</span></button></div>`;
-  h += dashboard();
   h += `<div class="row pair"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
-    <div class="row" style="align-items:center"><input class="in" id="ccQ" value="${esc(S.ccQ || '')}" placeholder="ค้นหา CC" style="width:160px" aria-label="ค้นหา Cost Center"><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
+    <div class="row" style="align-items:center"><select class="in" id="ccPickSel" style="width:auto;max-width:260px" aria-label="เลือก Cost Center"><option value="">เลือก CC เพื่อเปิด…</option>${[...st.values()].filter(x => !x.shared).sort((a, b) => String(a.code).localeCompare(String(b.code))).map(x => `<option value="${esc(x.code)}">${esc(x.code)}${x.name !== String(x.code) ? ' · ' + esc(x.name) : ''} (${x.total ? Math.round(x.found / x.total * 100) : 0}%)</option>`).join('')}</select><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
     <div class="grid" style="grid-auto-rows:1fr">`;
   for (const x of rows) {
     const r = x.total ? x.found / x.total : 0, p = Math.round(r * 100), mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
@@ -981,7 +981,7 @@ function webCC() {
   if (S.ccPick && !rowsAll.some(r => r.code === S.ccPick)) S.ccPick = null;
   const title = all ? 'ทุก Cost Center' : `CC ${esc(ccCode)}${area && area.name !== ccCode ? ' · ' + esc(area.name) : ''}`;
   let h = `<main class="wrap"><div><button class="btn sm" data-a="web" data-v="live">← กลับหน้ารวม</button></div>
-    <div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · 2 · นับ</p><h1>${title}</h1></div>
+    <div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · 2 · ตรวจนับ</p><h1>${title}</h1></div>
     <div class="chips"><span class="chip c-gray">ทั้งหมด ${N(totalOwn)}</span><span class="chip c-ok">ตรวจแล้ว ${N(doneOwn)}</span><span class="chip c-warn">เหลือ ${N(totalOwn - doneOwn)}</span>${n.move ? `<span class="chip c-oth">ต้องย้าย CC ${n.move}</span>` : ''}${n.unk ? `<span class="chip c-bad">ไม่อยู่ในทะเบียน ${n.unk}</span>` : ''}</div></div>
     ${!all && ccClosed(ccCode) ? `<div class="msg ok row" style="align-items:center;justify-content:space-between"><span><b>✓ ผู้ตรวจนับปิดงาน CC นี้แล้ว</b> · ${closeTxt(ccClosed(ccCode))}</span>${isLead() ? `<button class="btn sm" data-a="ccreopen" data-v="${esc(ccCode)}">เปิดให้นับต่อ</button>` : ''}</div>` : ''}
     ${!all && ccNameDiff(ccCode) ? `<div class="msg warn">⚠ ชื่อแผนกของ CC ${esc(ccCode)} ในไฟล์ไม่ตรงกัน: ${ccNameDiff(ccCode).map(esc).join(' / ')} · ระบบยึดรหัส CC เป็นหลัก ไม่นับว่าต้องย้าย</div>` : ''}
@@ -1095,9 +1095,9 @@ function webClose(c) {
   let h = `<main class="wrap"><div class="row"><section class="card side"><h1>4 · ปิดงาน</h1>`;
   if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
   else {
-    h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 2 นับ');
-    { const real = (meta.areas || []).filter(a => !a.shared), shut = real.filter(a => ccClosed(a.code)).length; h += ck(shut === real.length, 'ผู้ตรวจนับปิดงานครบทุก CC', `ปิดแล้ว ${shut} / ${real.length} CC${shut < real.length ? ' · ที่ยังไม่ปิดดูได้ที่เมนู 2 นับ' : ''}`); }
-    h += ck(open === 0, 'เรื่องที่ต้องตัดสินเคลียร์หมด', open ? `ค้าง ${open} เรื่อง · ดูที่เมนู 2 นับ` : 'ครบ');
+    h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 2 ตรวจนับ');
+    { const real = (meta.areas || []).filter(a => !a.shared), shut = real.filter(a => ccClosed(a.code)).length; h += ck(shut === real.length, 'ผู้ตรวจนับปิดงานครบทุก CC', `ปิดแล้ว ${shut} / ${real.length} CC${shut < real.length ? ' · ที่ยังไม่ปิดดูได้ที่เมนู 2 ตรวจนับ' : ''}`); }
+    h += ck(open === 0, 'เรื่องที่ต้องตัดสินเคลียร์หมด', open ? `ค้าง ${open} เรื่อง · ดูที่เมนู 2 ตรวจนับ` : 'ครบ');
     h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
     h += `<button class="btn dark" data-a="closeround">${open ? `ปิดรอบ (ยังค้าง ${open} เรื่อง)` : 'ปิดรอบ'}</button>${open ? '<p class="sub">ปิดได้ แต่เรื่องที่ค้างจะติดไปในไฟล์ส่งออกตามสถานะล่าสุด</p>' : ''}`;
   }
@@ -1595,7 +1595,7 @@ document.addEventListener('click', async e => {
     case 'exprep': S.msg.exp = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.exp = await reportFile(t.dataset.k, v); } catch (e) { S.msg.exp = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
     case 'pvreset': LS.set('pv-' + meta.id, null); { const b = $('#pivotBox'); if (b) delete b.dataset.ready; } break;
     case 'crcol': { const C = crConf(); C.cols = C.cols.includes(v) ? C.cols.filter(x => x !== v) : [...C.cols, v]; LS.set('cr-' + meta.id, C); break; }
-    case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.rep = await reportFile(S.repTab || 'sum', v); } catch (e) { S.msg.rep = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
+    case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.rep = await reportFile(!S.repTab || S.repTab === 'dash' ? 'sum' : S.repTab, v); } catch (e) { S.msg.rep = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
     case 'askbulk': S.confirmBulk = v; break;
     case 'nobulk': S.confirmBulk = null; break;
     case 'bulkmove': { const list = pendingMoves(v); for (const s2 of list) pushEvent({ k: 'rv', act: 'approve_move', code: s2.code, round: meta.id }); S.confirmBulk = null; flash(`อนุมัติย้าย ${list.length} รายการ · รอโอนย้ายใน SAP`); break; }
@@ -1744,6 +1744,7 @@ document.addEventListener('change', async e => {
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
   if (t.id === 'jobSel') { pickJob(t.value); render(); }
   if (t.id === 'repCC') { S.repCC = t.value; render(); }
+  if (t.id === 'ccPickSel' && t.value) { S.web = 'cc'; S.ccSel = t.value; S.ccTab = 'all'; S.ccPick = null; S.ccItemQ = ''; render(); }
   if (t.dataset.cr) { const C = crConf(); C[t.dataset.cr] = t.value; LS.set('cr-' + meta.id, C); render(); }
   if (t.dataset.ccf) { S.ccF = { ...(S.ccF || {}), [t.dataset.ccf]: t.value }; render(); }
 
