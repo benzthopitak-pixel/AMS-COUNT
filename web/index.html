@@ -242,6 +242,12 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const norm = s => String(s ?? '').trim().toUpperCase();
 // Cost Center is matched by its code only (names are just labels): ' 001010410 ' = '1010410'
 const ccKey = v => String(v ?? '').trim().toUpperCase().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
+// Sub-number: '0001' → '1', '' stays '' (file has no Sub column)
+const subKey = v => String(v ?? '').trim().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
+// one register row per Asset + Sub: sub 0 keeps the plain Asset code (counts made before subs still match), others are "<Asset>-<Sub>"
+const keyOf = (asset, sub) => !sub || sub === '0' ? asset : asset + '-' + sub;
+// what goes in the QR of a new sticker: always Asset-Sub (sub 0 included) when the file has a Sub column
+const fullCode = a => a ? (a.sub !== '' ? a.asset + '-' + a.sub : a.asset) : '';
 const N = n => Number(n || 0).toLocaleString();
 const fmtT = t => t ? new Date(t).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 const hm = t => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
@@ -263,7 +269,7 @@ const S = {
   gate: 'boot', authed: false, team: LS.get('team', []), firstRun: false, gateMsg: null, busy: false
 };
 let meta = null;                 // round document
-let master = new Map(), altIx = new Map();
+let master = new Map(), altIx = new Map(), subIx = new Map(), catIx = new Map();   // subIx: Asset → its Sub keys · catIx: Asset+Sub written together without '-' (old QR)
 let serverEv = {};               // docId -> items (all devices)
 let mine = [];                   // this device's events for the current round
 let dirty = new Set(), writing = false, online = false;
@@ -275,12 +281,26 @@ function loadMine() { usbEv = meta ? LS.get('usb-' + meta.id, {}) : {}; mine = m
 function saveMine() { if (meta) { LS.set('mine-' + meta.id, mine); LS.set('dirty-' + meta.id, [...dirty]); } }
 
 function indexMaster(rows) {
-  master = new Map(); altIx = new Map();
+  master = new Map(); altIx = new Map(); subIx = new Map(); catIx = new Map();
   for (const r of rows) {
-    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: ccKey(r[6]), wo: !!r[7] });
+    // r[8] Asset, r[9] Sub · registers imported before Sub support: an "Asset-Sub" code is split, anything else is Asset only
+    const m = r[8] == null ? /^(\d+)-(\d{1,4})$/.exec(r[0]) : null;
+    const asset = r[8] ?? (m ? m[1] : r[0]), sub = r[9] ?? (m ? subKey(m[2]) : '');
+    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: ccKey(r[6]), wo: !!r[7], asset, sub });
     if (r[4]) altIx.set(r[4], r[0]);
+    const l = subIx.get(asset); if (l) l.push(r[0]); else subIx.set(asset, [r[0]]);
   }
+  const clash = new Set();
+  for (const a of master.values()) {
+    if (a.sub === '' || (subIx.get(a.asset) || []).length < 2) continue;
+    for (const c of new Set([a.asset + a.sub, a.asset + a.sub.padStart(2, '0'), a.asset + a.sub.padStart(3, '0'), a.asset + a.sub.padStart(4, '0')])) {
+      if (master.has(c) || subIx.has(c)) continue;
+      if (catIx.has(c) && catIx.get(c) !== a.code) clash.add(c); else catIx.set(c, a.code);
+    }
+  }
+  for (const c of clash) catIx.delete(c);   // two assets read the same way: never guess
 }
+const subsOf = code => { const a = master.get(code); return a ? subIx.get(a.asset) || [code] : [code]; };
 
 /* ================= events → current state ================= */
 function allEvents() {
@@ -307,7 +327,7 @@ function compute() {
     if (e.k === 'scan') {
       if (s) { H(c, `สแกนซ้ำที่ ${e.areaName || ''}`, e); if (e.dev !== s.dev) { const l = dups.get(c) || []; l.push({ id: e.id, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, t: e.t }); dups.set(c, l); } continue; }   // two scanners counted it while offline: the earlier scan counts, Admin sees both
       lost.delete(c);
-      cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, src: e.src || (e.ns ? 'manual' : 'barcode'), cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0 });
+      cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, src: e.src || (e.ns ? 'manual' : 'barcode'), cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0, qf: e.qf || '', qraw: e.qraw || '' });
       recount.delete(c); H(c, `${SRC[e.src || (e.ns ? 'manual' : 'barcode')][0]} · พบที่ ${e.areaName}${e.room ? ' · ' + e.room : ''}`, e);
     } else if (!s && e.k !== 'rv') { continue; }
     else if (e.k === 'edit') {
@@ -336,6 +356,7 @@ const SRC = { qr: ['สแกน QR', 'c-ok'], barcode: ['สแกนบาร�
 const srcChip = s => s ? `<span class="chip ${SRC[s.src][1]}">${SRC[s.src][0]}</span>` : '';
 const hasQR = s => !!s && (s.src === 'qr' || !!s.hasQR);   // scanned from a QR, or Admin confirmed the asset already has a QR sticker
 const needQR = s => !!s && master.has(s.code) && !hasQR(s) && !s.printedAt;   // QR present = sticker already done
+const oldQR = s => !!s && !!s.qf && master.has(s.code) && !s.printedAt;   // scanned from an old-format QR (Asset only / no '-'): needs a new Asset-Sub sticker
 const dupOf = code => { const s2 = compute().cur.get(code), l = compute().dups.get(code); return l && s2 && !s2.rv.dup ? l : null; };
 const myDups = () => { const { dups, cur } = compute(), out = []; for (const [code, l] of dups) for (const d of l) if (d.dev === dev) out.push({ ...d, code, first: cur.get(code) }); return out; };
 function dupSyncPop() {
@@ -343,6 +364,18 @@ function dupSyncPop() {
   return `<div class="dupbg" role="alertdialog" aria-labelledby="dsH"><div class="duppop" data-stop="1" style="max-width:380px;align-items:stretch;text-align:left"><span class="dupicon" aria-hidden="true" style="align-self:center">!</span><b id="dsH" style="text-align:center">อินเทอร์เน็ตกลับมาแล้ว · พบรายการซ้ำ ${l.length} รายการ</b><span class="sub" style="text-align:center">ระหว่างที่อินเทอร์เน็ตขาดการเชื่อมต่อ มีเครื่องอื่นตรวจนับรายการเหล่านี้ไปก่อนแล้ว ระบบนับเพียงครั้งเดียว</span>
     <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto">${l.map(d => `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(d.code)}</b><br><span class="sub">${esc(master.get(d.code)?.name || '')} · ${esc(d.first?.by || '')} นับก่อน ${d.first ? hm(d.first.t) : ''} ที่ ${esc(d.first?.areaName || '')}</span></span><button class="btn sm red" data-a="dupdrop" data-v="${esc(d.code)}" data-id="${esc(d.id)}">ลบ</button></div>`).join('')}</div>
     <button class="btn red" data-a="dupdropall">ลบรายการซ้ำทั้งหมด (${l.length})</button><button class="btn" data-a="duplater">ภายหลัง</button></div></div>`;
+}
+// QR with the Asset only and several Subs in the register: count one Sub, or every Sub found here
+function subPopup() {
+  const p = S.subPop; if (!p || S.mode !== 'app') return '';
+  const { cur } = compute(), left = p.keys.filter(k => !cur.has(k));
+  const rowOf = k => { const a = master.get(k), s = cur.get(k);
+    return `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(fullCode(a))}</b> <span class="chip ${s ? 'c-ok' : 'c-gray'}">${s ? 'ตรวจแล้ว' : 'รอตรวจ'}</span><br><span class="sub">${esc(a.name)}${s ? ` · ${esc(s.by)} ${hm(s.t)}` : ''}</span></span>${s ? '' : `<button class="btn sm pri" data-a="subone" data-v="${esc(k)}">นับรายการนี้</button>`}</div>`; };
+  return `<div class="dupbg" data-a="closesub" role="alertdialog" aria-labelledby="subH"><div class="duppop" data-stop="1" style="max-width:400px;align-items:stretch;text-align:left">
+    <b id="subH" style="text-align:center">Asset นี้มี ${p.keys.length} รายการย่อย (Sub)</b><span class="mono" style="font-size:20px;font-weight:700;text-align:center">${esc(p.base)}</span>
+    <span class="sub" style="text-align:center">สติกเกอร์นี้มีเฉพาะเลข Asset · โปรดเลือกรายการที่พบ ระบบจะนำรายการที่นับไปไว้ในรายการ "ป้าย QR รูปแบบเก่า" เพื่อพิมพ์ป้ายใหม่</span>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto">${p.keys.map(rowOf).join('')}</div>
+    ${left.length ? `<button class="btn pri" data-a="suball">พบทั้งหมด (${left.length} รายการ)</button>` : `<span class="sub" style="text-align:center">ทุกรายการตรวจนับแล้ว</span>`}<button class="btn" data-a="closesub">ยกเลิก</button></div></div>`;
 }
 const lostOf = code => compute().lost.get(code) || null;
 // choices for an item nobody has scanned: found (no sticker / with its condition) or lost
@@ -642,7 +675,7 @@ function reportData(kind) {
   const { cur } = compute(), ccF = S.repCC || '', inCC = a => !ccF || String(a.cc) === ccF;
   if (kind === 'sum') {
     const by = new Map();
-    for (const a of master.values()) { if (!counted(a) || !inCC(a)) continue; const s2 = cur.get(a.code), e = by.get(String(a.cc)) || { cc: String(a.cc), total: 0, found: 0, lost: 0, mv: 0, dmg: 0, qr: 0 }; e.total++; if (s2) { e.found++; if (isMoved(s2)) e.mv++; if (s2.cond !== 'ปกติ') e.dmg++; if (needQR(s2) || s2.flags.reprint) e.qr++; } else if (lostOf(a.code)) e.lost++; by.set(e.cc, e); }
+    for (const a of master.values()) { if (!counted(a) || !inCC(a)) continue; const s2 = cur.get(a.code), e = by.get(String(a.cc)) || { cc: String(a.cc), total: 0, found: 0, lost: 0, mv: 0, dmg: 0, qr: 0 }; e.total++; if (s2) { e.found++; if (isMoved(s2)) e.mv++; if (s2.cond !== 'ปกติ') e.dmg++; if (needQR(s2) || oldQR(s2) || s2.flags.reprint) e.qr++; } else if (lostOf(a.code)) e.lost++; by.set(e.cc, e); }
     const rows = [...by.values()].sort((x, y) => x.cc.localeCompare(y.cc)).map(e => [e.cc, ccNameOf(e.cc), e.total, e.found, e.total - e.found - e.lost, e.lost, e.mv, e.dmg, e.qr, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%', ccClosed(e.cc) ? 'ปิดแล้ว' : '']);
     const tot = rows.reduce((t, r) => { for (let i = 2; i <= 8; i++) t[i] += r[i]; return t; }, ['รวม', '', 0, 0, 0, 0, 0, 0, 0]);
     tot.push(tot[2] ? Math.round(tot[3] / tot[2] * 1000) / 10 + '%' : '0%', ''); rows.push(tot);
@@ -674,8 +707,8 @@ function reportData(kind) {
     return { title: 'รายการที่ตรวจไม่พบ', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC', 'ชื่อ CC', 'สถานะ', 'บันทึกโดย', 'Remark'], rows, w: [11, 30, 10, 16, 8, 16, 18] };
   }
   if (kind === 'qr') {
-    const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && inCC(a) && (needQR(s2) || s2.flags.reprint || s2.flags.namebad || s2.rv.move === 'approved'); }).sort((x, y) => x.code.localeCompare(y.code))
-      .map(s2 => { const a = master.get(s2.code), cc = labelCC(s2.code); return [s2.code, a.name, cc.code, cc.name, [needQR(s2) && 'ยังไม่มี QR', s2.flags.reprint && 'ขอพิมพ์ใหม่', s2.flags.namebad && 'ชื่อไม่ตรง', s2.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · '), SRC[s2.src][0], s2.printedAt ? fmtT(s2.printedAt) : '']; });
+    const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && inCC(a) && (needQR(s2) || oldQR(s2) || s2.flags.reprint || s2.flags.namebad || s2.rv.move === 'approved'); }).sort((x, y) => x.code.localeCompare(y.code))
+      .map(s2 => { const a = master.get(s2.code), cc = labelCC(s2.code); return [s2.code, a.name, cc.code, cc.name, [needQR(s2) && 'ยังไม่มี QR', oldQR(s2) && `QR รูปแบบเก่า (${s2.qraw || 'ไม่มีเลข Sub'})`, s2.flags.reprint && 'ขอพิมพ์ใหม่', s2.flags.namebad && 'ชื่อไม่ตรง', s2.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · '), SRC[s2.src][0], s2.printedAt ? fmtT(s2.printedAt) : '']; });
     return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
   }
   if (kind === 'bw') {
@@ -809,8 +842,8 @@ function importBlock() {
   if (I.err) return h + `<div class="msg bad">${esc(I.err)}</div><div class="row"><button class="btn" data-a="cancelimport">เลือกไฟล์ใหม่</button></div>`;
   const st = importStats(), fresh = true;
   if (fresh) h += `<label class="f">ชื่อรอบตรวจนับ<input class="in" id="impRound" value="${esc(I.roundName)}" maxlength="80"></label>`;
-  h += `<div class="grid">${[['code', 'เลข Asset (บนสติกเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
-    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">เลข Asset ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
+  h += `<div class="grid">${[['code', 'เลข Asset (บนสติกเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['sub', 'Sub-number (เลขซับ)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k] ?? -1)}</select></label>`).join('')}</div>
+    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${I.map.sub >= 0 ? `<span class="chip c-blue">แยกตาม Asset + Sub-number${st.withSubs ? ` · ${N(st.withSubs)} Asset มีหลายรายการย่อย` : ''}</span>` : `<span class="chip c-gray">ไม่ได้เลือกคอลัมน์ Sub-number · นับรวมตามเลข Asset</span>`}${st.multi ? `<span class="chip c-warn">${I.map.sub >= 0 ? 'Asset + Sub' : 'เลข Asset'} ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
   if (busyRound) h += `<div class="msg ok">ไฟล์นี้จะเป็นงานใหม่อีกงาน · งาน "${esc(meta.name)}" ที่นับอยู่ยังอยู่ครบ สลับไปมาได้</div>`;
   h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างงานใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
   return h;
@@ -857,13 +890,17 @@ function prepareImport(name) {
   const h = p.headers, b = p.rows, ex = h.findIndex(x => norm(x) === 'ASSET');
   Object.assign(S.imp, { sheet: name, headers: h, rows: b, fmts: p.fmts, widths: p.widths, err: null, tpl: detectTpl(h), map: {
     code: ex >= 0 ? ex : Math.max(0, guess(h, ['ASSET', 'รหัส', 'CODE'])), alt: guess(h, ['INVENTORY'], b), name: guess(h, ['DESC', 'ชื่อ', 'รายการ', 'NAME']),
-    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER', 'COST CETER', 'COST CENTRE'].concat(h.some(x => norm(x) === 'CC') ? ['CC'] : []), b), cls: guess(h, ['ASSET CLASS', 'CLASS']) } });
+    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER', 'COST CETER', 'COST CENTRE'].concat(h.some(x => norm(x) === 'CC') ? ['CC'] : []), b), cls: guess(h, ['ASSET CLASS', 'CLASS']), sub: subCol(h) } });
 }
+// SAP: "Subnumber", "Sub-number", "SNo." · a column called just "Sub" too
+function subCol(h) { const n = x => norm(x).replace(/[\s._-]/g, ''); return h.findIndex(x => ['SUBNUMBER', 'SUBNO', 'SNO', 'SUB', 'ASSETSUBNUMBER'].includes(n(x))); }
+const impKey = (r, m) => { const c = norm(r[m.code]); return !c ? '' : m.sub >= 0 ? keyOf(c, subKey(r[m.sub]) || '0') : c; };
 function importStats() {
   const I = S.imp, m = I.map, codes = new Map(); let wo = 0;
-  for (const r of I.rows) { const c = norm(r[m.code]); if (!c) continue; codes.set(c, (codes.get(c) || 0) + 1); if (I.tpl.status >= 0 && r[I.tpl.status] === 'Write - Off') wo++; }
+  const assets = new Map();
+  for (const r of I.rows) { const c = impKey(r, m); if (!c) continue; codes.set(c, (codes.get(c) || 0) + 1); const as = norm(r[m.code]); assets.set(as, (assets.get(as) || new Set()).add(c)); if (I.tpl.status >= 0 && r[I.tpl.status] === 'Write - Off') wo++; }
   const rep = [...codes.values()].filter(v => v > 1);
-  return { codes: codes.size, rows: I.rows.length, multi: rep.length, multiRows: rep.reduce((a, b) => a + b, 0), wo };
+  return { codes: codes.size, rows: I.rows.length, multi: rep.length, multiRows: rep.reduce((a, b) => a + b, 0), wo, withSubs: m.sub >= 0 ? [...assets.values()].filter(x => x.size > 1).length : 0 };
 }
 /* ---------- ② live ---------- */
 function areaStats() {
@@ -1139,7 +1176,8 @@ function stickerList(c) {
   if (S.stTab === 'moved') return [...cur.values()].filter(s => s.rv.move === 'approved').map(s => s.code);
   if (S.stTab === 'ns') return [...cur.values()].filter(s => s.ns).map(s => s.code);
   if (S.stTab === 'noqr') return [...cur.values()].filter(needQR).map(s => s.code);
-  if (S.stTab === 'paste') { const out = []; for (const t of S.stPaste.split(/[\s,;]+/)) { const c2 = resolve(t); if (c2 && master.has(c2) && !out.includes(c2)) out.push(c2); } return out; }
+  if (S.stTab === 'oldqr') return [...cur.values()].filter(oldQR).map(s => s.code);
+  if (S.stTab === 'paste') { const out = []; for (const t of S.stPaste.split(/[\s,;]+/)) { const r = lookup(t); for (const c2 of r.multi || [r.code]) if (c2 && master.has(c2) && !out.includes(c2)) out.push(c2); } return out; }   // Asset only → every Sub
   return [];
 }
 
@@ -1149,16 +1187,16 @@ function stickerList(c) {
 const PT = 0.3528;   // 1 pt in mm
 if (typeof qrcode === 'function') qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(String(s)));   // Thai text in a QR
 const LBL_STD = { id: 'std', name: 'ป้ายมาตรฐาน (แบบเดิม)', w: 50, h: 25, builtin: true, els: [
-  { id: 'a1', t: 'text', x: 2.2, y: 2.2, w: 26.8, h: 3.4, text: 'No. : {Asset}', fs: 7.4, align: 'left' },
+  { id: 'a1', t: 'text', x: 2.2, y: 2.2, w: 26.8, h: 3.4, text: 'No. : {Asset-Sub}', fs: 7.4, align: 'left' },
   { id: 'a2', t: 'text', x: 2.2, y: 6.0, w: 26.8, h: 3.4, text: 'Date : {วันที่ซื้อ}', fs: 7.4, align: 'left' },
   { id: 'a3', t: 'text', x: 2.2, y: 9.8, w: 26.8, h: 3.4, text: 'CC : {CC บนป้าย}', fs: 7.4, align: 'left' },
   { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
   { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
-  { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset}' }] };
+  { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset-Sub}' }] };
 // thermal roll 70 × 50 mm with a 10 mm pre-printed header band: everything sits in the 40 mm below it
 const LBL_7050 = { id: 'std7050', name: 'ป้าย 70 × 50 (หัวแถบสี 10 มม.)', w: 70, h: 50, builtin: true, pre: { top: 10, color: '#1e88e5' }, els: [
-  { id: 'b0', t: 'qr', x: 3, y: 14, w: 32, h: 32, data: '{Asset}', ecc: 'M' },
-  { id: 'b1', t: 'text', x: 37, y: 14, w: 31, h: 5, text: '{Asset}', fs: 12, bold: true, align: 'left' },
+  { id: 'b0', t: 'qr', x: 3, y: 14, w: 32, h: 32, data: '{Asset-Sub}', ecc: 'M' },
+  { id: 'b1', t: 'text', x: 37, y: 14, w: 31, h: 5, text: '{Asset-Sub}', fs: 12, bold: true, align: 'left' },
   { id: 'b2', t: 'text', x: 37, y: 20.5, w: 31, h: 10, text: '{ชื่อ}', fs: 8, align: 'left', wrap: true },
   { id: 'b3', t: 'text', x: 37, y: 31.5, w: 31, h: 3.6, text: 'CC : {CC บนป้าย}', fs: 7.5, align: 'left' },
   { id: 'b4', t: 'text', x: 37, y: 35.5, w: 31, h: 3.6, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.5, align: 'left' },
@@ -1180,14 +1218,14 @@ function lblRecord(code) {
   const a = master.get(code), s2 = compute().cur.get(code), cc = labelCC(code), r = {};
   const put = (k, v) => { if (String(k).trim()) r[lk(k)] = v ?? ''; };
   (meta?.headers || []).forEach((h, i) => { let v = a?.raws[0]?.[i]; if (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? ''))) v = dmy(v); put(h, v); });
-  put('Asset', code); put('ชื่อ', a?.name || s2?.uname || ''); put('CC บนป้าย', cc.code); put('ชื่อ CC บนป้าย', cc.name); put('วันที่ซื้อ', a ? capDate(a) : '');
+  put('Asset', a?.asset || code); put('Sub', a?.sub ?? ''); put('Asset-Sub', a ? fullCode(a) : code); put('ชื่อ', a?.name || s2?.uname || ''); put('CC บนป้าย', cc.code); put('ชื่อ CC บนป้าย', cc.name); put('วันที่ซื้อ', a ? capDate(a) : '');
   if (a) for (const [k, l] of RES_F) put(l, crVal(k, a, s2));
   put('วันที่พิมพ์', new Date().toLocaleDateString('th-TH'));
   return r;
 }
 function lblFieldNames() {
   const out = S.stTab === 'xls' && S.xls ? [...S.xls.headers]
-    : ['Asset', 'ชื่อ', 'CC บนป้าย', 'ชื่อ CC บนป้าย', 'วันที่ซื้อ', ...(meta?.headers || []).map(h => String(h).trim()), ...RES_F.map(x => x[1])];
+    : ['Asset-Sub', 'Asset', 'Sub', 'ชื่อ', 'CC บนป้าย', 'ชื่อ CC บนป้าย', 'วันที่ซื้อ', ...(meta?.headers || []).map(h => String(h).trim()), ...RES_F.map(x => x[1])];
   out.push('วันที่พิมพ์');
   const seen = new Set(); return out.filter(x => x && !seen.has(lk(x)) && seen.add(lk(x)));
 }
@@ -1247,7 +1285,7 @@ function drawSticker(cv, code) {
 }
 
 /* ---------- 5 · print page ---------- */
-const ST_TABS = c => { const { cur } = compute(); return [['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', ''], ['xls', '📄 จากไฟล์ Excel', S.xls ? S.xls.recs.length : '']]; };
+const ST_TABS = c => { const { cur } = compute(); return [['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR', [...cur.values()].filter(needQR).length], ['oldqr', 'ป้าย QR รูปแบบเก่า', [...cur.values()].filter(oldQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', ''], ['xls', '📄 จากไฟล์ Excel', S.xls ? S.xls.recs.length : '']]; };
 const tplPick = () => `<label class="f">แม่แบบป้าย<select class="in" id="lblPick">${lblAll().map(t => `<option value="${esc(t.id)}" ${t.id === lblActive().id ? 'selected' : ''}>${esc(t.name)} · ${t.w} × ${t.h} มม.</option>`).join('')}</select></label>`;
 function webStickers(c) {
   if (!S.lblLoaded) { S.lblLoaded = true; lblLoad(); }
@@ -1266,7 +1304,7 @@ function webStickers(c) {
       S.xls.rows.slice(0, 300).forEach((r, i) => { h += `<tr><td><input type="checkbox" data-a="xlssel" data-v="${i}" ${S.xlsSel.has(i) ? 'checked' : ''} aria-label="เลือกแถว ${i + 1}"></td>${H.map((_, j) => `<td>${esc(r[j] ?? '')}</td>`).join('')}</tr>`; });
       h += `</tbody></table></div>${S.xls.rows.length > 300 ? `<p class="sub">แสดง 300 แถวแรก · "เลือกทั้งหมด" รวมทุก ${N(S.xls.rows.length)} แถว</p>` : ''}`; }
   } else {
-    if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
+    if (S.stTab === 'paste') h += `<label class="f">เลข Asset หรือ Asset-Sub บรรทัดละ 1 รหัส (ใส่เฉพาะเลข Asset = ทุกรายการย่อย)<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
     h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
     for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
       h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
@@ -1548,12 +1586,13 @@ function appView(c) {
   h += dupSyncPop();
   if (S.othPop && S.mode === 'app' && !S.dupPop) { const a = master.get(S.othPop.code), s = compute().cur.get(S.othPop.code);
     if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
-      h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
+      h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>${S.othPop.also?.length > 1 ? `<span class="sub">คำตอบนี้ใช้กับทั้ง ${S.othPop.also.length} รายการย่อย (Sub) ที่เพิ่งนับ</span>` : ''}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:#f4f5fa"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
         <span class="sub">บันทึกว่าพบแล้ว · โปรดระบุเหตุผล</span><div class="chips" style="justify-content:center">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมมา')}${D('unsure', 'รอตรวจสอบ')}</div>
         <button class="btn dark" data-a="closeoth" style="align-self:stretch">ตกลง</button></div></div>`; } }
   if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
     h += `<div class="dupbg" data-a="closedup" role="alertdialog" aria-labelledby="dupH"><div class="duppop"><span class="dupicon" aria-hidden="true">!</span><b id="dupH">ตรวจนับซ้ำ</b><span class="mono" style="font-size:20px;font-weight:700">${esc(d.code)}</span>${a ? `<span>${esc(a.name)}</span>` : ''}<span class="sub">นับไปแล้วโดย ${esc(d.by)} · ${hm(d.t)}${d.where ? ' · ' + esc(d.where) : ''}</span><button class="btn dark" data-a="closedup" style="align-self:stretch">ตกลง</button></div></div>`; }
+  h += subPopup();
   return h;
 }
 function appLogin() {
@@ -1736,7 +1775,7 @@ function webUsb() {
       <div class="tbl-wrap"><table><thead><tr><th>ผู้ตรวจนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
   return h;
 }
-const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo]);
+const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo, a.asset, a.sub]);
 async function exportPackage() {
   const pkg = { kind: 'ams-package', v: 1, at: Date.now(), meta: { ...meta, status: meta.status === 'closed' ? 'closed' : 'counting' }, rows: rowsOfMaster(), events: allEvents() };
   return save(`AssetSync-แพ็กเกจ-${meta.id}.json`, new TextEncoder().encode(JSON.stringify(pkg)), 'application/json');
@@ -1903,12 +1942,27 @@ function beep(kind) {
   } catch {}
   try { navigator.vibrate?.(kind === 'ok' ? 40 : [80, 60, 80]); } catch {}
 }
-function resolve(raw) {
-  const t = norm(stripType(raw)); if (!t) return '';
-  const first = t.split(/[|;,\s]+/)[0], base = first.split('-')[0];
-  for (const c of [t, first, base]) { if (master.has(c)) return c; if (altIx.has(c)) return altIx.get(c); }
-  return first;
+/* QR / barcode → register key. Accepts every label printed so far:
+ *   "51000001-1" / "51000001-0001"  Asset-Sub (standard from now on)
+ *   "510000011"                     Asset+Sub with no '-' (old)        → qf 'concat'
+ *   "51000001"                      Asset only; with several Subs the counter picks → qf 'asset' (old, ambiguous) */
+function lookup(raw) {
+  const t = norm(stripType(raw)); if (!t) return { code: '' };
+  const first = t.split(/[|;,\s]+/)[0];
+  const byAsset = (asset, qf) => { const l = subIx.get(asset) || []; return l.length > 1 ? { multi: l, base: asset, qf: 'asset' } : { code: l[0], qf }; };
+  for (const c of t === first ? [t] : [t, first]) {
+    const m = /^(.+)-(\d{1,4})$/.exec(c);
+    if (m && subIx.has(m[1])) { const k = keyOf(m[1], subKey(m[2])); if (master.has(k)) return { code: k, qf: '' }; }
+    if (subIx.has(c)) return byAsset(c, '');
+    if (master.has(c)) return { code: c, qf: '' };
+    if (catIx.has(c)) return { code: catIx.get(c), qf: 'concat' };
+    if (altIx.has(c)) return { code: altIx.get(c), qf: '' };
+  }
+  const base = first.split('-')[0];
+  if (subIx.has(base)) return byAsset(base, '');
+  return { code: first, qf: '' };
 }
+const resolve = raw => { const r = lookup(raw); return r.code || r.base || ''; };
 const AIM = /^\][A-Za-z][0-9A-Za-z]/;
 // CipherLab ReaderConfig → Data Output → "Display Code Type" puts the symbology name in front of the data, e.g. "QR Code51000001", "EAN138857129171164"
 const CODE_TYPES = ['QR Code', 'Micro QR', 'MicroQR', 'Data Matrix', 'DataMatrix', 'PDF417', 'MicroPDF417', 'Aztec', 'MaxiCode', 'Han Xin', 'DotCode', 'GS1 DataBar Expanded', 'GS1 DataBar Limited', 'GS1 DataBar', 'GS1-128', 'GS1 128', 'EAN-128', 'EAN128', 'UCC/EAN-128',
@@ -1922,13 +1976,21 @@ const srcOf = raw => { const t = String(raw ?? '').trim(); if (S.manual) return 
 function doScan(raw) {
   if (S.area && !S.area.shared && ccClosed(S.area.code)) { beep('dup'); flash('CC นี้ปิดงานแล้ว · เปิดนับต่อก่อน'); S.app = 'area'; render(); return; }
   const src = srcOf(raw); raw = stripType(raw);
-  const code = resolve(raw); if (!code || !S.area) return;
+  const r = lookup(raw); S.subPop = null;
+  if ((!r.code && !r.multi) || !S.area) return;
   if (meta.status === 'closed') { flash('รอบนี้ปิดแล้ว'); return; }
+  // QR with the Asset only, and the Asset has several Subs: the counter says which ones are here
+  if (r.multi) { beep('oth'); S.dupPop = null; S.othPop = null; S.subPop = { base: r.base, keys: r.multi.slice().sort((x, y) => (+master.get(x).sub || 0) - (+master.get(y).sub || 0)), src, raw: String(raw).trim() }; render(); return; }
+  countCode(r.code, src, r.qf ? { qf: r.qf, qraw: String(raw).trim() } : {});
+}
+// one count; extra = { qf, qraw } when the sticker is an old format (Asset only / no '-'): it goes on the reprint list
+function countCode(code, src, extra = {}, quiet = false) {
   const prev = compute().cur.get(code);
-  if (prev) { beep('dup'); S.othPop = null; S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return; }
+  if (prev) { if (quiet) return false; beep('dup'); S.othPop = null; S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return false; }
   S.dupPop = null; S.othPop = null;
-  pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual, src });
+  pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual, src, ...extra });
   const s = compute().cur.get(code);
+  if (quiet) { S.cards.unshift({ code }); return true; }
   beep(!master.has(code) ? 'unk' : isOther(s) ? 'oth' : 'ok');
   if (master.has(code) && isOther(s)) S.othPop = { code };
   S.cards.unshift({ code }); render();
@@ -1968,6 +2030,17 @@ document.addEventListener('click', async e => {
       flash(`บันทึกว่าพบแล้ว${c2 !== 'ปกติ' ? ' · ' + c2 : ''} · ติด "ต้องพิมพ์สติกเกอร์ใหม่" ให้`);
       if (!web) { S.cards.unshift({ code: v }); S.item = null; S.search = null; }
       break;
+    }
+    case 'closesub': S.subPop = null; break;
+    case 'subone': case 'suball': {
+      const p = S.subPop; if (!p || !S.area || !meta) { S.subPop = null; break; }
+      if (S.area && !S.area.shared && ccClosed(S.area.code)) { S.subPop = null; flash('CC นี้ปิดงานแล้ว · เปิดนับต่อก่อน'); break; }
+      const extra = { qf: 'asset', qraw: p.raw }; S.subPop = null;
+      if (a === 'subone') { countCode(v, p.src, extra); return; }
+      const { cur } = compute(), todo = p.keys.filter(k => !cur.has(k)); let firstOther = null;
+      for (const k of todo) if (countCode(k, p.src, extra, true) && !firstOther && isOther(compute().cur.get(k))) firstOther = k;
+      beep(firstOther ? 'oth' : 'ok'); if (firstOther) S.othPop = { code: firstOther, also: todo.filter(k => isOther(compute().cur.get(k))) };
+      flash(`นับแล้ว ${todo.length} รายการ (Asset ${p.base})`); break;
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
@@ -2081,7 +2154,7 @@ document.addEventListener('click', async e => {
     case 'appinfo': window.AndroidBridge.openAppInfo(v); return;
     case 'chkupd': flash('กำลังตรวจหาอัปเดต…'); window.AndroidBridge.checkUpdate(); return;
     case 'applyupd': flush().finally(() => window.AndroidBridge?.reload ? window.AndroidBridge.reload() : location.reload()); return;
-    case 'popdec': edit(v, { dec: t.dataset.d }); S.othPop = null; render(); return;
+    case 'popdec': for (const c2 of S.othPop?.also || [v]) edit(c2, { dec: t.dataset.d }); S.othPop = null; render(); return;   // "พบทั้งหมด": one answer for every Sub counted here
     case 'manual': S.manual = !S.manual; break;
     case 'feedf': S.feedF = v; break;
     case 'verify': await verify(); break;
@@ -2180,7 +2253,7 @@ document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 
 
 // Android back button: close sheet → go to home tab → leave app
 window.AMSBack = () => {
-  if (S.dupPop || S.othPop) { S.dupPop = null; S.othPop = null; render(); return true; }
+  if (S.dupPop || S.othPop || S.subPop) { S.dupPop = null; S.othPop = null; S.subPop = null; render(); return true; }
   if (S.item || S.areaPick || S.search) { if (S.item) S.item = null; else { S.areaPick = false; S.search = null; } render(); return true; }
   if (S.mode === 'app' && S.user && S.app !== 'home') { S.app = 'home'; render(); return true; }
   if (S.mode === 'web' && S.web !== 'rounds' && S.web !== 'live') { S.web = isLead() ? 'rounds' : 'live'; render(); return true; }
@@ -2192,13 +2265,14 @@ async function doImport() {
   const I = S.imp, m = I.map, g = (r, i) => i >= 0 ? String(r[i] ?? '').trim() : '';
   const out = new Map(), cc = {}, nmSeen = {}, statusIx = I.tpl.status;
   for (const r of I.rows) {
-    const code = norm(r[m.code]); if (!code) continue;
+    const code = impKey(r, m); if (!code) continue;
+    const asset = norm(r[m.code]), sub = m.sub >= 0 ? subKey(r[m.sub]) || '0' : '';
     const wo = statusIx >= 0 && r[statusIx] === 'Write - Off';
     const ccCode = ccKey(g(r, m.cc)), ccNm = g(r, m.ccName) || ccCode;   // no department-name column: the Cost Center code is the department
     if (ccCode && !cc[ccCode]) cc[ccCode] = ccNm;
     if (ccCode) (nmSeen[ccCode] = nmSeen[ccCode] || new Set()).add(ccNm);
     const ex = out.get(code); if (ex) { ex[5].push(r); continue; }
-    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], ccCode, wo]);
+    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], ccCode, wo, asset, sub]);
   }
   const rows = [...out.values()], counts = {};
   for (const r of rows) if (!r[7]) counts[r[6]] = (counts[r[6]] || 0) + 1;
@@ -2304,17 +2378,17 @@ function exportBook(kind) {
     addData(dataSheetName, data, h.length);
   }
   if (kind === 'main' || kind === 'transfer') {
-    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, s.code, '(blank)', a.name, s.area, s.areaName, s.rv.move === 'approved' ? ('รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
+    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, a.asset, a.sub === '' ? '(blank)' : a.sub, a.name, s.area, s.areaName, s.rv.move === 'approved' ? ('รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
   }
   if ((kind === 'main' || kind === 'writeoff')) {
-    const rows = left.sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code)).map(a => [a.cc, a.ccName, a.code, '(blank)', a.name, a.raws[0] && ci.cap >= 0 ? a.raws[0][ci.cap] : '', sumIdx(a, ci.acq), sumIdx(a, ci.dep), sumIdx(a, ci.book)]);
+    const rows = left.sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code)).map(a => [a.cc, a.ccName, a.asset, a.sub === '' ? '(blank)' : a.sub, a.name, a.raws[0] && ci.cap >= 0 ? a.raws[0][ci.cap] : '', sumIdx(a, ci.acq), sumIdx(a, ci.dep), sumIdx(a, ci.book)]);
     add('write-off', [['Status', wo ? 'Write - Off' : 'ไม่พบ (รอนับซ้ำ)', '', '', 'T-Code : ABAVN'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'Capitalized on', 'Acquis.val.', 'Accum.dep.', 'Book val.']].concat(rows), [4]);
     const g = new Map(); for (const r of rows) { const e = g.get(r[0]) || [r[0], r[1], 0, 0, 0, 0]; e[2]++; e[3] += +r[6] || 0; e[4] += +r[7] || 0; e[5] += +r[8] || 0; g.set(r[0], e); }
     for (const e of g.values()) for (const i of [3, 4, 5]) e[i] = Math.round(e[i] * 100) / 100;
     add('สรุป write-off', [[], ['สรุป ขออนุมัติ Write - Off'], ['Cost Center', 'Department', 'List', 'Asset Cost', 'Accum.dep._Net', ' Book value_Net', 'Status', 'Remark']].concat([...g.values()].map(e => [...e, 'Loss', 'ขออนุมัติ write - off'])), [1]);
   }
   if (kind === 'main') {
-    add('คิวพิมพ์สติกเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติกเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
+    add('คิวพิมพ์สติกเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || oldQR(s) || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติกเกอร์', oldQR(s) && 'QR รูปแบบเก่า', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
     add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (ผู้ตรวจนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจ Admin', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ทรัพย์สินของบริษัท' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
   }
   if (wb.SheetNames.includes(dataSheetName)) wb.SheetNames = [dataSheetName, ...wb.SheetNames.filter(n => n !== dataSheetName)];
@@ -2344,7 +2418,7 @@ async function stickerExcel(codes) {
     const cc = labelCC(code);
     for (const raw of a.raws.length ? a.raws : [[]]) {
       const sub = String(v(raw, ix.sub) || 0).replace(/\.0+$/, ''), cap = String(v(raw, ix.cap) || '');
-      const vals = [`${code}-${sub}`, v(raw, ix.inv), sub, v(raw, ix.cls), v(raw, ix.life), v(raw, m0.name ?? -1) || a.name, v(raw, ix.plant), v(raw, ix.plantName), cc.code, cc.name, cap, v(raw, ix.loc), v(raw, ix.vendor), v(raw, ix.owner), v(raw, ix.acq), v(raw, ix.dep), v(raw, ix.book), v(raw, ix.crcy)];
+      const vals = [`${a.asset}-${a.sub !== '' ? a.sub : subKey(sub) || '0'}`, v(raw, ix.inv), sub, v(raw, ix.cls), v(raw, ix.life), v(raw, m0.name ?? -1) || a.name, v(raw, ix.plant), v(raw, ix.plantName), cc.code, cc.name, cap, v(raw, ix.loc), v(raw, ix.vendor), v(raw, ix.owner), v(raw, ix.acq), v(raw, ix.dep), v(raw, ix.book), v(raw, ix.crcy)];
       vals.forEach((x, c) => {
         const base = { font: { name: 'Tahoma', sz: 9 }, border, alignment: { horizontal: [2, 4, 6, 10].includes(c) ? 'center' : undefined, vertical: 'center' } };
         if (c === 10 && /^\d{4}-\d{2}-\d{2}$/.test(cap)) { const [y, mo, d] = cap.split('-').map(Number); put(r, c, { t: 'n', v: (Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30)) / 864e5, z: 'mm-dd-yy', s: base }); return; }
