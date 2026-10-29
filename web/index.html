@@ -445,7 +445,7 @@ function watchJob() {
     if (m && m.ver && m.ver !== LS.get('masterVer', null)) { flash('กำลังโหลดทะเบียน…'); if (!(await loadMaster(m).catch(() => false))) { flash('ทะเบียนยังโหลดไม่ครบ · กำลังลองใหม่'); retryMaster(); } }
     if (m && (!jobs || !jobs.length)) { jobs = [jobEntry(m)]; LS.set('jobs', jobs); }   // the old single round becomes the first job
     meta = m; LS.set('meta', m); if (roundChanged) { loadMine(); evRound = null; S.area = null; LS.set('area', null); S.cards = []; }
-    subscribeEvents(); startPresence(); online = true; _cache = null; render(); if (dirty.size) flush();
+    subscribeEvents(); startPresence(); online = true; _cache = null; render(); if (dirty.size) flush(); flushOtherJobs();
   }, () => { online = false; paintSync(); });
 }
 async function deleteJob(id) {
@@ -457,6 +457,16 @@ async function deleteJob(id) {
   LS.set('mine-' + id, []); LS.set('dirty-' + id, []);
   if (meta?.id === id) { meta = null; LS.set('meta', null); mine = []; serverEv = {}; S.cards = []; jobId = null; LS.set('jobId', null); watchedKey = null; if (db) watchJob(); }
   flash('ลบงานแล้ว'); render();
+}
+// counts made in another job (or by cable) still waiting to be sent: send them too, whichever job is open now
+async function flushOtherJobs() {
+  if (!db || usbMode) return;
+  for (const j of jobList()) {
+    if (j.id === meta?.id) continue;
+    const d = LS.get('dirty-' + j.id, []); if (!d.length) continue;
+    const list = LS.get('mine-' + j.id, []);
+    try { for (const k of d) await db.doc(`ev/${j.id}-${dev}-${k}`).set({ round: j.id, dev, items: list.slice(k * CHUNK, (k + 1) * CHUNK), at: Date.now() }); LS.set('dirty-' + j.id, []); } catch { return; }
+  }
 }
 function pickJob(id) { if (id === meta?.id) return; jobId = id; LS.set('jobId', id); S.cards = []; S.ccSel = null; if (db) watchJob(); flash('กำลังเปิดงาน…'); }
 
@@ -1253,7 +1263,7 @@ async function exportPackage() {
 async function importPackage(file) {
   let pkg; try { pkg = JSON.parse(await file.text()); } catch { return ['ไฟล์นี้ไม่ใช่แพ็กเกจ AMS (.json)', 'bad']; }
   if (pkg?.kind !== 'ams-package' || !pkg.meta?.id || !Array.isArray(pkg.rows)) return ['ไฟล์นี้ไม่ใช่แพ็กเกจ AMS', 'bad'];
-  meta = pkg.meta; LS.set('meta', meta); indexMaster(pkg.rows); LS.set('master', pkg.rows); LS.set('masterVer', meta.ver);
+  meta = pkg.meta; LS.set('meta', meta); jobId = meta.id; LS.set('jobId', meta.id); indexMaster(pkg.rows); LS.set('master', pkg.rows); LS.set('masterVer', meta.ver);
   loadMine();
   const others = {}; let n = 0;
   for (const e of pkg.events || []) if (e && e.id && e.dev !== dev) { (others[e.dev] ||= []).push(e); n++; }
