@@ -275,7 +275,7 @@ function compute() {
     } else if (!s && e.k !== 'rv') { continue; }
     else if (e.k === 'edit') {
       for (const f of ['cond', 'remark', 'room', 'dec', 'uname', 'area', 'areaName']) if (e[f] !== undefined) s[f] = e[f];
-      if (e.flags) Object.assign(s.flags, e.flags);
+      if (e.flags) { Object.assign(s.flags, e.flags); delete s.flags.transferred; }
       if (e.printed) { s.flags.reprint = false; s.flags.namebad = false; s.printedAt = e.t; }
       H(c, e.printed ? 'พิมพ์ป้ายใหม่แล้ว' : 'แก้ไข: ' + Object.keys(e).filter(k => !['id', 'k', 'code', 't', 'by', 'dev', 'round'].includes(k)).map(k => k === 'flags' ? 'ป้าย/โอนย้าย' : ({ cond: 'สภาพ', remark: 'Remark', room: 'ห้อง', dec: 'การตัดสินใจ', uname: 'ชื่อ', area: 'CC ที่พบ', areaName: '' }[k] ?? k)).join(', '), e);
     } else if (e.k === 'del') { cur.delete(c); H(c, 'ยกเลิกผลนับ', e); }
@@ -287,7 +287,6 @@ function compute() {
       if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'Admin: รับเข้าทะเบียน', e); }
       if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'Admin: ไม่ใช่ของเรา', e); }
       if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'Admin รับทราบสภาพ', e); }
-      if (e.act === 'transferred') { s.flags.pendingTransfer = false; s.flags.transferred = true; H(c, 'โอนย้ายแล้ว', e); }
     }
   }
   _cacheKey = key; _cache = { cur, recount, hist, evs, ccDone, lost };
@@ -605,7 +604,7 @@ function reportData(kind) {
     return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
   }
   const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
-    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.flags.transferred ? 'โอนแล้ว' : s2.rv.move === 'approved' ? 'อนุมัติแล้ว · รอโอน' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
+    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.rv.move === 'approved' ? 'รอโอนย้าย' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
   return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'คนนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
 }
 function editDialog(code) {
@@ -634,6 +633,11 @@ function crPanel() {
     ${C.mode === 'list' ? `<span class="sub">คอลัมน์ที่จะพิมพ์ (จากไฟล์ที่นำเข้า)</span><div class="chips">${H.map(([k, l]) => tog(k, l)).join('')}</div><span class="sub">ผลการตรวจนับ</span><div class="chips">${RES_F.map(([k, l]) => tog(k, l)).join('')}</div>` : ''}
     <span class="sub">ระบบจำตัวเลือกไว้ให้ครั้งหน้า</span></section>`;
 }
+// moves still waiting for Admin: approve them all with one tap (each becomes "รอโอนย้าย" + new sticker)
+const pendingMoves = (ccF = '') => [...compute().cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && !s2.rv.move && s2.dec !== 'borrowed' && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); });
+const bulkMoveBox = (ccF, where) => { const n = pendingMoves(ccF).length; if (!n || !isLead()) return '';
+  return S.confirmBulk === where ? `<div class="confirm"><b>อนุมัติย้ายแผนกทั้งหมด ${n} รายการ?</b><span>ทุกรายการจะเป็น "รอโอนย้าย" และเข้าคิวพิมพ์ QR ใหม่ · รายการที่คนนับแจ้งว่า "ยืมมา" ไม่รวม</span><div class="row"><button class="btn oth" data-a="bulkmove" data-v="${esc(ccF)}">ยืนยันอนุมัติ ${n} รายการ</button><button class="btn" data-a="nobulk">ยกเลิก</button></div></div>`
+    : `<button class="btn oth" data-a="askbulk" data-v="${where}">✓ อนุมัติย้ายทั้งหมด (${n})</button>`; };
 function webReport() {
   const tab = S.repTab || 'sum', d = reportData(tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
   const n = Object.fromEntries(REP_TABS.map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
@@ -641,7 +645,7 @@ function webReport() {
     <div class="row"><button class="btn" data-a="repdl" data-v="xlsx">⬇ Excel</button><button class="btn pri" data-a="repdl" data-v="pdf">⬇ PDF</button></div></div>
     <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l}${k === 'cr' ? '' : ` [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]`}</button>`).join('')}</div>
     <select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select></div>
-    ${tab === 'cr' ? crPanel() : ''}
+    ${tab === 'cr' ? crPanel() : ''}${tab === 'mv' ? `<div class="row" style="justify-content:flex-end">${bulkMoveBox(S.repCC || '', 'rep')}</div>` : ''}
     <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
   for (const r of d.rows.slice(0, 1000)) { const tot = (tab === 'sum' || d.totRow) && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
   h += `</tbody></table></div>${d.rows.length > 1000 ? `<p class="sub">แสดง 1,000 จาก ${N(d.rows.length)} · ไฟล์ที่ดาวน์โหลดมีครบ</p>` : ''}${d.rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>`;
@@ -879,6 +883,7 @@ function webCC() {
     <div class="bar" aria-label="ความคืบหน้า"><i style="width:${totalOwn ? doneOwn / totalOwn * 100 : 0}%;background:var(--ok)"></i></div>
     <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${CC_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="cctab" data-v="${k}">${l} [${n[k]}]</button>`).join('')}</div>
     <input class="in" id="ccItemQ" value="${esc(S.ccItemQ || '')}" placeholder="ค้นหาเลข Asset หรือชื่อ" style="max-width:260px" aria-label="ค้นหาในรายการ"></div>
+    ${tab === 'move' ? `<div class="row" style="justify-content:flex-end">${bulkMoveBox(all ? '' : ccCode, 'cc')}</div>` : ''}
     <div class="fbar"><span class="sub">ตัวกรอง</span>
       <select class="in" data-ccf="src" aria-label="ที่มา">${SRC_OPTS.map(([k, l]) => `<option value="${k}" ${(F.src || '') === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <select class="in" data-ccf="by" aria-label="ผู้นับ"><option value="">ผู้นับ: ทุกคน</option>${people.map(p => `<option ${F.by === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
@@ -956,7 +961,7 @@ function inboxDetail(code) {
   return h;
 }
 function flagChips(s, act) {
-  return [['reprint', 'ต้องพิมพ์สติ๊กเกอร์ใหม่'], ['namebad', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ'], ['transferred', 'มีการโอนย้ายแล้ว'], ['pendingTransfer', 'รอโอนย้าย']]
+  return [['reprint', 'ต้องพิมพ์สติ๊กเกอร์ใหม่'], ['namebad', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ'], ['pendingTransfer', 'รอโอนย้าย']]
     .map(([k, l]) => `<button class="tog" aria-pressed="${!!s.flags[k]}" data-a="${act}" data-f="${k}" data-v="${esc(s.code)}">${s.flags[k] ? '✓ ' : ''}${l}</button>`).join('');
 }
 
@@ -1258,7 +1263,7 @@ async function exportReport() {
   const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ']];
   for (const s of [...cur.values()].filter(s => s.dev === dev).sort((a, b) => a.t - b.t)) {
     const a = master.get(s.code);
-    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.transferred ? 'มีการโอนย้ายแล้ว' : s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t)]);
+    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t)]);
   }
   const raw = [['AMS Count USB', 1, meta.id, dev, S.user?.name || '', Date.now(), mine.length]]; let buf = [], len = 0;
   for (const e of mine) { const j = JSON.stringify(e); if (len + j.length > 30000 && buf.length) { raw.push(['[' + buf.join(',') + ']']); buf = []; len = 0; } buf.push(j); len += j.length + 1; }
@@ -1462,6 +1467,9 @@ document.addEventListener('click', async e => {
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
     case 'crcol': { const C = crConf(); C.cols = C.cols.includes(v) ? C.cols.filter(x => x !== v) : [...C.cols, v]; LS.set('cr-' + meta.id, C); break; }
     case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); S.msg.rep = await reportFile(S.repTab || 'sum', v); break;
+    case 'askbulk': S.confirmBulk = v; break;
+    case 'nobulk': S.confirmBulk = null; break;
+    case 'bulkmove': { const list = pendingMoves(v); for (const s2 of list) pushEvent({ k: 'rv', act: 'approve_move', code: s2.code, round: meta.id }); S.confirmBulk = null; flash(`อนุมัติย้าย ${list.length} รายการ · รอโอนย้ายใน SAP`); break; }
     case 'askclose': S.confirmClose = v; break;
     case 'noclose': S.confirmClose = null; break;
     case 'ccclose': S.confirmClose = null; pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: true, left: +t.dataset.n || 0 }); beep('ok'); flash('ปิดงาน CC แล้ว · ขอบคุณ'); break;
@@ -1769,7 +1777,7 @@ function exportBook(kind) {
           if (t.ccNewName >= 0) r[t.ccNewName] = s ? (mv ? s.areaName : a.ccName) : '';
           fillSY(r, s, false);
         }
-        data.push([...r, !s ? (lostOf(a.code) ? 'สูญหาย' : 'ไม่พบ') : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.transferred ? 'มีการโอนย้ายแล้ว' : s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
+        data.push([...r, !s ? (lostOf(a.code) ? 'สูญหาย' : 'ไม่พบ') : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
       }
     }
     // scanned but not in the register: one row each at the bottom, marked 'Asset Not In Plan'
@@ -1777,7 +1785,7 @@ function exportBook(kind) {
     addData(dataSheetName, data, h.length);
   }
   if (kind === 'main' || kind === 'transfer') {
-    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, s.code, '(blank)', a.name, s.area, s.areaName, s.rv.move === 'approved' ? (s.flags.transferred ? 'มีการโอนย้ายแล้ว' : 'รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
+    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, s.code, '(blank)', a.name, s.area, s.areaName, s.rv.move === 'approved' ? ('รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
   }
   if ((kind === 'main' || kind === 'writeoff')) {
     const rows = left.sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code)).map(a => [a.cc, a.ccName, a.code, '(blank)', a.name, a.raws[0] && ci.cap >= 0 ? a.raws[0][ci.cap] : '', sumIdx(a, ci.acq), sumIdx(a, ci.dep), sumIdx(a, ci.book)]);
