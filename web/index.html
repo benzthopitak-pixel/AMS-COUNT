@@ -96,6 +96,13 @@ th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; p
 td { padding: 9px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
 tr.click { cursor: pointer; } tr.click:hover { background: #f8f9fc; } tr.sel { background: var(--blue-soft); }
 td .chip { white-space: nowrap; }
+/* equal rows: fixed columns, one line per cell */
+table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; height: 44px; padding-top: 6px; padding-bottom: 6px; }
+.fbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .fbar .in { width: auto; min-height: 38px; padding: 6px 10px; font-size: 13px; }
+/* small right-hand detail panel */
+.compact { font-size: 13px; gap: 8px !important; } .compact .btn { padding: 5px 10px; min-height: 32px; font-size: 12.5px; } .compact .tog { padding: 4px 9px; min-height: 30px; font-size: 12px; }
+.compact .card { padding: 10px !important; } .compact [style*="font-size:22px"] { font-size: 17px !important; } .compact [style*="font-size:17px"] { font-size: 14px !important; } .compact .sub { font-size: 12px; } .compact h2 { font-size: 15px; }
+.compact .sticker { width: 220px; transform: rotate(-2deg); filter: drop-shadow(0 4px 10px rgb(18 24 38 / .15)); }
 .tile { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; border: none; }
 .tile b { font-size: 15px; } .tile .p { font-size: 24px; font-weight: 700; line-height: 1.2; } .tile small { font-size: 12px; }
 .bar { height: 10px; background: #eef0f6; border-radius: 6px; overflow: hidden; display: flex; }
@@ -325,12 +332,20 @@ function pushEvent(e) {
 }
 function pendingCount() {
   if (!db) return 0;
-  return mine.filter(e => !isServer(e.id)).length;
+  const rej = db.rejected ? db.rejected() : null;
+  return mine.filter(e => !isServer(e.id) && !(rej && rej.has(e.id))).length;
 }
+// ---------- jobs: every imported file is its own job (meta/<id>, master/<id>/cN); the old single round is meta/round ----------
+let jobs = LS.get('jobs', null), jobId = LS.get('jobId', null);
+const metaKeyOf = m => m?.metaKey || 'meta/round';
+const masterKeyOf = (m, i) => (m?.masterKey || 'master/c') + i;
+const jobEntry = m => ({ id: m.id, name: m.name, status: m.status, createdAt: m.createdAt || 0, closedAt: m.closedAt || 0, fileName: m.fileName || '', total: m.total ?? null, areas: (m.areas || []).filter(a => !a.shared).length, metaKey: metaKeyOf(m), masterKey: m.masterKey || 'master/c' });
+const jobList = () => (jobs && jobs.length ? jobs : meta ? [jobEntry(meta)] : []).slice().sort((a, b) => (a.status === 'closed') - (b.status === 'closed') || b.createdAt - a.createdAt);
+async function saveJobs(list) { jobs = list; LS.set('jobs', list); if (db && isLead()) await db.doc('jobs').set({ list }); }
 async function saveMeta(m) {
   if (m && !usbMode && S.team.length) m = { ...m, team: S.team.filter(u => u.active).map(u => ({ name: u.name, role: u.role, code: u.code })) };
   meta = m; LS.set('meta', m);
-  if (db) { try { if (m) await db.doc('meta/round').set(m); else await db.doc('meta/round').delete(); online = true; } catch (e) { online = false; flash('บันทึกขึ้นระบบไม่สำเร็จ ลองใหม่'); } }
+  if (db) { try { if (m) { await db.doc(metaKeyOf(m)).set(m); await saveJobs([jobEntry(m), ...(jobs || []).filter(j => j.id !== m.id)]); } online = true; } catch (e) { online = false; flash('บันทึกขึ้นระบบไม่สำเร็จ ลองใหม่'); } }
   _cache = null; render();
 }
 async function saveMaster(rows, m) {
@@ -339,7 +354,7 @@ async function saveMaster(rows, m) {
   for (const r of rows) { const n = new TextEncoder().encode(JSON.stringify(r)).length; if (size + n > 190000 && cur.length) { parts.push(cur); cur = []; size = 0; } cur.push(r); size += n; }
   if (cur.length) parts.push(cur);
   m.ver = 'v' + Date.now(); m.chunks = parts.length;
-  if (db) for (let i = 0; i < parts.length; i++) { flash(`กำลังส่งทะเบียนขึ้นระบบ ${i + 1}/${parts.length}`); await db.doc('master/c' + i).set({ ver: m.ver, rows: parts[i] }); }
+  if (db) for (let i = 0; i < parts.length; i++) { flash(`กำลังส่งทะเบียนขึ้นระบบ ${i + 1}/${parts.length}`); await db.doc(masterKeyOf(m, i)).set({ ver: m.ver, rows: parts[i] }); }
   LS.set('masterVer', m.ver);
   await saveMeta(m);
 }
@@ -355,9 +370,18 @@ function subscribeEvents() {
 }
 async function loadMaster(m) {
   const rows = [];
-  for (let i = 0; i < m.chunks; i++) { const d = (await db.doc('master/c' + i).get()).data(); if (!d || d.ver !== m.ver) return false; rows.push(...d.rows); }
+  for (let i = 0; i < m.chunks; i++) { const d = (await db.doc(masterKeyOf(m, i)).get()).data(); if (!d || d.ver !== m.ver) return false; rows.push(...d.rows); }
   indexMaster(rows); LS.set('master', rows); LS.set('masterVer', m.ver); return true;
 }
+// the register must reach every device: keep retrying until this device has the version the round says
+function retryMaster() {
+  clearTimeout(retryMaster.t);
+  retryMaster.t = setTimeout(async () => {
+    if (!db || !meta?.ver || meta.ver === LS.get('masterVer', null)) return;
+    if (await loadMaster(meta).catch(() => false)) { _cache = null; flash('โหลดทะเบียนครบแล้ว'); render(); } else retryMaster();
+  }, 10000);
+}
+setInterval(() => { if (db && meta?.ver && meta.ver !== LS.get('masterVer', null)) retryMaster(); }, 30000);
 async function loadTeam() {
   try { S.team = await Store.auth.team(); LS.set('team', S.team); } catch {}
 }
@@ -381,15 +405,48 @@ async function connect() {
   S.gate = null; S.authed = true;
   db = await cap('db');
   if (!db) { paintSync(); render(); return; }
-  unsubMeta?.();
-  unsubMeta = db.doc('meta/round').onSnapshot(async s => {
+  unsubJobs?.();
+  unsubJobs = db.doc('jobs').onSnapshot(s => { const list = s.exists ? (s.data().list || []) : null; jobs = list; LS.set('jobs', list); watchJob(); render(); }, () => { online = false; paintSync(); });
+}
+function curJobKey() {
+  if (!jobs || !jobs.length) return 'meta/round';
+  const j = jobs.find(x => x.id === jobId) || jobs.find(x => x.status !== 'closed') || jobs[0];
+  return j.metaKey;
+}
+let watchedKey = null, unsubJobs = null;
+function watchJob() {
+  const k = curJobKey(); if (k === watchedKey && unsubMeta) return;
+  watchedKey = k; unsubMeta?.();
+  unsubMeta = db.doc(k).onSnapshot(async s => {
     const m = s.exists ? s.data() : null;
     const roundChanged = (m?.id || null) !== (meta?.id || null);
-    if (m && m.ver && m.ver !== LS.get('masterVer', null)) { flash('กำลังโหลดทะเบียน…'); await loadMaster(m); }
+    if (m && m.ver && m.ver !== LS.get('masterVer', null)) { flash('กำลังโหลดทะเบียน…'); if (!(await loadMaster(m).catch(() => false))) { flash('ทะเบียนยังโหลดไม่ครบ · กำลังลองใหม่'); retryMaster(); } }
+    if (m && (!jobs || !jobs.length)) { jobs = [jobEntry(m)]; LS.set('jobs', jobs); }   // the old single round becomes the first job
     meta = m; LS.set('meta', m); if (roundChanged) { loadMine(); evRound = null; S.area = null; LS.set('area', null); S.cards = []; }
-    subscribeEvents(); online = true; _cache = null; render(); if (dirty.size) flush();
+    subscribeEvents(); startPresence(); online = true; _cache = null; render(); if (dirty.size) flush();
   }, () => { online = false; paintSync(); });
 }
+async function deleteJob(id) {
+  const j = jobList().find(x => x.id === id); if (!j) return;
+  try {
+    if (db) { await Store.db.deleteRound(j.id); await db.doc(j.metaKey).delete(); await Store.db.deleteKeys(j.masterKey); }
+    await saveJobs(jobList().filter(x => x.id !== id));
+  } catch (e) { flash('ลบไม่สำเร็จ: ' + e.message); return; }
+  LS.set('mine-' + id, []); LS.set('dirty-' + id, []);
+  if (meta?.id === id) { meta = null; LS.set('meta', null); mine = []; serverEv = {}; S.cards = []; jobId = null; LS.set('jobId', null); watchedKey = null; if (db) watchJob(); }
+  flash('ลบงานแล้ว'); render();
+}
+function pickJob(id) { if (id === meta?.id) return; jobId = id; LS.set('jobId', id); S.cards = []; S.ccSel = null; if (db) watchJob(); flash('กำลังเปิดงาน…'); }
+
+// ---------- who is online: each device says where it is counting (nothing stored) ----------
+let pres = null, presRoom = null; S.pres = {};
+const presState = () => ({ dev, by: S.user?.name || '', role: S.user?.role || (S.mode === 'web' ? 'lead' : 'counter'), mode: S.mode, area: S.area?.code || null, areaName: S.area?.name || null });
+function startPresence() {
+  if (!db || !Store.db.presence || !meta || usbMode) return;
+  if (presRoom !== meta.id) { pres?.stop(); presRoom = meta.id; S.pres = {}; pres = Store.db.presence(meta.id, st => { S.pres = st; if (S.mode === 'web' && (S.web === 'live' || S.web === 'cc') && !document.activeElement?.matches?.('input,select,textarea')) render(); }); }
+  pres.set(presState());
+}
+setInterval(() => { if (pres) pres.set(presState()); }, 45000);
 
 window.addEventListener('online', () => { if (db) flush(); });
 /* ================= boot from this browser's copy ================= */
@@ -404,6 +461,9 @@ function syncInfo() {
   const p = pendingCount();
   if (!online) return ['s-bad', p ? `ออฟไลน์ · รอส่ง ${p} รายการ` : 'ออฟไลน์ · ไม่มีอินเทอร์เน็ต', 'off', p];
   if (p || writing) return ['s-wait', `กำลังส่ง ${p} รายการ`, 'up', p];
+  const rj = db.rejected ? mine.filter(e => db.rejected().has(e.id)).length : 0;
+  if (rj) return ['s-bad', `ส่งไม่ได้ ${rj} รายการ (ระบบไม่อนุญาต) · ดูที่แท็บ ฉัน → ตรวจว่าส่งครบ`, 'off', rj];
+  if (meta?.ver && meta.ver !== LS.get('masterVer', null)) return ['s-wait', 'กำลังโหลดทะเบียนให้ครบ', 'up', 0];
   return ['s-on', 'ซิงก์แล้ว · ข้อมูลถึงระบบครบ', 'ok', 0];
 }
 const SYNC_ICON = {
@@ -436,7 +496,7 @@ function render() {
       + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '4', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '5', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '6', 'ทีม + ตั้งค่า', 0, 99));
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
-      <div class="side-foot">${meta ? `<span class="sub">รอบปัจจุบัน</span><b>${esc(meta.name)}</b>` : '<span class="sub">ยังไม่มีรอบนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
+      <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
     html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div></header>`;
   }
@@ -468,19 +528,22 @@ function totals() {
   return { total, found, left: total - found, other, unk };
 }
 function webRounds(c) {
-  let h = `<main class="wrap"><h1>1 · เพิ่มข้อมูลตรวจนับ</h1>`;
-  if (meta && meta.status !== 'closed' && !S.imp) {
-    const T = totals(), pct = T.total ? Math.round(T.found / T.total * 100) : 0;
-    const stLabel = ['c-warn', 'กำลังนับ'];
-    h += `<button class="card" data-a="web" data-v="live" style="border:2px solid var(--blue);text-align:left;color:inherit">
-      <div class="row" style="justify-content:space-between;align-items:center"><span class="chip ${stLabel[0]}">${stLabel[1]}</span><span class="sub">ทำต่อ →</span></div>
-      <b style="font-size:22px">${esc(meta.name)}</b>
-      <span class="sub">ชื่อไฟล์: ${esc(meta.fileName || '-')} · ${N(T.total)} รายการ · ${(meta.areas || []).filter(a => !a.shared).length} แผนก</span>
-      <div class="bar" aria-label="นับพบ ${pct}%"><i style="width:${pct}%;background:var(--ok)"></i></div>
-      <span class="sub"><b style="color:var(--ok-ink)">${pct}%</b> นับพบ · เรื่องรอตรวจ ${c ? c.move.length + c.unk.length + c.dmg.length : 0}</span></button>`;
+  let h = `<main class="wrap"><div><p class="sub">แต่ละไฟล์ที่นำเข้า = 1 งาน · มีหลายงานพร้อมกันได้</p><h1>1 · เพิ่มข้อมูลตรวจนับ</h1></div>`;
+  const list = jobList();
+  if (list.length && !S.imp) {
+    h += `<section class="card"><h2>งานทั้งหมด (${list.length})</h2><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">`;
+    for (const j of list) {
+      const cur = meta && j.id === meta.id, T = cur ? totals() : null, pct = T && T.total ? Math.round(T.found / T.total * 100) : 0;
+      h += `<div class="card" style="border:2px solid ${cur ? 'var(--blue)' : 'var(--line)'};gap:6px">
+        <div class="row" style="justify-content:space-between;align-items:center"><span class="chip ${j.status === 'closed' ? 'c-gray' : 'c-warn'}">${j.status === 'closed' ? 'ปิดแล้ว' : 'กำลังนับ'}</span>${cur ? '<span class="chip c-blue">เปิดอยู่</span>' : ''}</div>
+        <b style="font-size:18px">${esc(j.name)}</b><span class="sub">${esc(j.fileName || '-')} · ${j.total != null ? N(j.total) + ' รายการ · ' : ''}${j.areas} CC · ${j.createdAt ? fmtT(j.createdAt) : ''}</span>
+        ${cur ? `<div class="bar" aria-label="นับพบ ${pct}%"><i style="width:${pct}%;background:var(--ok)"></i></div><span class="sub"><b style="color:var(--ok-ink)">${pct}%</b> · ${N(T.found)}/${N(T.total)} · เรื่องรอตรวจ ${c ? c.move.length + c.unk.length + c.dmg.length : 0}</span>` : ''}
+        <div class="row" style="gap:6px">${cur ? `<button class="btn sm pri" data-a="web" data-v="live">ไปหน้านับ →</button>` : `<button class="btn sm pri" data-a="pickjob" data-v="${esc(j.id)}">เปิดงานนี้</button>`}
+        ${S.confirmDel === j.id ? `<button class="btn sm red" data-a="deljob" data-v="${esc(j.id)}">ยืนยันลบ (ผลนับหายด้วย)</button><button class="btn sm" data-a="nodel">ยกเลิก</button>` : `<button class="btn sm" data-a="askdel" data-v="${esc(j.id)}">ลบ</button>`}</div></div>`;
+    }
+    h += `</div></section>`;
   }
-  h += `<section class="card">${importBlock()}</section>`;
-  if (meta && !S.imp) h += `<div class="row" style="justify-content:flex-end">${S.confirmReset ? `<div class="confirm"><b>ลบ "${esc(meta.name)}" และผลนับทั้งหมด?</b><span>ทะเบียนที่นำเข้าก็จะหายด้วย · ส่งออก Excel เก็บไว้ก่อน</span><div class="row"><button class="btn red" data-a="reset">ลบเลย</button><button class="btn" data-a="noreset">ยกเลิก</button></div></div>` : `<button class="btn sm red" data-a="askreset">ลบข้อมูลรอบนี้</button>`}</div>`;
+  h += `<section class="card"><h2>${list.length ? 'เพิ่มงานใหม่' : 'เริ่มงานแรก'}</h2>${importBlock()}</section>`;
   return h + `</main>`;
 }
 function importBlock() {
@@ -493,8 +556,8 @@ function importBlock() {
   if (fresh) h += `<label class="f">ชื่อรอบตรวจนับ<input class="in" id="impRound" value="${esc(I.roundName)}" maxlength="80"></label>`;
   h += `<div class="grid">${[['code', 'เลข Asset (บนสติ๊กเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
     <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">เลข Asset ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · ยิงครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
-  if (busyRound) h += `<div class="msg warn">มีรอบ "${esc(meta.name)}" กำลังนับอยู่ · นำเข้าไฟล์นี้จะเริ่มรอบใหม่แทน (ส่งออก Excel รอบเดิมเก็บไว้ก่อน)</div>`;
-  h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างรอบใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
+  if (busyRound) h += `<div class="msg ok">ไฟล์นี้จะเป็นงานใหม่อีกงาน · งาน "${esc(meta.name)}" ที่นับอยู่ยังอยู่ครบ สลับไปมาได้</div>`;
+  h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างงานใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
   return h;
 }
 
@@ -577,7 +640,7 @@ function webLive(c) {
     <button class="kpi" data-a="opencc" data-v="*" data-t="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ดูรายการ →</span></button></div>`;
   h += `<div class="row"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
     <div class="row" style="align-items:center"><input class="in" id="ccQ" value="${esc(S.ccQ || '')}" placeholder="ค้นหา CC" style="width:160px" aria-label="ค้นหา Cost Center"><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
-    <div class="grid">`;
+    <div class="grid" style="grid-auto-rows:1fr">`;
   for (const x of rows) {
     const r = x.total ? x.found / x.total : 0, p = Math.round(r * 100), mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
     const bg = r >= 1 ? '#12b76a' : r >= .66 ? '#6ce9a6' : r >= .33 ? '#a6f4c5' : r > 0 ? '#d1fadf' : '#f2f4f7';
@@ -586,11 +649,29 @@ function webLive(c) {
     h += `<button class="tile click" data-a="opencc" data-v="${esc(x.code)}" title="เปิดรายละเอียด ${esc(x.code)}" style="background:${bg};color:${fg};cursor:pointer"><b class="mono">${esc(x.code)}</b>${x.name !== String(x.code) ? `<small style="opacity:.85">${esc(x.name)}</small>` : ''}<span class="p">${p}%</span><small>ตรวจ ${N(x.found)}/${N(x.total)} · เหลือ ${N(x.total - x.found)}</small>${flags ? `<span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${flags}</span>` : ''}</button>`;
   }
   h += `</div>${rows.length ? '' : '<p class="sub">ไม่พบ CC</p>'}</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
-  const devs = new Map(); for (const e of compute().evs) { const d2 = devs.get(e.dev) || { by: e.by, n: 0, t: 0 }; d2.n++; d2.t = Math.max(d2.t, e.t); d2.by = e.by; devs.set(e.dev, d2); }
-  h += `<section class="card"><h2>ทีม / เครื่อง</h2>${[...devs.entries()].map(([d2, x]) => `<div class="row" style="align-items:center"><span class="dot" style="background:var(--orange);color:#1d0e00">${esc((x.by || '?').slice(0, 1))}</span><span style="flex:1"><b>${esc(x.by)}</b><br><span class="sub">เครื่อง ${esc(d2)}${d2 === dev ? ' (เครื่องนี้)' : ''} · ${N(x.n)} รายการ · ล่าสุด ${hm(x.t)}</span></span></div>`).join('') || '<p class="sub">ยังไม่มีใครสแกน</p>'}</section>`;
+  h += teamPanel();
   const last = [...cur.values()].sort((a, b) => b.t - a.t).slice(0, 8);
   h += `<section class="card"><h2>สแกนล่าสุด</h2>${last.map(s2 => `<button class="li" data-a="openitemcc" data-v="${esc(s2.code)}" style="background:#f8f9fc"><span class="t"><b class="mono">${esc(s2.code)}</b><span>${esc(master.get(s2.code)?.name || s2.uname || 'ไม่อยู่ในทะเบียน')} · ${esc(s2.areaName)}</span></span>${badge(s2)}</button>`).join('') || '<p class="sub">—</p>'}</section></aside></div>`;
   return h + `</main>`;
+}
+// right panel: every device — online now?, counting which CC, how many items it counted · Admin first, then counters
+function teamPanel() {
+  const { cur, evs } = compute(), devs = new Map(), now = Date.now();
+  const roleOf = (name, r) => r || S.team.find(u => u.name === name)?.role || (meta?.team || []).find(u => u.name === name)?.role || 'counter';
+  for (const e of evs) { const d = devs.get(e.dev) || { dev: e.dev, by: e.by, n: 0, t: 0, area: null, areaName: null }; d.t = Math.max(d.t, e.t); d.by = e.by; if (e.k === 'scan') { d.area = e.area; d.areaName = e.areaName; } devs.set(e.dev, d); }
+  for (const s2 of cur.values()) { const d = devs.get(s2.dev); if (d) d.n++; }
+  for (const [d, p] of Object.entries(S.pres || {})) { const x = devs.get(d) || { dev: d, by: p.by, n: 0, t: 0 }; x.on = true; x.p = p; if (p.by) x.by = p.by; devs.set(d, x); }
+  const me = devs.get(dev) || { dev, by: S.user?.name, n: 0, t: 0 }; me.on = true; me.p = me.p || presState(); devs.set(dev, me);
+  const list = [...devs.values()].map(x => ({ ...x, role: roleOf(x.by, x.p?.role) })).sort((a, b) => (a.role !== 'lead') - (b.role !== 'lead') || (b.on || false) - (a.on || false) || b.n - a.n);
+  const nOn = list.filter(x => x.on).length;
+  let h = `<section class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2>ทีม / เครื่อง</h2><span class="chip c-ok">ออนไลน์ ${nOn}</span></div>`;
+  for (const x of list) {
+    const lead = x.role === 'lead', where = x.on && x.p ? (x.p.mode === 'web' ? 'ใช้บนคอม' : x.p.areaName ? `กำลังนับ ${esc(x.p.areaName)}${x.p.area && x.p.areaName !== String(x.p.area) ? ` (${esc(x.p.area)})` : ''}` : 'ยังไม่เลือก CC') : x.areaName ? `ล่าสุดที่ ${esc(x.areaName)}` : '';
+    h += `<div class="row" style="align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f2f5"><span class="dot" style="position:relative;flex:none;background:${lead ? 'var(--blue)' : '#e4e7ec'};color:${lead ? '#fff' : '#344054'}">${esc((x.by || '?').slice(0, 1))}<i style="position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;border:2px solid #fff;background:${x.on ? 'var(--ok)' : '#98a2b3'}" aria-label="${x.on ? 'ออนไลน์' : 'ออฟไลน์'}"></i></span>
+      <span style="flex:1;min-width:0"><b>${esc(x.by || '?')}</b> <span class="chip ${lead ? 'c-blue' : 'c-gray'}" style="font-size:11px">${lead ? 'Admin' : 'ผู้ตรวจนับ'}</span><br><span class="sub">${x.on ? '<b style="color:var(--ok-ink)">ออนไลน์</b>' : `ออฟไลน์${x.t ? ' · ' + hm(x.t) : ''}`}${where ? ' · ' + where : ''}<br>เครื่อง ${esc(x.dev)}${x.dev === dev ? ' (เครื่องนี้)' : ''}</span></span>
+      <span style="flex:none;min-width:54px;text-align:center;background:var(--orange);color:#1d0e00;border-radius:14px;padding:6px 8px;line-height:1.1"><b style="font-size:18px">${N(x.n)}</b><br><span style="font-size:11px">รายการ</span></span></div>`;
+  }
+  return h + `</section>`;
 }
 const needsDecision = s2 => (isOther(s2) && s2.dec !== 'borrowed' && !s2.rv.move) || (!master.has(s2.code) && !s2.rv.unk) || ((s2.cond === 'ชำรุด' || s2.cond === 'รอซ่อม') && !s2.rv.dmg);
 
@@ -610,15 +691,20 @@ function ccRows(ccCode) {
   return out;
 }
 const CC_TABS = [['all', 'ทั้งหมด'], ['left', 'รอตรวจ'], ['done', 'ตรวจแล้ว'], ['move', 'ต้องย้าย CC'], ['unk', 'ไม่อยู่ในทะเบียน'], ['noqr', 'ยังไม่มี QR']];
-const SRC_TABS = [['scan', 'จากเครื่องยิงทั้งหมด'], ['qr', 'ยิง QR'], ['barcode', 'ยิงบาร์โค้ด'], ['manual', 'พิมพ์ / ค้นหาบนเครื่อง'], ['web', 'บันทึกบนเว็บ']];
+const SRC_OPTS = [['', 'ที่มา: ทั้งหมด'], ['scan', 'จากเครื่องยิงทั้งหมด'], ['qr', 'ยิง QR'], ['barcode', 'ยิงบาร์โค้ด'], ['manual', 'พิมพ์ / ค้นหาบนเครื่อง'], ['web', 'บันทึกบนเว็บ']];
 function webCC() {
   const ccCode = S.ccSel, all = ccCode === '*', area = (meta.areas || []).find(x => String(x.code) === ccCode);
-  const rowsAll = ccRows(ccCode), tab = S.ccTab || 'all', q = norm(S.ccItemQ || '');
+  if (SRC[S.ccTab] || S.ccTab === 'scan') { S.ccF = { ...(S.ccF || {}), src: S.ccTab }; S.ccTab = 'all'; }
+  const rowsAll = ccRows(ccCode), tab = S.ccTab || 'all', q = norm(S.ccItemQ || ''), F = S.ccF || {};
   const n = { all: rowsAll.length, left: rowsAll.filter(r => r.state === 'left').length, done: rowsAll.filter(r => r.state === 'done').length, move: rowsAll.filter(r => r.state === 'moveout' || r.state === 'movein').length, unk: rowsAll.filter(r => r.state === 'unk').length, noqr: rowsAll.filter(r => r.state !== 'movein' && needQR(r.s)).length };
   const here = r => r.s && (all || String(r.s.area) === ccCode);
-  n.scan = rowsAll.filter(r => here(r) && r.s.src !== 'web').length; for (const k of Object.keys(SRC)) n[k] = rowsAll.filter(r => here(r) && r.s.src === k).length;
-  let rows = rowsAll.filter(r => tab === 'all' ? true : tab === 'move' ? (r.state === 'moveout' || r.state === 'movein') : tab === 'scan' ? (here(r) && r.s.src !== 'web') : SRC[tab] ? (here(r) && r.s.src === tab) : tab === 'noqr' ? (r.state !== 'movein' && needQR(r.s)) : r.state === tab);
-  if (tab === 'scan' || SRC[tab]) rows.sort((x, y) => y.s.t - x.s.t); else rows.sort((x, y) => x.code.localeCompare(y.code));
+  const people = [...new Set(rowsAll.filter(r => r.s).map(r => r.s.by))].sort();
+  let rows = rowsAll.filter(r => tab === 'all' ? true : tab === 'move' ? (r.state === 'moveout' || r.state === 'movein') : tab === 'noqr' ? (r.state !== 'movein' && needQR(r.s)) : r.state === tab);
+  if (F.src) rows = rows.filter(r => here(r) && (F.src === 'scan' ? r.s.src !== 'web' : r.s.src === F.src));
+  if (F.by) rows = rows.filter(r => r.s && r.s.by === F.by);
+  if (F.cond) rows = rows.filter(r => r.s && r.s.cond === F.cond);
+  if (F.qr) rows = rows.filter(r => r.s && r.a && (F.qr === 'done' ? !needQR(r.s) : needQR(r.s)));
+  if (F.src || F.by) rows.sort((x, y) => y.s.t - x.s.t); else rows.sort((x, y) => x.code.localeCompare(y.code));
   if (q) rows = rows.filter(r => norm(r.code).includes(q) || norm(r.a?.name || r.s?.uname || '').includes(q));
   const totalOwn = rowsAll.filter(r => r.state !== 'movein' && r.state !== 'unk').length, doneOwn = rowsAll.filter(r => r.state === 'done' || r.state === 'moveout').length;
   if (S.ccPick && !rowsAll.some(r => r.code === S.ccPick)) S.ccPick = null;
@@ -630,16 +716,21 @@ function webCC() {
     <div class="bar" aria-label="ความคืบหน้า"><i style="width:${totalOwn ? doneOwn / totalOwn * 100 : 0}%;background:var(--ok)"></i></div>
     <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${CC_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="cctab" data-v="${k}">${l} [${n[k]}]</button>`).join('')}</div>
     <input class="in" id="ccItemQ" value="${esc(S.ccItemQ || '')}" placeholder="ค้นหาเลข Asset หรือชื่อ" style="max-width:260px" aria-label="ค้นหาในรายการ"></div>
-    <div class="row" style="align-items:center"><span class="sub">ที่มาของผลนับ:</span><div class="pills">${SRC_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="cctab" data-v="${k}">${l} [${n[k]}]</button>`).join('')}</div></div>
-    <div class="row"><section class="card grow"><div class="tbl-wrap" style="max-height:70vh;overflow-y:auto"><table><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th></tr></thead><tbody>`;
+    <div class="fbar"><span class="sub">ตัวกรอง</span>
+      <select class="in" data-ccf="src" aria-label="ที่มา">${SRC_OPTS.map(([k, l]) => `<option value="${k}" ${(F.src || '') === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <select class="in" data-ccf="by" aria-label="ผู้นับ"><option value="">ผู้นับ: ทุกคน</option>${people.map(p => `<option ${F.by === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+      <select class="in" data-ccf="cond" aria-label="สภาพ"><option value="">สภาพ: ทั้งหมด</option>${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(c => `<option ${F.cond === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+      <select class="in" data-ccf="qr" aria-label="QR"><option value="">QR: ทั้งหมด</option><option value="done" ${F.qr === 'done' ? 'selected' : ''}>QR ครบแล้ว</option><option value="need" ${F.qr === 'need' ? 'selected' : ''}>ต้องสร้าง QR</option></select>
+      ${Object.values(F).some(Boolean) ? '<button class="btn sm" data-a="ccfclear">ล้างตัวกรอง</button>' : ''}<span class="sub">แสดง ${N(rows.length)} รายการ</span></div>
+    <div class="row"><section class="card grow" style="min-width:0"><div class="tbl-wrap" style="max-height:70vh;overflow-y:auto"><table class="tfix"><colgroup><col style="width:88px"><col style="min-width:180px">${all ? '<col style="width:76px">' : ''}<col style="width:118px"><col style="width:78px"><col style="width:70px"><col style="width:92px"><col style="width:58px"><col style="width:100px"></colgroup><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th></tr></thead><tbody>`;
   const ST = { left: '<span class="chip c-warn">รอตรวจ</span>', done: '<span class="chip c-ok">ตรวจแล้ว</span>', unk: '<span class="chip c-bad">ไม่อยู่ในทะเบียน</span>' };
   for (const r of rows.slice(0, 500)) {
     const s2 = r.s, mvTxt = r.state === 'moveout' ? `<span class="chip c-oth">ต้องย้ายไป ${esc(s2.areaName)}</span>` : r.state === 'movein' ? `<span class="chip c-oth">ย้ายมาจาก ${esc(r.a.cc)}</span>` : ST[r.state];
     const decided = s2 && s2.rv.move ? (s2.rv.move === 'approved' ? ' <span class="chip c-blue">อนุมัติแล้ว</span>' : ' <span class="chip c-gray">ไม่ย้าย</span>') : s2 && s2.dec === 'borrowed' && (r.state === 'moveout' || r.state === 'movein') ? ' <span class="chip c-gray">ยืมมา</span>' : '';
-    h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td>${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}</td><td>${srcChip(s2)}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติดแล้ว</span>' : '<span class="chip c-blue">ต้องสร้าง QR</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub">${s2 ? esc(s2.by) + '<br>' + fmtT(s2.t) : ''}</td></tr>`;
+    h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td></tr>`;
   }
   h += `</tbody></table></div>${rows.length > 500 ? `<p class="sub">แสดง 500 จาก ${N(rows.length)} รายการ · ค้นหาเพื่อกรอง</p>` : ''}${rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>
-    <aside class="card side" style="position:sticky;top:16px">${S.ccPick ? ccDetail(S.ccPick, ccCode) : '<p class="sub">แตะรายการทางซ้ายเพื่อดูรายละเอียดและแก้ไข</p>'}</aside></div></main>`;
+    <aside class="card side compact" style="position:sticky;top:16px;flex:0 0 300px;max-height:calc(100vh - 32px);overflow-y:auto">${S.ccPick ? `<div class="sticker"><canvas id="ccSticker" width="560" height="296" aria-label="สติ๊กเกอร์ ${esc(S.ccPick)}"></canvas></div>` + ccDetail(S.ccPick, ccCode) : '<div class="sticker" style="opacity:.35"><canvas id="ccSticker" width="560" height="296" aria-hidden="true"></canvas></div><p class="sub" style="text-align:center">แตะรายการทางซ้ายเพื่อดูสติ๊กเกอร์ รายละเอียด และแก้ไข</p>'}</aside></div></main>`;
   return h;
 }
 function ccDetail(code, ccCode) {
@@ -820,6 +911,7 @@ function appHome(c) {
   let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span></div>`;
   if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
   h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
+    ${jobList().filter(j => j.status !== 'closed').length > 1 ? `<div class="card" style="gap:6px;padding:12px"><span class="sub">งานที่นับอยู่ (แตะเพื่อสลับ)</span><div class="chips">${jobList().filter(j => j.status !== 'closed').map(j => `<button class="tog" aria-pressed="${j.id === meta.id}" data-a="pickjob" data-v="${esc(j.id)}">${j.id === meta.id ? '✓ ' : ''}${esc(j.name)}</button>`).join('')}</div></div>` : ''}
     <b style="font-size:18px">เลือก Cost Center ที่จะนับ</b><input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">`;
   const list = (meta.areas || []).slice().sort((a, b) => { const pa = st.get(String(a.code)), pb = st.get(String(b.code)); const da = pa && pa.total && pa.found >= pa.total, dbb = pb && pb.total && pb.found >= pb.total; return (da - dbb) || a.name.localeCompare(b.name); });
   for (const a of areaFilter(list)) h += areaCard(a, st.get(String(a.code)));
@@ -1182,6 +1274,10 @@ document.addEventListener('click', async e => {
       await saveMeta({ id: 'r' + Date.now(), name: 'ตรวจนับ ' + new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }), status: 'prepare', createdAt: Date.now(), team: meta?.team || [], areas: keep, fileName: meta?.fileName || '', sheet: meta?.sheet || '', headers: meta?.headers || null, tpl: meta?.tpl || null, ver: meta?.ver, chunks: meta?.chunks, woCount: meta?.woCount || 0 });
       loadMine(); evRound = null; subscribeEvents(); S.web = 'prepare'; S.cards = []; break;
     }
+    case 'pickjob': pickJob(v); S.web = S.mode === 'web' ? 'live' : S.web; S.app = 'home'; break;
+    case 'askdel': S.confirmDel = v; break;
+    case 'nodel': S.confirmDel = null; break;
+    case 'deljob': S.confirmDel = null; await deleteJob(v); return;
     case 'askreset': S.confirmReset = true; break;
     case 'noreset': S.confirmReset = false; break;
     case 'reset': S.confirmReset = false; if (meta) { LS.set('mine-' + meta.id, []); if (db) try { await Store.db.deleteRound(meta.id); } catch (e) { flash('ลบผลนับบนระบบไม่สำเร็จ: ' + e.message); return; } } await saveMeta(null); mine = []; serverEv = {}; S.cards = []; S.web = 'rounds'; flash('ลบรอบแล้ว'); return;
@@ -1233,7 +1329,7 @@ document.addEventListener('click', async e => {
     case 'mempin': { const pin = ($('#pin-' + v)?.value || '').trim(); const u = S.team.find(x => x.id === v); if (!/^\d{4,8}$/.test(pin)) { flash('PIN ต้องเป็นตัวเลข 4–8 หลัก'); return; } await teamOp(() => Store.auth.setPin(v, u.code, pin), `ตั้ง PIN ใหม่ให้ ${u.name} แล้ว`); return; }
     case 'areapick': S.areaPick = true; break;
     case 'closepick': S.areaPick = false; break;
-    case 'setarea': { S.areaQ = ''; const ar = (meta.areas || []).find(x => String(x.code) === v); S.area = { code: String(ar.code), name: ar.name, shared: !!ar.shared }; LS.set('area', S.area); S.areaPick = false; S.app = 'area'; S.areaTab = 'left'; break; }
+    case 'setarea': { setTimeout(startPresence, 0); S.areaQ = ''; const ar = (meta.areas || []).find(x => String(x.code) === v); S.area = { code: String(ar.code), name: ar.name, shared: !!ar.shared }; LS.set('area', S.area); S.areaPick = false; S.app = 'area'; S.areaTab = 'left'; break; }
     case 'areatab': S.areaTab = v; break;
     case 'openitem': S.item = v; break;
     case 'closeitem': S.item = null; break;
@@ -1249,6 +1345,7 @@ document.addEventListener('click', async e => {
     case 'srchsave': { const q = S.search.q.trim(); if (!q) return; S.search = null; S.manual = true; doScan(q); S.manual = false; return; }
     case 'closedup': clearTimeout(S.dupT); S.dupPop = null; break;
     case 'closeoth': S.othPop = null; break;
+    case 'ccfclear': S.ccF = {}; break;
     case 'openrc': if (window.AndroidBridge.openReaderConfig() !== 'OK') flash('ไม่พบแอป ReaderConfig · เปิดจากหน้ารวมแอปของเครื่อง'); return;
     case 'appinfo': window.AndroidBridge.openAppInfo(v); return;
     case 'chkupd': flash('กำลังตรวจหาอัปเดต…'); window.AndroidBridge.checkUpdate(); return;
@@ -1298,6 +1395,8 @@ document.addEventListener('change', async e => {
   if (t.id === 'stSize') { S.stSize = t.value; }
   if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
+  if (t.id === 'jobSel') { pickJob(t.value); render(); }
+  if (t.dataset.ccf) { S.ccF = { ...(S.ccF || {}), [t.dataset.ccf]: t.value }; render(); }
 
 });
 document.addEventListener('input', e => { if (e.target.id === 'areaQ') { S.areaQ = e.target.value; clearTimeout(window._aq); window._aq = setTimeout(() => { render(); const i = $('#areaQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); return; }
@@ -1372,7 +1471,10 @@ async function doImport() {
   const fresh = true;
   if (fresh) {
     const nm = ($('#impRound')?.value || I.roundName || '').trim() || 'ตรวจนับ ' + new Date().toLocaleDateString('th-TH');
-    meta = { id: 'r' + Date.now(), name: nm, status: 'counting', createdAt: Date.now(), releasedAt: Date.now(), team: meta?.team || [], areas: [] };
+    const id = 'r' + Date.now();
+    if (meta && (!jobs || !jobs.length)) jobs = [jobEntry(meta)];
+    meta = { id, name: nm, status: 'counting', createdAt: Date.now(), releasedAt: Date.now(), team: meta?.team || [], areas: [], metaKey: 'meta/' + id, masterKey: 'master/' + id + '/c' };
+    jobId = id; LS.set('jobId', id); watchedKey = null;
     loadMine(); evRound = null; S.cards = []; S.liveArea = null;
   }
   const prev = new Map((meta.areas || []).map(a => [String(a.code), a]));
@@ -1381,7 +1483,8 @@ async function doImport() {
   const woCount = rows.filter(r => r[7]).length;
   const ccNames = Object.fromEntries(Object.entries(nmSeen).filter(([, v]) => v.size > 1).map(([k, v]) => [k, [...v]]));
   S.imp = null; flash('กำลังนำเข้า…');
-  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, map: m, areas, woCount, ccNames });
+  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, map: m, areas, woCount, ccNames, total: rows.filter(r => !r[7]).length });
+  if (db) watchJob();
   if (fresh) subscribeEvents();
   S.web = 'live';
   flash(`นำเข้าแล้ว ${N(rows.length)} รายการ · ${areas.length} แผนก${Object.keys(ccNames).length ? ` · ⚠ ชื่อแผนกไม่ตรงกัน ${Object.keys(ccNames).length} CC (ยึดรหัส CC)` : ''}`);
@@ -1393,7 +1496,9 @@ async function verify() {
     const snap = await db.collection('ev').where('round', '==', meta.id).where('dev', '==', dev).get();
     const ids = new Set(); for (const d of snap.docs) for (const x of d.data().items || []) ids.add(x.id);
     const miss = mine.filter(x => !ids.has(x.id));
-    S.verify = miss.length ? [`ยังไม่ถึงระบบ ${miss.length} รายการ · กดอีกครั้ง`, 'bad'] : [`ครบ ✓ ในเครื่อง ${mine.length} = บนระบบ ${ids.size} · ${fmtT(Date.now())}`, 'ok'];
+    const rej = db.rejected ? db.rejected() : new Map(), missOk = miss.filter(x => !rej.has(x.id));
+    if (miss.length && !missOk.length) { S.verify = [`ส่งไม่ได้ ${miss.length} รายการ · ระบบไม่อนุญาต (${[...new Set(miss.map(x => rej.get(x.id)))].join(', ').slice(0, 120)}) · แจ้ง Admin`, 'bad']; return; }
+    S.verify = missOk.length ? [`ยังไม่ถึงระบบ ${missOk.length} รายการ · กดอีกครั้ง`, 'bad'] : [`ครบ ✓ ในเครื่อง ${mine.length} = บนระบบ ${ids.size} · ${fmtT(Date.now())}`, 'ok'];
     if (miss.length) { mine.forEach((_, i) => dirty.add(Math.floor(i / CHUNK))); saveMine(); flush(); }
   } catch (e) { S.verify = ['ตรวจไม่ได้ตอนนี้ (ออฟไลน์?)', 'bad']; }
 }
@@ -1507,6 +1612,7 @@ function afterRender() {
   const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
   const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
+  const cs = $('#ccSticker'); if (cs) drawSticker(cs, S.ccPick || ccRows(S.ccSel || '*')[0]?.code || '');
   if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && !S.search && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus();
   if (S.search && !S.item && document.activeElement?.id !== 'srchIn') { const si = $('#srchIn'); if (si) { si.focus(); try { si.setSelectionRange(si.value.length, si.value.length); } catch {} } }
 }

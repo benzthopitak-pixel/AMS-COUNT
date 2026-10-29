@@ -19,7 +19,14 @@
   // always signed in as the demo Admin
   try { if (!localStorage.getItem('amt.auth')) localStorage.setItem('amt.auth', JSON.stringify({ access_token: 'demo', user: { id: 'u1' } })); } catch {}
 
-  const chans = [];
+  const chans = [], PRES = {};
+  // review copy: the other demo devices look online at the department of their latest scan
+  const demoPresence = name => {
+    const out = { ...(PRES[name] || {}) }, last = new Map();
+    for (const e of T.events) { const d = e.data || {}; if (d.k === 'scan' && d.dev && d.dev !== 'demo-lead') last.set(d.dev, d); }
+    let i = 0; for (const [dv, d] of last) { if (i++ >= 2) break; out['demo-' + dv] = [{ dev: dv, by: d.by, role: 'counter', mode: 'app', area: d.area, areaName: d.areaName, at: Date.now() }]; }
+    return out;
+  };
   const push = ch => setTimeout(() => {
     for (const c of chans) for (const l of c.ls) {
       if (l.f.table !== ch.table) continue;
@@ -44,7 +51,7 @@
       if (op.name === 'ams_set_pin') { const u = T.users.find(x => x.id === op.args.p_user); if (u) u.password = op.args.p_password; persist(); return { data: null, error: null }; }
       return { data: null, error: null };
     }
-    const q = op.q, t = T[q.table], r = role(op.uid), match = row => q.eq.every(([f, v]) => row[f] === v);
+    const q = op.q, t = T[q.table], r = role(op.uid), match = row => q.eq.every(([f, v]) => row[f] === v) && (!q.like || String(row[q.like[0]]).startsWith(q.like[1].replace(/%$/, '')));
     if (q.action === 'select') {
       let rows = t.filter(match);
       for (const f of [...q.order].reverse()) rows = [...rows].sort((a, b) => a[f] < b[f] ? -1 : a[f] > b[f] ? 1 : 0);
@@ -64,6 +71,7 @@
     }
     if (q.action === 'update') { t.filter(match).forEach(x => Object.assign(x, q.values)); persist(); return { data: null, error: null }; }
     if (q.action === 'delete') {
+      if (q.table === 'kv' && r !== 'lead') return { error: { message: 'row-level security' } };
       const gone = t.filter(match); T[q.table] = t.filter(x => !match(x));
       for (const g of gone) push({ table: q.table, eventType: 'DELETE', old: q.table === 'kv' ? { key: g.key } : { id: g.id, round: g.round } });
       persist(); return { data: null, error: null };
@@ -81,7 +89,7 @@
     function builder(table) {
       const q = { table, action: 'select', cols: '*', eq: [], order: [], range: null, single: false };
       const b = {
-        select(c) { q.cols = c; return b; }, eq(f, v) { q.eq.push([f, v]); return b; }, order(f) { q.order.push(f); return b; },
+        select(c) { q.cols = c; return b; }, eq(f, v) { q.eq.push([f, v]); return b; }, like(f, v) { q.like = [f, v]; return b; }, order(f) { q.order.push(f); return b; },
         range(x, y) { q.range = [x, y]; return b; }, maybeSingle() { q.single = true; return b; },
         upsert(v, o) { q.action = 'upsert'; q.values = Array.isArray(v) ? v : [v]; q.opts = o || {}; return b; },
         update(v) { q.action = 'update'; q.values = v; return b; }, delete() { q.action = 'delete'; return b; },
@@ -98,7 +106,8 @@
       },
       from: builder,
       rpc(name, args) { return call({ op: 'rpc', name, args, uid: uid() }); },
-      channel(name) { const c = { name, ls: [], on(type, f, cb) { c.ls.push({ f, cb }); return c; }, subscribe(st) { chans.push(c); setTimeout(() => st && st('SUBSCRIBED'), 5); return c; } }; return c; },
+      channel(name) { const c = { name, ls: [], pres: [], on(type, f, cb) { if (type === 'presence') c.pres.push(cb); else c.ls.push({ f, cb }); return c; }, subscribe(st) { chans.push(c); setTimeout(() => st && st('SUBSCRIBED'), 5); return c; },
+        async track(s) { (PRES[name] = PRES[name] || {})['me'] = [s]; for (const x of chans) if (x.name === name) x.pres.forEach(f => setTimeout(f, 0)); }, presenceState() { return demoPresence(name); } }; return c; },
       removeChannel(c) { const i = chans.indexOf(c); if (i >= 0) chans.splice(i, 1); }
     };
   }

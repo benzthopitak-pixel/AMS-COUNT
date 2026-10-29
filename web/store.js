@@ -112,13 +112,20 @@
     }
     return out;
   }
+  // a row the database refuses for good (no permission, bad value) must not hold back everything after it
+  const refused = e => !!e && /^(42501|23514|23502|22P02|PGRST)/.test(String(e.code || '')) || /row-level security|violates/i.test(e?.message || '');
+  const rejected = new Map();   // id → reason · shown on the device, never retried
   async function putEvents(items) {
-    const fresh = items.filter(e => e && e.id && !sentIds.has(e.id));
+    const fresh = items.filter(e => e && e.id && !sentIds.has(e.id) && !rejected.has(e.id));
     for (let i = 0; i < fresh.length; i += 500) {
       const part = fresh.slice(i, i + 500);
       const { error } = await client().from('events').upsert(part.map(rowOf), { onConflict: 'id', ignoreDuplicates: true });
-      if (error) throw err(error);
-      part.forEach(e => sentIds.add(e.id));
+      if (!error) { part.forEach(e => sentIds.add(e.id)); continue; }
+      if (!refused(error)) throw err(error);
+      for (const e of part) {   // send one by one, set aside only the refused rows
+        const r = await client().from('events').upsert([rowOf(e)], { onConflict: 'id', ignoreDuplicates: true });
+        if (!r.error) sentIds.add(e.id); else if (refused(r.error)) rejected.set(e.id, r.error.message || 'refused'); else throw err(r.error);
+      }
     }
   }
   async function kvGet(key) {
@@ -161,6 +168,7 @@
   }
 
   const db = {
+    rejected: () => rejected,
     doc(path) {
       const [col, ...rest] = path.split('/'), id = rest.join('/');
       if (col === 'ev') return {
@@ -182,7 +190,17 @@
       };
       return q;
     },
-    async deleteRound(round) { const { error } = await client().from('events').delete().eq('round', round); if (error) throw err(error); }
+    async deleteRound(round) { const { error } = await client().from('events').delete().eq('round', round); if (error) throw err(error); },
+    async deleteKeys(prefix) { const { error } = await client().from('kv').delete().like('key', prefix + '%'); if (error) throw err(error); },
+    // who is online right now (Supabase Realtime presence · nothing stored) → cb({ dev: state })
+    presence(room, cb) {
+      let me = null, ready = false;
+      const ch = client().channel('pr-' + room, { config: { presence: { key: 'k' + Math.random().toString(36).slice(2, 8) } } });
+      const sync = () => { const st = ch.presenceState() || {}, out = {}; for (const k in st) for (const x of st[k] || []) if (x && x.dev) out[x.dev] = x; cb(out); };
+      ch.on('presence', { event: 'sync' }, sync).on('presence', { event: 'join' }, sync).on('presence', { event: 'leave' }, sync)
+        .subscribe(st => { if (st === 'SUBSCRIBED') { ready = true; if (me) ch.track(me).catch(() => {}); } });
+      return { set(state) { me = { ...state, at: Date.now() }; if (ready) ch.track(me).catch(() => {}); }, stop() { client().removeChannel(ch); } };
+    }
   };
 
   /* ---------- files: Android app saves to Download/AMS Count, browser downloads ---------- */
