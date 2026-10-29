@@ -266,7 +266,7 @@ function compute() {
   const dropped = new Set(evs.filter(e => e.k === 'edit' && e.dropScan).map(e => e.dropScan));   // duplicate scans someone removed
   for (const e of evs) {
     const c = e.code; let s = cur.get(c);
-    if (e.k === 'edit' && e.dropScan) { H(c, 'ลบรายการยิงซ้ำ', e); continue; }
+    if (e.k === 'edit' && e.dropScan) { H(c, 'ลบรายการสแกนซ้ำ', e); continue; }
     if (e.k === 'scan' && dropped.has(e.id)) continue;
     if (String(c).startsWith('#CC:')) { const k = c.slice(4); if (e.areaDone) ccDone.set(k, { by: e.by, t: e.t, left: e.left || 0, dev: e.dev }); else ccDone.delete(k); continue; }   // "นับครบแล้ว" for one Cost Center
     if (e.k === 'edit' && e.lost !== undefined && !s) { if (e.lost) { lost.set(c, { by: e.by, t: e.t, remark: e.remark || '', area: e.area || '' }); H(c, 'บันทึกว่าสูญหาย' + (e.remark ? ' · ' + e.remark : ''), e); } else { lost.delete(c); H(c, 'ยกเลิกสูญหาย', e); } continue; }
@@ -283,13 +283,13 @@ function compute() {
       H(c, e.printed ? 'พิมพ์ป้ายใหม่แล้ว' : 'แก้ไข: ' + Object.keys(e).filter(k => !['id', 'k', 'code', 't', 'by', 'dev', 'round'].includes(k)).map(k => k === 'flags' ? 'ป้าย/โอนย้าย' : ({ cond: 'สภาพ', remark: 'Remark', room: 'ห้อง', dec: 'การตัดสินใจ', uname: 'ชื่อ', area: 'CC ที่พบ', areaName: '' }[k] ?? k)).join(', '), e);
     } else if (e.k === 'del') { cur.delete(c); H(c, 'ยกเลิกผลนับ', e); }
     else if (e.k === 'rv') {
-      if (e.act === 'recount') { cur.delete(c); recount.add(c); H(c, 'Admin สั่งนับซ้ำ', e); continue; }
+      if (e.act === 'recount') { cur.delete(c); recount.add(c); H(c, 'Admin สั่งตรวจนับซ้ำ', e); continue; }
       if (!s) continue;
       if (e.act === 'approve_move') { s.rv.move = 'approved'; s.flags.pendingTransfer = true; s.flags.reprint = true; s.dec = s.dec || 'moved'; H(c, 'Admin อนุมัติย้ายแผนก', e); }
-      if (e.act === 'dup_ack') { s.rv.dup = 'ack'; H(c, 'Admin: รับทราบยิงซ้ำ', e); }
-      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'Admin: ไม่ย้าย (ยืม)', e); }
+      if (e.act === 'dup_ack') { s.rv.dup = 'ack'; H(c, 'Admin: รับทราบสแกนซ้ำ', e); }
+      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'Admin: ไม่ย้าย (ยืมใช้ชั่วคราว)', e); }
       if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'Admin: รับเข้าทะเบียน', e); }
-      if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'Admin: ไม่ใช่ของเรา', e); }
+      if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'Admin: ไม่ใช่ทรัพย์สินของบริษัท', e); }
       if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'Admin รับทราบสภาพ', e); }
     }
   }
@@ -297,16 +297,16 @@ function compute() {
   return _cache;
 }
 // where a count came from: QR sticker, barcode, typed / searched on the scanner, or recorded on the web
-const SRC = { qr: ['ยิง QR', 'c-ok'], barcode: ['ยิงบาร์โค้ด', 'c-gray'], manual: ['พิมพ์ / ค้นหาบนเครื่อง', 'c-warn'], web: ['บันทึกบนเว็บ', 'c-blue'] };
+const SRC = { qr: ['สแกน QR', 'c-ok'], barcode: ['สแกนบาร์โค้ด', 'c-gray'], manual: ['พิมพ์ / ค้นหาบนเครื่อง', 'c-warn'], web: ['บันทึกบนเว็บ', 'c-blue'] };
 const srcChip = s => s ? `<span class="chip ${SRC[s.src][1]}">${SRC[s.src][0]}</span>` : '';
 const needQR = s => !!s && master.has(s.code) && s.src !== 'qr' && !s.printedAt;   // QR scanned = sticker already done
 const dupOf = code => { const s2 = compute().cur.get(code), l = compute().dups.get(code); return l && s2 && !s2.rv.dup ? l : null; };
 const myDups = () => { const { dups, cur } = compute(), out = []; for (const [code, l] of dups) for (const d of l) if (d.dev === dev) out.push({ ...d, code, first: cur.get(code) }); return out; };
 function dupSyncPop() {
   const l = myDups(); if (!l.length || S.dupSyncHide === l.length || S.mode !== 'app' || S.dupPop || S.othPop) return '';
-  return `<div class="dupbg" role="alertdialog" aria-labelledby="dsH"><div class="duppop" data-stop="1" style="max-width:380px;align-items:stretch;text-align:left"><span class="dupicon" aria-hidden="true" style="align-self:center">!</span><b id="dsH" style="text-align:center">เน็ตกลับมาแล้ว · พบรายการซ้ำ ${l.length} รายการ</b><span class="sub" style="text-align:center">ตอนเน็ตหลุด มีเครื่องอื่นนับรายการเหล่านี้ไปก่อนแล้ว ระบบนับครั้งเดียว</span>
+  return `<div class="dupbg" role="alertdialog" aria-labelledby="dsH"><div class="duppop" data-stop="1" style="max-width:380px;align-items:stretch;text-align:left"><span class="dupicon" aria-hidden="true" style="align-self:center">!</span><b id="dsH" style="text-align:center">อินเทอร์เน็ตกลับมาแล้ว · พบรายการซ้ำ ${l.length} รายการ</b><span class="sub" style="text-align:center">ระหว่างที่อินเทอร์เน็ตขาดการเชื่อมต่อ มีเครื่องอื่นตรวจนับรายการเหล่านี้ไปก่อนแล้ว ระบบนับเพียงครั้งเดียว</span>
     <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto">${l.map(d => `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(d.code)}</b><br><span class="sub">${esc(master.get(d.code)?.name || '')} · ${esc(d.first?.by || '')} นับก่อน ${d.first ? hm(d.first.t) : ''} ที่ ${esc(d.first?.areaName || '')}</span></span><button class="btn sm red" data-a="dupdrop" data-v="${esc(d.code)}" data-id="${esc(d.id)}">ลบ</button></div>`).join('')}</div>
-    <button class="btn red" data-a="dupdropall">ลบรายการซ้ำทั้งหมด (${l.length})</button><button class="btn" data-a="duplater">ไว้ทีหลัง</button></div></div>`;
+    <button class="btn red" data-a="dupdropall">ลบรายการซ้ำทั้งหมด (${l.length})</button><button class="btn" data-a="duplater">ภายหลัง</button></div></div>`;
 }
 const lostOf = code => compute().lost.get(code) || null;
 // choices for an item nobody has scanned: found (no sticker / with its condition) or lost
@@ -314,12 +314,12 @@ const markChoices = (code, act, extra = '') => {
   const L = lostOf(code);
   if (L) return `<div class="card" style="background:var(--bad-soft, #fef3f2);padding:12px;gap:6px"><b style="color:var(--bad-ink)">บันทึกว่าสูญหายแล้ว</b><span class="sub">${esc(L.by)} · ${fmtT(L.t)}${L.remark ? ' · ' + esc(L.remark) : ''}</span><div class="row"><button class="btn sm" data-a="unlost" data-v="${esc(code)}">ยกเลิก (กลับเป็นรอตรวจ)</button></div></div>`;
   const B = (c, l, cls) => `<button class="btn ${cls}" data-a="${act}" data-v="${esc(code)}" data-c="${c}" ${extra}>${l}</button>`;
-  return `<div class="card" style="background:#f8f9fc;padding:12px;gap:8px"><b>บันทึกผลรายการนี้</b><span class="sub">พบของจริงแต่ยิงไม่ได้ / ไม่มีสติ๊กเกอร์ · หรือหาไม่เจอ</span>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${B('ปกติ', 'พบ · ไม่มีสติ๊กเกอร์', 'pri')}${B('ชำรุด', 'พบ · ชำรุด', '')}${B('รอซ่อม', 'พบ · รอซ่อม', '')}${B('ไม่ใช้งาน', 'พบ · ไม่ใช้งาน', '')}</div>
-    <input class="in" id="mkRemark-${esc(code)}" placeholder="Remark (ไม่บังคับ)">${B('lost', 'สูญหาย / หาไม่เจอ', 'red')}</div>`;
+  return `<div class="card" style="background:#f8f9fc;padding:12px;gap:8px"><b>บันทึกผลรายการนี้</b><span class="sub">พบทรัพย์สินแต่สแกนไม่ได้ / ไม่มีสติกเกอร์ · หรือค้นหาไม่พบ</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${B('ปกติ', 'พบ · ไม่มีสติกเกอร์', 'pri')}${B('ชำรุด', 'พบ · ชำรุด', '')}${B('รอซ่อม', 'พบ · รอซ่อม', '')}${B('ไม่ใช้งาน', 'พบ · ไม่ใช้งาน', '')}</div>
+    <input class="in" id="mkRemark-${esc(code)}" placeholder="Remark (ไม่บังคับ)">${B('lost', 'สูญหาย / ค้นหาไม่พบ', 'red')}</div>`;
 };
 const ccClosed = code => compute().ccDone.get(String(code)) || null;
-const closeTxt = d => `ปิดงานโดย ${esc(d.by)} · ${fmtT(d.t)}${d.left ? ` · ไม่เจอ ${d.left} รายการ` : ''}`;
+const closeTxt = d => `ปิดงานโดย ${esc(d.by)} · ${fmtT(d.t)}${d.left ? ` · ไม่พบ ${d.left} รายการ` : ''}`;
 const isOther = s => { const a = master.get(s.code); return !!(a && !s.shared && s.area && a.cc && ccKey(s.area) !== ccKey(a.cc)); };
 // same CC code but the file spells the department differently → warn only, never counts as a move
 const ccNameOf = code => (meta?.areas || []).find(x => String(x.code) === String(code))?.name || String(code);
@@ -379,7 +379,7 @@ async function saveJobs(list) { jobs = list; LS.set('jobs', list); if (db && isL
 async function saveMeta(m) {
   if (m && !usbMode && S.team.length) m = { ...m, team: S.team.filter(u => u.active).map(u => ({ name: u.name, role: u.role, code: u.code })) };
   meta = m; LS.set('meta', m);
-  if (db) { try { if (m) { await db.doc(metaKeyOf(m)).set(m); await saveJobs([jobEntry(m), ...(jobs || []).filter(j => j.id !== m.id)]); } online = true; } catch (e) { online = false; flash('บันทึกขึ้นระบบไม่สำเร็จ ลองใหม่'); } }
+  if (db) { try { if (m) { await db.doc(metaKeyOf(m)).set(m); await saveJobs([jobEntry(m), ...(jobs || []).filter(j => j.id !== m.id)]); } online = true; } catch (e) { online = false; flash('บันทึกขึ้นระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); } }
   _cache = null; render();
 }
 async function saveMaster(rows, m) {
@@ -503,10 +503,10 @@ function syncInfo() {
   if (usbMode) { const n = Math.max(0, mine.length - LS.get('usbOut-' + (meta?.id || ''), 0)); return n ? ['s-wait', `สาย USB · ยังไม่ส่งออก ${n} รายการ`, 'usb', n] : ['s-on', 'สาย USB · ส่งออกครบแล้ว', 'usb', 0]; }
   if (!db) return ['s-off', 'ยังไม่เชื่อมต่อระบบ', 'off', pendingCount() || mine.length && 0];
   const p = pendingCount();
-  if (!online) return ['s-bad', p ? `ออฟไลน์ · รอส่ง ${p} รายการ` : 'ออฟไลน์ · ไม่มีอินเทอร์เน็ต', 'off', p];
+  if (!online) return ['s-bad', p ? `ออฟไลน์ · รอส่งข้อมูล ${p} รายการ` : 'ออฟไลน์ · ไม่มีอินเทอร์เน็ต', 'off', p];
   if (p || writing) return ['s-wait', `กำลังส่ง ${p} รายการ`, 'up', p];
   const rj = db.rejected ? mine.filter(e => db.rejected().has(e.id)).length : 0;
-  if (rj) return ['s-bad', `ส่งไม่ได้ ${rj} รายการ (ระบบไม่อนุญาต) · ดูที่แท็บ ฉัน → ตรวจว่าส่งครบ`, 'off', rj];
+  if (rj) return ['s-bad', `ส่งไม่ได้ ${rj} รายการ (ระบบไม่อนุญาต) · ดูที่แท็บ บัญชี → ตรวจว่าส่งครบ`, 'off', rj];
   if (meta?.ver && meta.ver !== LS.get('masterVer', null)) return ['s-wait', 'กำลังโหลดทะเบียนให้ครบ', 'up', 0];
   return ['s-on', 'ซิงก์แล้ว · ข้อมูลถึงระบบครบ', 'ok', 0];
 }
@@ -535,12 +535,12 @@ function render() {
     const stg = stageOf();
     const I = (v, num, label, n, doneAt) => { const on = S.web === v || (v === 'live' && S.web === 'cc'); return `<button class="nav-item ${on ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}" ${on ? 'aria-current="page"' : ''}><span class="nav-num">${num}</span><span class="nav-label">${label}</span>${n ? `<span class="nav-badge">${n}</span>` : ''}</button>`; };
     let items;
-    if (meta && !isLead()) items = I('live', '2', 'นับ (ดูอย่างเดียว)', 0, 99);
+    if (meta && !isLead()) items = I('live', '2', 'นับ (ดูได้อย่างเดียว)', 0, 99);
     else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิด + ส่งออก', 0, 99)
-      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '5', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '6', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '7', 'ทีม + ตั้งค่า', 0, 99));
+      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '5', 'พิมพ์สติกเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '6', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '7', 'ทีม + ตั้งค่า', 0, 99));
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
-      <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
+      <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
     html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div></header>`;
   }
@@ -561,7 +561,7 @@ function render() {
 /* ================= WEB ================= */
 function webView(c) {
   if (S.web === 'team' && !usbMode && isLead()) return webTeam();
-  if (!isLead()) return meta && master.size ? (S.web === 'cc' ? webCC() : webLive(c)) : `<main class="wrap"><div class="card"><h2>ยังไม่มีรอบนับที่เปิดอยู่</h2><p class="sub">บัญชีคนนับดูผลบนคอมได้อย่างเดียว · งานเตรียม ตรวจ และปิดรอบเป็นของ Admin</p></div></main>`;
+  if (!isLead()) return meta && master.size ? (S.web === 'cc' ? webCC() : webLive(c)) : `<main class="wrap"><div class="card"><h2>ยังไม่มีรอบนับที่เปิดอยู่</h2><p class="sub">บัญชีผู้ตรวจนับดูผลบนคอมพิวเตอร์ได้อย่างเดียว · งานเตรียม ตรวจ และปิดรอบเป็นของ Admin</p></div></main>`;
   if (!meta || S.web === 'rounds') return webRounds(c);
   if (S.web === 'live') return webLive(c);
   if (S.web === 'cc') return webCC();
@@ -589,7 +589,7 @@ function crVal(key, a, s2) {
   const [k, f] = key.split(':');
   if (k === 'h') return a.raws[0]?.[+f] ?? '';
   const L = !s2 && lostOf(a.code);
-  return { res: s2 ? (isMoved(s2) ? 'พบ (ย้ายแผนก)' : isOther(s2) ? 'พบ (ยืมมา)' : 'พบ') : L ? 'สูญหาย' : 'ไม่พบ', cond: s2?.cond || '', area: s2 ? String(s2.area) : '', areaName: s2?.areaName || '', by: s2?.by || L?.by || '', t: s2 ? fmtT(s2.t) : '', src: s2 ? SRC[s2.src][0] : '', qr: !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', remark: s2?.remark || L?.remark || '' }[f] ?? '';
+  return { res: s2 ? (isMoved(s2) ? 'พบ (ย้ายแผนก)' : isOther(s2) ? 'พบ (ยืมใช้ชั่วคราว)' : 'พบ') : L ? 'สูญหาย' : 'ไม่พบ', cond: s2?.cond || '', area: s2 ? String(s2.area) : '', areaName: s2?.areaName || '', by: s2?.by || L?.by || '', t: s2 ? fmtT(s2.t) : '', src: s2 ? SRC[s2.src][0] : '', qr: !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', remark: s2?.remark || L?.remark || '' }[f] ?? '';
 }
 const crLabel = key => (crFields().find(([k]) => k === key) || [key, key])[1];
 function reportData(kind) {
@@ -626,8 +626,8 @@ function reportData(kind) {
     return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
   }
   const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
-    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.rv.move === 'approved' ? 'รอโอนย้าย' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
-  return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'คนนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
+    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('ผู้ตรวจนับ: ', ''), s2.rv.move === 'approved' ? 'รอโอนย้าย' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืมใช้ชั่วคราว)' : 'รอ Admin อนุมัติ', s2.by]; });
+  return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'ผู้ตรวจนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
 }
 function editDialog(code) {
   const s2 = compute().cur.get(code), a = master.get(code); if (!s2) { S.editPop = null; return ''; }
@@ -658,7 +658,7 @@ function crPanel() {
 // moves still waiting for Admin: approve them all with one tap (each becomes "รอโอนย้าย" + new sticker)
 const pendingMoves = (ccF = '') => [...compute().cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && !s2.rv.move && s2.dec !== 'borrowed' && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); });
 const bulkMoveBox = (ccF, where) => { const n = pendingMoves(ccF).length; if (!n || !isLead()) return '';
-  return S.confirmBulk === where ? `<div class="confirm"><b>อนุมัติย้ายแผนกทั้งหมด ${n} รายการ?</b><span>ทุกรายการจะเป็น "รอโอนย้าย" และเข้าคิวพิมพ์ QR ใหม่ · รายการที่คนนับแจ้งว่า "ยืมมา" ไม่รวม</span><div class="row"><button class="btn oth" data-a="bulkmove" data-v="${esc(ccF)}">ยืนยันอนุมัติ ${n} รายการ</button><button class="btn" data-a="nobulk">ยกเลิก</button></div></div>`
+  return S.confirmBulk === where ? `<div class="confirm"><b>อนุมัติย้ายแผนกทั้งหมด ${n} รายการ?</b><span>ทุกรายการจะเป็น "รอโอนย้าย" และเข้าคิวพิมพ์ QR ใหม่ · รายการที่ผู้ตรวจนับแจ้งว่า "ยืมมา" ไม่รวม</span><div class="row"><button class="btn oth" data-a="bulkmove" data-v="${esc(ccF)}">ยืนยันอนุมัติ ${n} รายการ</button><button class="btn" data-a="nobulk">ยกเลิก</button></div></div>`
     : `<button class="btn oth" data-a="askbulk" data-v="${where}">✓ อนุมัติย้ายทั้งหมด (${n})</button>`; };
 function webReport() {
   const tab = S.repTab || 'sum', d = reportData(tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
@@ -684,7 +684,7 @@ async function reportFile(kind, fmt) {
     return await save(name + '.xlsx', new Blob([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
   // PDF: Thai needs the app font, so each A4 page is drawn on a canvas and placed as an image
-  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ ลองรีเฟรช', 'bad'];
+  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
   try { await document.fonts?.load('500 20px Prompt'); await document.fonts?.load('700 20px Prompt'); } catch {}
   const { jsPDF } = window.jspdf, pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'l' });
   const K = 4, W = 297 * K, H = 210 * K, M = 10 * K, rowH = 6.4 * K, fs = 2.7 * K, top0 = M + 16 * K, perPage = Math.floor((H - top0 - M - 6 * K) / rowH);
@@ -742,8 +742,8 @@ function importBlock() {
   if (I.err) return h + `<div class="msg bad">${esc(I.err)}</div><div class="row"><button class="btn" data-a="cancelimport">เลือกไฟล์ใหม่</button></div>`;
   const st = importStats(), fresh = true;
   if (fresh) h += `<label class="f">ชื่อรอบตรวจนับ<input class="in" id="impRound" value="${esc(I.roundName)}" maxlength="80"></label>`;
-  h += `<div class="grid">${[['code', 'เลข Asset (บนสติ๊กเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
-    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">เลข Asset ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · ยิงครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
+  h += `<div class="grid">${[['code', 'เลข Asset (บนสติกเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
+    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">เลข Asset ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
   if (busyRound) h += `<div class="msg ok">ไฟล์นี้จะเป็นงานใหม่อีกงาน · งาน "${esc(meta.name)}" ที่นับอยู่ยังอยู่ครบ สลับไปมาได้</div>`;
   h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างงานใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
   return h;
@@ -854,7 +854,7 @@ function teamPanel() {
   const nOn = list.filter(x => x.on).length;
   let h = `<section class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2>ทีม / เครื่อง</h2><span class="chip c-ok">ออนไลน์ ${nOn}</span></div>`;
   for (const x of list) {
-    const lead = x.role === 'lead', where = x.on && x.p ? (x.p.mode === 'web' ? 'ใช้บนคอม' : x.p.areaName ? `กำลังนับ ${esc(x.p.areaName)}${x.p.area && x.p.areaName !== String(x.p.area) ? ` (${esc(x.p.area)})` : ''}` : 'ยังไม่เลือก CC') : x.areaName ? `ล่าสุดที่ ${esc(x.areaName)}` : '';
+    const lead = x.role === 'lead', where = x.on && x.p ? (x.p.mode === 'web' ? 'ใช้บนคอมพิวเตอร์' : x.p.areaName ? `กำลังนับ ${esc(x.p.areaName)}${x.p.area && x.p.areaName !== String(x.p.area) ? ` (${esc(x.p.area)})` : ''}` : 'ยังไม่เลือก CC') : x.areaName ? `ล่าสุดที่ ${esc(x.areaName)}` : '';
     h += `<div class="row" style="align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f2f5"><span class="dot" style="position:relative;flex:none;background:${lead ? 'var(--blue)' : '#e4e7ec'};color:${lead ? '#fff' : '#344054'}">${esc((x.by || '?').slice(0, 1))}<i style="position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;border:2px solid #fff;background:${x.on ? 'var(--ok)' : '#98a2b3'}" aria-label="${x.on ? 'ออนไลน์' : 'ออฟไลน์'}"></i></span>
       <span style="flex:1;min-width:0"><b>${esc(x.by || '?')}</b> <span class="chip ${lead ? 'c-blue' : 'c-gray'}" style="font-size:11px">${lead ? 'Admin' : 'ผู้ตรวจนับ'}</span><br><span class="sub">${x.on ? '<b style="color:var(--ok-ink)">ออนไลน์</b>' : `ออฟไลน์${x.t ? ' · ' + hm(x.t) : ''}`}${where ? ' · ' + where : ''}<br>เครื่อง ${esc(x.dev)}${x.dev === dev ? ' (เครื่องนี้)' : ''}</span></span>
       <span style="flex:none;min-width:54px;text-align:center;background:var(--orange);color:#1d0e00;border-radius:14px;padding:6px 8px;line-height:1.1"><b style="font-size:18px">${N(x.n)}</b><br><span style="font-size:11px">รายการ</span></span></div>`;
@@ -878,8 +878,8 @@ function ccRows(ccCode) {
   }
   return out;
 }
-const CC_TABS = [['all', 'ทั้งหมด'], ['left', 'รอตรวจ'], ['done', 'ตรวจแล้ว'], ['move', 'ต้องย้าย CC'], ['unk', 'ไม่อยู่ในทะเบียน'], ['lost', 'สูญหาย'], ['dup', 'ยิงซ้ำ 2 เครื่อง'], ['noqr', 'ยังไม่มี QR']];
-const SRC_OPTS = [['', 'ที่มา: ทั้งหมด'], ['scan', 'จากเครื่องยิงทั้งหมด'], ['qr', 'ยิง QR'], ['barcode', 'ยิงบาร์โค้ด'], ['manual', 'พิมพ์ / ค้นหาบนเครื่อง'], ['web', 'บันทึกบนเว็บ']];
+const CC_TABS = [['all', 'ทั้งหมด'], ['left', 'รอตรวจ'], ['done', 'ตรวจแล้ว'], ['move', 'ต้องย้าย CC'], ['unk', 'ไม่อยู่ในทะเบียน'], ['lost', 'สูญหาย'], ['dup', 'สแกนซ้ำ 2 เครื่อง'], ['noqr', 'ยังไม่มี QR']];
+const SRC_OPTS = [['', 'ที่มา: ทั้งหมด'], ['scan', 'จากเครื่องสแกนทั้งหมด'], ['qr', 'สแกน QR'], ['barcode', 'สแกนบาร์โค้ด'], ['manual', 'พิมพ์ / ค้นหาบนเครื่อง'], ['web', 'บันทึกบนเว็บ']];
 function webCC() {
   const ccCode = S.ccSel, all = ccCode === '*', area = (meta.areas || []).find(x => String(x.code) === ccCode);
   if (SRC[S.ccTab] || S.ccTab === 'scan') { S.ccF = { ...(S.ccF || {}), src: S.ccTab }; S.ccTab = 'all'; }
@@ -917,10 +917,10 @@ function webCC() {
   for (const r of rows.slice(0, 500)) {
     const s2 = r.s, mvTxt = r.state === 'moveout' ? `<span class="chip c-oth">ต้องย้ายไป ${esc(s2.areaName)}</span>` : r.state === 'movein' ? `<span class="chip c-oth">ย้ายมาจาก ${esc(r.a.cc)}</span>` : ST[r.state];
     const decided = s2 && s2.rv.move ? (s2.rv.move === 'approved' ? ' <span class="chip c-blue">อนุมัติแล้ว</span>' : ' <span class="chip c-gray">ไม่ย้าย</span>') : s2 && s2.dec === 'borrowed' && (r.state === 'moveout' || r.state === 'movein') ? ' <span class="chip c-gray">ยืมมา</span>' : '';
-    h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}${dupOf(r.code) ? ' <span class="chip c-warn" title="ยิงจาก 2 เครื่องตอนออฟไลน์">ยิงซ้ำ</span>' : ''}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td><td style="overflow:visible">${!s2 ? '' : S.confirmUndo === r.code ? `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm red" data-a="wundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">ยืนยัน</button><button class="btn sm" data-a="noundo" style="min-height:28px;padding:2px 8px;font-size:12px">ไม่</button></span>` : `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm" data-a="editpop" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">แก้ไข</button><button class="btn sm red" data-a="askundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px" title="ยกเลิกตรวจนับ">ยกเลิก</button></span>`}</td></tr>`;
+    h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}${dupOf(r.code) ? ' <span class="chip c-warn" title="สแกนจาก 2 เครื่องตอนออฟไลน์">สแกนซ้ำ</span>' : ''}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td><td style="overflow:visible">${!s2 ? '' : S.confirmUndo === r.code ? `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm red" data-a="wundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">ยืนยัน</button><button class="btn sm" data-a="noundo" style="min-height:28px;padding:2px 8px;font-size:12px">ไม่</button></span>` : `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm" data-a="editpop" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">แก้ไข</button><button class="btn sm red" data-a="askundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px" title="ยกเลิกตรวจนับ">ยกเลิก</button></span>`}</td></tr>`;
   }
   h += `</tbody></table></div>${rows.length > 500 ? `<p class="sub">แสดง 500 จาก ${N(rows.length)} รายการ · ค้นหาเพื่อกรอง</p>` : ''}${rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>
-    <aside class="card side compact" style="flex:0 0 300px">${S.ccPick ? `<div class="sticker"><canvas id="ccSticker" width="560" height="296" aria-label="สติ๊กเกอร์ ${esc(S.ccPick)}"></canvas></div>` + ccDetail(S.ccPick, ccCode) : '<div class="sticker" style="opacity:.35"><canvas id="ccSticker" width="560" height="296" aria-hidden="true"></canvas></div><p class="sub" style="text-align:center">แตะรายการทางซ้ายเพื่อดูสติ๊กเกอร์ รายละเอียด และแก้ไข</p>'}</aside></div></main>`;
+    <aside class="card side compact" style="flex:0 0 300px">${S.ccPick ? `<div class="sticker"><canvas id="ccSticker" width="560" height="296" aria-label="สติกเกอร์ ${esc(S.ccPick)}"></canvas></div>` + ccDetail(S.ccPick, ccCode) : '<div class="sticker" style="opacity:.35"><canvas id="ccSticker" width="560" height="296" aria-hidden="true"></canvas></div><p class="sub" style="text-align:center">แตะรายการทางซ้ายเพื่อดูสติกเกอร์ รายละเอียด และแก้ไข</p>'}</aside></div></main>`;
   return h;
 }
 function ccDetail(code, ccCode) {
@@ -946,13 +946,13 @@ function badge(s) {
 }
 
 /* ---------- ③ inbox ---------- */
-const TABS = [['move', 'ย้ายแผนก', 'c-oth'], ['unk', 'ไม่อยู่ในทะเบียน', 'c-bad'], ['dmg', 'ชำรุด / รอซ่อม', 'c-warn'], ['reprint', 'พิมพ์สติ๊กเกอร์ใหม่', 'c-blue'], ['namebad', 'ชื่อบนป้ายไม่ตรง', 'c-blue'], ['transfer', 'รอโอนย้าย', 'c-oth'], ['cleared', 'เคลียร์แล้ว', 'c-gray']];
+const TABS = [['move', 'ย้ายแผนก', 'c-oth'], ['unk', 'ไม่อยู่ในทะเบียน', 'c-bad'], ['dmg', 'ชำรุด / รอซ่อม', 'c-warn'], ['reprint', 'พิมพ์สติกเกอร์ใหม่', 'c-blue'], ['namebad', 'ชื่อบนป้ายไม่ตรง', 'c-blue'], ['transfer', 'รอโอนย้าย', 'c-oth'], ['cleared', 'ดำเนินการแล้ว', 'c-gray']];
 function webInbox(c) {
   const list = c[S.inboxTab] || [];
   if (S.inboxSel && !compute().cur.has(S.inboxSel)) S.inboxSel = null;
   const selCode = S.inboxSel || list[0]?.code || null;
   const open = c.move.length + c.unk.length + c.dmg.length;
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่ Admin ต้องตัดสิน</p><h1>3 · กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · เคลียร์แล้ว ${c.cleared.length}</p></div>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · เรื่องที่ Admin ต้องตัดสิน</p><h1>3 · กล่องตรวจ</h1><p class="sub">ค้างตัดสิน ${open} · ดำเนินการแล้ว ${c.cleared.length}</p></div>`;
   if (S.inboxTab === 'move') h += `<button class="btn dark" data-a="bulkapprove" ${S.inboxChecked.size ? '' : 'disabled'}>อนุมัติย้ายที่เลือก (${S.inboxChecked.size})</button>`;
   h += `</div><div class="pills">${TABS.map(([k, l, cl]) => `<button class="pill ${S.inboxTab === k ? 'on' : ''}" data-a="inboxtab" data-v="${k}">${l} [${c[k].length}]</button>`).join('')}</div><div class="row"><section class="side" style="display:flex;flex-direction:column;gap:8px">`;
   if (!list.length) h += `<div class="card"><p class="sub">ไม่มีเรื่องในแท็บนี้</p></div>`;
@@ -964,28 +964,28 @@ function webInbox(c) {
   h += `</section><section class="card grow">${selCode ? inboxDetail(selCode) : '<p class="sub">เลือกเรื่องทางซ้าย</p>'}</section></div></main>`;
   return h;
 }
-const decLabel = d => ({ moved: 'คนนับ: ย้ายมาแล้ว', borrowed: 'คนนับ: ยืมมา', unsure: 'คนนับ: ไม่แน่ใจ' }[d] || 'ยังไม่ระบุ');
+const decLabel = d => ({ moved: 'ผู้ตรวจนับ: ต้องการย้าย', borrowed: 'ผู้ตรวจนับ: ยืมใช้ชั่วคราว', unsure: 'ผู้ตรวจนับ: รอตรวจสอบ' }[d] || 'ยังไม่ระบุ');
 function inboxDetail(code) {
   const { cur, hist } = compute(), s = cur.get(code), a = master.get(code);
   if (!s) return '<p class="sub">ไม่มีผลนับ</p>';
-  let h = `<div class="row" style="justify-content:space-between"><b class="mono" style="font-size:22px">${esc(code)}</b>${badge(s)}</div><div style="font-size:17px">${esc(a?.name || s.uname || '(คนนับไม่ได้กรอกชื่อ)')}${a ? ` · Class ${esc(a.cls)}` : ''}</div>`;
+  let h = `<div class="row" style="justify-content:space-between"><b class="mono" style="font-size:22px">${esc(code)}</b>${badge(s)}</div><div style="font-size:17px">${esc(a?.name || s.uname || '(ผู้ตรวจนับไม่ได้กรอกชื่อ)')}${a ? ` · Class ${esc(a.cls)}` : ''}</div>`;
   if (a) h += `<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;text-align:center"><div class="card" style="background:#f4f5fa;padding:12px"><span class="sub">ในทะเบียน</span><b>${esc(a.ccName)}</b>${a.ccName !== String(a.cc) ? `<span class="sub mono">${esc(a.cc)}</span>` : ''}</div><b style="color:var(--oth)">${isOther(s) ? '→' : '='}</b><div class="card" style="background:${isOther(s) ? 'var(--oth-soft)' : 'var(--ok-soft)'};padding:12px"><span class="sub">พบจริงที่</span><b>${esc(s.areaName)}</b><span class="sub">${esc(s.room || '')}</span></div></div>`;
   if (a && !isOther(s) && !s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc)) h += `<div class="msg warn">⚠ CC ตรงกัน (${esc(a.cc)}) แต่ชื่อแผนกไม่ตรง: ทะเบียน "${esc(a.ccName)}" · พบที่ "${esc(s.areaName)}" · ไม่ต้องย้าย</div>`;
   h += `<p class="sub">${esc(s.by)} · ${fmtT(s.t)} · สภาพ <b>${esc(s.cond)}</b>${s.remark ? ' · ' + esc(s.remark) : ''}</p><div class="row" style="align-items:center">${srcChip(s)}${!a ? '' : s.src === 'qr' ? '<span class="chip c-ok">QR ครบแล้ว · ไม่ต้องสร้างป้าย</span>' : s.printedAt ? `<span class="chip c-ok">ติด QR แล้ว ${fmtT(s.printedAt)}</span>` : '<span class="chip c-blue">ยังไม่มี QR · อยู่ในคิวสร้าง QR</span>'}</div>`;
   const B = (act, label, cls) => `<button class="btn ${cls || ''}" data-a="rv" data-act="${act}" data-v="${esc(code)}">${label}</button>`;
   const dl = dupOf(code);
-  if (dl) h += `<div class="msg warn" style="display:flex;flex-direction:column;gap:6px"><b>ยิงซ้ำจาก ${dl.length + 1} เครื่อง (ตอนออฟไลน์)</b><span>ใช้ผลแรก: ${esc(s.by)} · ${fmtT(s.t)} · พบที่ ${esc(s.areaName)}</span>${dl.map(d => `<span>${esc(d.by)} · ${fmtT(d.t)} · พบที่ ${esc(d.areaName)}${String(d.area) !== String(s.area) ? ` <button class="btn sm" data-a="dupuse" data-v="${esc(code)}" data-cc="${esc(d.area)}" data-ccn="${esc(d.areaName)}">ใช้ที่พบนี้แทน</button>` : ' (ที่เดียวกัน)'} <button class="btn sm red" data-a="dupdrop" data-v="${esc(code)}" data-id="${esc(d.id)}">ลบรายการนี้</button></span>`).join('')}<button class="btn sm" data-a="rv" data-act="dup_ack" data-v="${esc(code)}" style="align-self:flex-start">รับทราบ</button></div>`;
+  if (dl) h += `<div class="msg warn" style="display:flex;flex-direction:column;gap:6px"><b>สแกนซ้ำจาก ${dl.length + 1} เครื่อง (ตอนออฟไลน์)</b><span>ใช้ผลแรก: ${esc(s.by)} · ${fmtT(s.t)} · พบที่ ${esc(s.areaName)}</span>${dl.map(d => `<span>${esc(d.by)} · ${fmtT(d.t)} · พบที่ ${esc(d.areaName)}${String(d.area) !== String(s.area) ? ` <button class="btn sm" data-a="dupuse" data-v="${esc(code)}" data-cc="${esc(d.area)}" data-ccn="${esc(d.areaName)}">ใช้ที่พบนี้แทน</button>` : ' (ที่เดียวกัน)'} <button class="btn sm red" data-a="dupdrop" data-v="${esc(code)}" data-id="${esc(d.id)}">ลบรายการนี้</button></span>`).join('')}<button class="btn sm" data-a="rv" data-act="dup_ack" data-v="${esc(code)}" style="align-self:flex-start">รับทราบ</button></div>`;
   h += `<div class="row">`;
-  if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมชั่วคราว)') + B('recount', 'สั่งนับซ้ำ');
-  if (!a && !s.rv.unk) h += B('unk_accept', 'รับเข้าทะเบียน', 'pri') + B('unk_reject', 'ไม่ใช่ของเรา');
+  if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมใช้ชั่วคราว)') + B('recount', 'สั่งตรวจนับซ้ำ');
+  if (!a && !s.rv.unk) h += B('unk_accept', 'รับเข้าทะเบียน', 'pri') + B('unk_reject', 'ไม่ใช่ทรัพย์สินของบริษัท');
   if ((s.cond === 'ชำรุด' || s.cond === 'รอซ่อม') && !s.rv.dmg) h += B('dmg_ack', 'รับทราบสภาพ', 'pri');
-  if (!isOther(s) || s.rv.move) h += B('recount', 'สั่งนับซ้ำ');
+  if (!isOther(s) || s.rv.move) h += B('recount', 'สั่งตรวจนับซ้ำ');
   h += `</div><div><span class="sub">ป้าย + การโอนย้าย (แตะเพื่อเปิด/ปิด)</span><div class="chips" style="margin-top:6px">${flagChips(s, 'leadflag')}</div></div>`;
   h += `<div class="card" style="background:#f8f9fc;padding:12px"><b>ประวัติ</b>${(hist.get(code) || []).map(x => `<span class="sub">${fmtT(x.t)} · ${esc(x.by)} · ${esc(x.txt)}</span>`).join('')}</div>`;
   return h;
 }
 function flagChips(s, act) {
-  return [['reprint', 'ต้องพิมพ์สติ๊กเกอร์ใหม่'], ['namebad', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ'], ['pendingTransfer', 'รอโอนย้าย']]
+  return [['reprint', 'ต้องพิมพ์สติกเกอร์ใหม่'], ['namebad', 'ชื่อบนสติกเกอร์ไม่ตรงระบบ'], ['pendingTransfer', 'รอโอนย้าย']]
     .map(([k, l]) => `<button class="tog" aria-pressed="${!!s.flags[k]}" data-a="${act}" data-f="${k}" data-v="${esc(s.code)}">${s.flags[k] ? '✓ ' : ''}${l}</button>`).join('');
 }
 
@@ -1006,7 +1006,7 @@ function webClose(c) {
     <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:#d6ddff">XLSX · ไฟล์หลัก</span><b style="font-size:18px">ผลนับตามแม่แบบเดิม</b><span style="font-size:14px;color:#e3e8ff">สรุป · Data · Transfer · write-off · สรุป write-off · คิวป้าย · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--oth-ink)">XLSX · SAP AS02</span><b style="font-size:18px">Transfer ย้ายแผนก</b><span class="sub">อนุมัติแล้ว ${c.transfer.length + c.cleared.filter(s => s.rv.move === 'approved' && !s.flags.pendingTransfer).length} รายการ</span><button class="btn" data-a="export" data-v="transfer">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--bad-ink)">XLSX · SAP ABAVN</span><b style="font-size:18px">Write-Off</b><span class="sub">${N(T.left)} รหัสที่ยังไม่พบ</span><button class="btn" data-a="export" data-v="writeoff">ดาวน์โหลด</button></div>
-    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--blue-ink)">PDF</span><b style="font-size:18px">สติ๊กเกอร์ QR</b><span class="sub">คิวพิมพ์ ${c.reprint.length + c.namebad.length} ดวง</span><button class="btn" data-a="web" data-v="stickers">ไปหน้าพิมพ์</button></div></div>
+    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--blue-ink)">PDF</span><b style="font-size:18px">สติกเกอร์ QR</b><span class="sub">คิวพิมพ์ ${c.reprint.length + c.namebad.length} ดวง</span><button class="btn" data-a="web" data-v="stickers">ไปหน้าพิมพ์</button></div></div>
     ${S.msg.exp ? `<div class="msg ${S.msg.exp[1]}">${esc(S.msg.exp[0])}</div>` : ''}</section></div></main>`;
   return h;
 }
@@ -1025,14 +1025,14 @@ function stickerList(c) {
 function webStickers(c) {
   const list = stickerList(c), { cur } = compute();
   for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>5 · พิมพ์สติ๊กเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
-    <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR (ยิงบาร์โค้ด / พิมพ์เอง / เว็บ)', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติ๊กเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>5 · พิมพ์สติกเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
+    <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR (สแกนบาร์โค้ด / พิมพ์เอง / เว็บ)', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
     <div class="row"><section class="card grow">`;
   if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
   h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
   for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
     h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
-  h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติ๊กเกอร์"></canvas></div>
+  h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
     <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option></select></label>
     <div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>
     <button class="btn lime" data-a="stdone" ${S.stSel.size ? '' : 'disabled'}>บันทึกว่าติดแล้ว</button>${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
@@ -1073,7 +1073,7 @@ function appView(c) {
   h += `</div>`;
   if (S.user && meta && master.size) {
     const B = (v, l) => `<button class="${S.app === v ? 'on' : ''}" data-a="app" data-v="${v}">${l}</button>`;
-    h += `<nav class="bnav" aria-label="เมนูแอป"><div class="bnav-in">${B('home', 'งาน')}${B('area', 'พื้นที่')}<button class="fab" data-a="app" data-v="scan" aria-label="สแกน">สแกน</button>${B('feed', 'ผลนับ')}${B('me', 'ฉัน')}</div></nav>`;
+    h += `<nav class="bnav" aria-label="เมนูแอป"><div class="bnav-in">${B('home', 'งาน')}${B('area', 'พื้นที่')}<button class="fab" data-a="app" data-v="scan" aria-label="สแกน">สแกน</button>${B('feed', 'ผลนับ')}${B('me', 'บัญชี')}</div></nav>`;
   }
   if (S.updReady && S.mode === 'app') h += `<div style="position:fixed;left:12px;right:12px;top:calc(8px + env(safe-area-inset-top, 0px));z-index:35;max-width:440px;margin:0 auto"><div class="card dark" style="flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:#121826;color:#fff"><span style="flex:1;font-size:14px">มีหน้าจอเวอร์ชันใหม่ (${esc(S.updReady)})</span><button class="btn sm lime" data-a="applyupd">อัปเดตเลย</button></div></div>`;
   if (S.item) h += itemSheet(S.item);
@@ -1084,7 +1084,7 @@ function appView(c) {
     if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
       h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:#f4f5fa"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
-        <span class="sub">บันทึกว่าพบแล้ว · อยู่ที่นี่เพราะ?</span><div class="chips" style="justify-content:center">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}</div>
+        <span class="sub">บันทึกว่าพบแล้ว · โปรดระบุเหตุผล</span><div class="chips" style="justify-content:center">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมใช้ชั่วคราว')}${D('unsure', 'รอตรวจสอบ')}</div>
         <button class="btn dark" data-a="closeoth" style="align-self:stretch">ตกลง</button></div></div>`; } }
   if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
     h += `<div class="dupbg" data-a="closedup" role="alertdialog" aria-labelledby="dupH"><div class="duppop"><span class="dupicon" aria-hidden="true">!</span><b id="dupH">ตรวจนับซ้ำ</b><span class="mono" style="font-size:20px;font-weight:700">${esc(d.code)}</span>${a ? `<span>${esc(a.name)}</span>` : ''}<span class="sub">นับไปแล้วโดย ${esc(d.by)} · ${hm(d.t)}${d.where ? ' · ' + esc(d.where) : ''}</span><button class="btn dark" data-a="closedup" style="align-self:stretch">ตกลง</button></div></div>`; }
@@ -1093,7 +1093,7 @@ function appView(c) {
 function appLogin() {
   const team = meta?.team || [];
   return `<div class="pbody"><div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AssetSync</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
-    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'Admin' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม Admin เพิ่มได้ที่เมนู ทีม + ตั้งค่า บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
+    ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม Admin เพิ่มได้ที่เมนู ทีม + ตั้งค่า บนคอมพิวเตอร์ หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
     <div class="card"><label class="f">หรือพิมพ์ชื่อ<input class="in" id="loginName" placeholder="ชื่อของคุณ"></label><button class="btn pri" data-a="loginname">เข้าใช้งาน</button></div>
     <p class="sub">โหมดสาย USB · เลือกชื่อจากแพ็กเกจที่นำเข้า · เครื่องนี้: ${esc(dev)}</p></div>`;
 }
@@ -1102,8 +1102,8 @@ function appHome(c) {
   const st = areaStats(), T = totals(), { cur } = compute();
   const mineN = [...cur.values()].filter(x => x.by === S.user.name).length;
   let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span></div>`;
-  if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
-  h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
+  if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบตรวจนับแล้ว ขอบคุณสำหรับความร่วมมือ</div>`;
+  h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมตรวจนับแล้ว ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณตรวจนับ ${N(mineN)} รายการ</span></div>
     ${jobList().filter(j => j.status !== 'closed').length > 1 ? `<div class="card" style="gap:6px;padding:12px"><span class="sub">งานที่นับอยู่ (แตะเพื่อสลับ)</span><div class="chips">${jobList().filter(j => j.status !== 'closed').map(j => `<button class="tog" aria-pressed="${j.id === meta.id}" data-a="pickjob" data-v="${esc(j.id)}">${j.id === meta.id ? '✓ ' : ''}${esc(j.name)}</button>`).join('')}</div></div>` : ''}
     <b style="font-size:18px">เลือก Cost Center ที่จะนับ</b><input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">`;
   const list = (meta.areas || []).slice().sort((a, b) => { const pa = st.get(String(a.code)), pb = st.get(String(b.code)); const da = pa && pa.total && pa.found >= pa.total, dbb = pb && pb.total && pb.found >= pb.total; const ca = !!ccClosed(a.code), cb = !!ccClosed(b.code); return (ca - cb) || (da - dbb) || a.name.localeCompare(b.name); });
@@ -1112,12 +1112,12 @@ function appHome(c) {
 }
 function areaCard(a, x) {
   const p = x && x.total ? x.found / x.total : 0, dn = !a.shared && ccClosed(a.code);
-  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><span style="display:flex;flex-direction:column;min-width:0"><b style="font-size:17px">${esc(a.name)}</b>${!a.shared && a.name !== String(a.code) ? `<span class="sub mono">CC ${esc(a.code)}</span>` : ''}</span><span style="display:flex;gap:4px;flex:none">${dn ? '<span class="chip c-ok">✓ ปิดแล้ว</span>' : ''}<span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · เจอของแผนกอื่น ${x.other}` : ''}</span></button>`;
+  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><span style="display:flex;flex-direction:column;min-width:0"><b style="font-size:17px">${esc(a.name)}</b>${!a.shared && a.name !== String(a.code) ? `<span class="sub mono">CC ${esc(a.code)}</span>` : ''}</span><span style="display:flex;gap:4px;flex:none">${dn ? '<span class="chip c-ok">✓ ปิดแล้ว</span>' : ''}<span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · พบทรัพย์สินของแผนกอื่น ${x.other}` : ''}</span></button>`;
 }
 const areaFilter = list => { const q = norm(S.areaQ || ''); return q ? list.filter(a => norm(a.name).includes(q) || norm(a.code).includes(q)) : list; };
 function areaPicker() {
   const st = areaStats();
-  return `<div class="sheetbg" data-a="closepick"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between"><h2>ตอนนี้คุณอยู่ที่ไหน?</h2><button class="btn sm" data-a="closepick">ปิด</button></div><p class="sub">เลือกชื่อ Cost Center ที่ยืนนับอยู่จริง · ยิงของ CC ไหนก็ได้ ถ้าไม่ตรงจะเด้งเตือน</p>
+  return `<div class="sheetbg" data-a="closepick"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between"><h2>ตอนนี้คุณอยู่ที่ไหน?</h2><button class="btn sm" data-a="closepick">ปิด</button></div><p class="sub">เลือกชื่อ Cost Center ที่ยืนนับอยู่จริง · สแกนทรัพย์สินของ CC ใดก็ได้ หากไม่ตรงระบบจะแจ้งเตือน</p>
     <input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">
     ${areaFilter(meta.areas || []).map(a => areaCard(a, st.get(String(a.code)))).join('') || '<p class="sub">ไม่พบ CC</p>'}</div></div>`;
 }
@@ -1135,11 +1135,11 @@ function appArea() {
   const list = S.areaTab === 'left' ? left : S.areaTab === 'found' ? own : oth;
   let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:var(--lime);font-weight:600">คุณอยู่ที่นี่</span><br><b style="font-size:21px">${esc(S.area.name)}</b>${S.area.shared ? '' : ` <span class="mono" style="font-size:13px;color:#c7cbd4">${esc(code)}</span>`}</span><button class="btn sm lime" data-a="areapick">เปลี่ยน</button></div>
     <label class="f" style="color:#c7cbd4">ห้อง / จุดย่อย<input class="in" id="roomIn" value="${esc(S.room)}" placeholder="เช่น ห้องธุรการ ชั้น 2" style="background:#2a3242;border-color:#2a3242;color:#fff"></label>
-    <div class="cnt3"><button data-a="areatab" data-v="found" style="background:var(--ok);color:#fff"><b>${own.length}</b><span style="font-size:12px">เจอแล้ว</span></button><button data-a="areatab" data-v="left" style="background:var(--warn);color:#1d0e00"><b>${S.area.shared ? '—' : left.length}</b><span style="font-size:12px">ยังไม่เจอ</span></button><button data-a="areatab" data-v="other" style="background:var(--oth);color:#fff"><b>${oth.length}</b><span style="font-size:12px">ของแผนกอื่น</span></button></div></div>
-    <div class="pbody"><div class="tabs3">${[['left', 'ยังไม่เจอ'], ['found', 'เจอแล้ว'], ['other', 'แผนกอื่น']].map(([k, l]) => `<button class="${S.areaTab === k ? 'on' : ''}" data-a="areatab" data-v="${k}">${l}</button>`).join('')}</div>`;
+    <div class="cnt3"><button data-a="areatab" data-v="found" style="background:var(--ok);color:#fff"><b>${own.length}</b><span style="font-size:12px">พบแล้ว</span></button><button data-a="areatab" data-v="left" style="background:var(--warn);color:#1d0e00"><b>${S.area.shared ? '—' : left.length}</b><span style="font-size:12px">ยังไม่พบ</span></button><button data-a="areatab" data-v="other" style="background:var(--oth);color:#fff"><b>${oth.length}</b><span style="font-size:12px">ของแผนกอื่น</span></button></div></div>
+    <div class="pbody"><div class="tabs3">${[['left', 'ยังไม่พบ'], ['found', 'พบแล้ว'], ['other', 'แผนกอื่น']].map(([k, l]) => `<button class="${S.areaTab === k ? 'on' : ''}" data-a="areatab" data-v="${k}">${l}</button>`).join('')}</div>`;
   for (const x of list.slice(0, 80)) {
     const c2 = x.code, a = master.get(c2);
-    h += `<button class="li" data-a="openitem" data-v="${esc(c2)}"><span class="t"><b class="mono">${esc(c2)}</b><span>${esc(a?.name || x.uname || '')}${a?.raws?.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}${elsewhere.has(c2) ? ` · <b style="color:var(--oth-ink)">เจอที่ ${esc(elsewhere.get(c2))}</b>` : ''}${recount.has(c2) ? ' · <b style="color:var(--warn-ink)">สั่งนับซ้ำ</b>' : ''}${S.areaTab === 'left' && lostOf(c2) ? ' · <b style="color:var(--bad-ink)">สูญหาย</b>' : ''}${S.areaTab === 'other' ? ` · ของ ${esc(a?.ccName)}` : ''}</span></span></button>`;
+    h += `<button class="li" data-a="openitem" data-v="${esc(c2)}"><span class="t"><b class="mono">${esc(c2)}</b><span>${esc(a?.name || x.uname || '')}${a?.raws?.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}${elsewhere.has(c2) ? ` · <b style="color:var(--oth-ink)">พบที่ ${esc(elsewhere.get(c2))}</b>` : ''}${recount.has(c2) ? ' · <b style="color:var(--warn-ink)">สั่งตรวจนับซ้ำ</b>' : ''}${S.areaTab === 'left' && lostOf(c2) ? ' · <b style="color:var(--bad-ink)">สูญหาย</b>' : ''}${S.areaTab === 'other' ? ` · ของ ${esc(a?.ccName)}` : ''}</span></span></button>`;
   }
   if (list.length > 80) h += `<p class="sub" style="text-align:center">+ อีก ${list.length - 80} รายการ</p>`;
   if (!list.length) h += `<p class="sub" style="text-align:center">ไม่มีรายการ</p>`;
@@ -1148,7 +1148,7 @@ function appArea() {
   else {
     h += `<button class="btn lime" data-a="app" data-v="scan" style="font-size:17px;padding:14px">สแกนในพื้นที่นี้</button>`;
     if (!S.area.shared) h += S.confirmClose === code
-      ? `<div class="confirm"><b>ปิดงาน CC ${esc(S.area.name)}?</b><span>${left.length ? `ยังไม่เจอ <b>${left.length}</b> รายการ · ระบบจะบันทึกว่า "ไม่พบ" ให้ Admin ตัดสินต่อ` : 'เจอครบทุกรายการแล้ว'}</span><div class="row"><button class="btn pri" data-a="ccclose" data-v="${esc(code)}" data-n="${left.length}">ยืนยัน นับครบแล้ว</button><button class="btn" data-a="noclose">ยังก่อน</button></div></div>`
+      ? `<div class="confirm"><b>ปิดงาน CC ${esc(S.area.name)}?</b><span>${left.length ? `ยังไม่พบ <b>${left.length}</b> รายการ · ระบบจะบันทึกว่า "ไม่พบ" ให้ Admin ตัดสินต่อ` : 'พบครบทุกรายการแล้ว'}</span><div class="row"><button class="btn pri" data-a="ccclose" data-v="${esc(code)}" data-n="${left.length}">ยืนยัน นับครบแล้ว</button><button class="btn" data-a="noclose">ยกเลิก</button></div></div>`
       : `<button class="btn dark" data-a="askclose" data-v="${esc(code)}">✓ ปิดงาน CC นี้ (นับครบแล้ว)</button>`;
   }
   h += `</div>`;
@@ -1159,26 +1159,26 @@ function appScan() {
   if (!S.area.shared && ccClosed(S.area.code)) { S.app = 'area'; flash('CC นี้ปิดงานแล้ว · กด "เปิดนับต่อ" ถ้าจะนับเพิ่ม'); return appArea(); }
   const closed = meta.status === 'closed', { cur } = compute(), st = areaStats().get(String(S.area.code));
   let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#c7cbd4">กำลังนับที่ (แผนกที่ยืนอยู่จริง)</span><br><b style="font-size:20px">${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:var(--lime);font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span><button class="btn sm lime" data-a="areapick" style="margin-left:8px">เปลี่ยน</button></div>
-    <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:var(--lime)">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มยิงข้างเครื่อง'}</b>
-    <input id="scanIn" ${S.manual ? 'inputmode="text"' : 'inputmode="none"'} placeholder="${S.manual ? 'เลข Asset' : 'ยิงสติ๊กเกอร์ QR / บาร์โค้ด'}" aria-label="รหัสที่สแกน" enterkeyhint="done" ${closed ? 'disabled' : ''}>
-    <span style="font-size:12px;color:#c7cbd4">ยิงต่อได้เลย ไม่ต้องกดบันทึก · บนคอมพิมพ์รหัสแล้ว Enter ได้</span></form></div><div class="pbody">`;
+    <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:var(--lime)">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มสแกนด้านข้างเครื่อง'}</b>
+    <input id="scanIn" ${S.manual ? 'inputmode="text"' : 'inputmode="none"'} placeholder="${S.manual ? 'เลข Asset' : 'สแกนสติกเกอร์ QR / บาร์โค้ด'}" aria-label="รหัสที่สแกน" enterkeyhint="done" ${closed ? 'disabled' : ''}>
+    <span style="font-size:12px;color:#c7cbd4">สแกนต่อได้ทันที ไม่ต้องกดบันทึก · บนคอมพิวเตอร์พิมพ์รหัสแล้ว Enter ได้</span></form></div><div class="pbody">`;
   for (const card of S.cards.slice(0, 25)) {
     const s = cur.get(card.code), a = master.get(card.code);
-    if (card.dup) { h += `<div class="rcard"><div class="row" style="align-items:center"><span class="dot" style="background:var(--warn);color:#1d0e00">2</span><span class="t" style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--warn-ink)">นับซ้ำ · ${esc(card.dupBy)} นับไปแล้ว ${hm(card.dupT)}</span></span><button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">แก้</button></div></div>`; continue; }
+    if (card.dup) { h += `<div class="rcard"><div class="row" style="align-items:center"><span class="dot" style="background:var(--warn);color:#1d0e00">2</span><span class="t" style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--warn-ink)">นับซ้ำ · ${esc(card.dupBy)} นับไปแล้ว ${hm(card.dupT)}</span></span><button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">แก้ไข</button></div></div>`; continue; }
     if (!s) { h += `<div class="rcard" style="opacity:.6"><b class="mono">${esc(card.code)}</b><span class="sub">ยกเลิกแล้ว</span></div>`; continue; }
     const tick = pendingCount() && mine.some(e => e.code === card.code && !isServer(e.id)) ? '<span class="chip c-warn">รอส่ง</span>' : db ? '<span class="chip c-ok">✓✓</span>' : '';
     if (!a) {
       h += `<div class="rcard unk"><div class="row" style="align-items:center"><span class="dot" style="background:var(--bad)">?</span><span style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--bad-ink)">ไม่อยู่ในทะเบียน</span></span>${tick}</div>
-        <div class="row"><input class="in" id="un-${esc(card.code)}" value="${esc(s.uname)}" placeholder="ชื่อ / ลักษณะของ" style="flex:1"><button class="btn sm" data-a="uname" data-v="${esc(card.code)}">บันทึก</button></div><div class="row"><button class="btn sm red" data-a="undo" data-v="${esc(card.code)}">ข้าม (สแกนผิด)</button></div></div>`;
+        <div class="row"><input class="in" id="un-${esc(card.code)}" value="${esc(s.uname)}" placeholder="ชื่อ / ลักษณะของ" style="flex:1"><button class="btn sm" data-a="uname" data-v="${esc(card.code)}">บันทึก</button></div><div class="row"><button class="btn sm red" data-a="undo" data-v="${esc(card.code)}">ข้าม (สแกนผิดพลาด)</button></div></div>`;
     } else if (isOther(s)) {
       const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="dec" data-d="${d}" data-v="${esc(card.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
-      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ทะเบียน CC ${esc(a.cc)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)}</span><span class="sub" style="color:var(--oth-ink)">ทะเบียนอยู่ CC ${esc(a.cc)} แต่พบที่ ${esc(s.areaName)} (แผนกที่คุณเลือก) · อยู่ที่นี่เพราะ?</span><div class="chips">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
+      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ทะเบียน CC ${esc(a.cc)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)}</span><span class="sub" style="color:var(--oth-ink)">ทะเบียนอยู่ CC ${esc(a.cc)} แต่พบที่ ${esc(s.areaName)} (แผนกที่คุณเลือก) · โปรดระบุเหตุผล</span><div class="chips">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมใช้ชั่วคราว')}${D('unsure', 'รอตรวจสอบ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
     } else {
-      h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span><span>${srcChip(s)}${s.src === 'qr' ? ' <span class="chip c-ok">ครบ</span>' : ''}</span>${s.dev !== dev && (compute().dups.get(card.code) || []).some(d => d.dev === dev) ? `<span class="sub" style="color:var(--warn-ink)">⚠ ${esc(s.by)} นับไปก่อนแล้ว ${hm(s.t)} (ตอนเน็ตหลุด) · ไม่นับซ้ำ</span>` : ''}${!s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc) ? `<span class="sub" style="color:var(--warn-ink)">⚠ CC ตรง แต่ชื่อในทะเบียนเป็น "${esc(a.ccName)}"</span>` : ''}</span>${tick}</button>`;
+      h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span><span>${srcChip(s)}${s.src === 'qr' ? ' <span class="chip c-ok">ครบ</span>' : ''}</span>${s.dev !== dev && (compute().dups.get(card.code) || []).some(d => d.dev === dev) ? `<span class="sub" style="color:var(--warn-ink)">⚠ ${esc(s.by)} นับไปก่อนแล้ว ${hm(s.t)} (ขณะอินเทอร์เน็ตขาดการเชื่อมต่อ) · ไม่นับซ้ำ</span>` : ''}${!s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc) ? `<span class="sub" style="color:var(--warn-ink)">⚠ CC ตรง แต่ชื่อในทะเบียนเป็น "${esc(a.ccName)}"</span>` : ''}</span>${tick}</button>`;
     }
   }
-  if (!S.cards.length) h += `<p class="sub" style="text-align:center">ผลการสแกนจะขึ้นเป็นการ์ดที่นี่<br>ไม่มีสติ๊กเกอร์? กดปุ่มด้านล่างเพื่อค้นหารายการ</p>`;
-  h += `<button class="btn" data-a="opensearch" style="border-style:dashed">ไม่มีสติ๊กเกอร์? ค้นหารายการ</button></div>`;
+  if (!S.cards.length) h += `<p class="sub" style="text-align:center">ผลการสแกนจะแสดงเป็นการ์ดที่นี่<br>ไม่มีสติกเกอร์? กดปุ่มด้านล่างเพื่อค้นหารายการ</p>`;
+  h += `<button class="btn" data-a="opensearch" style="border-style:dashed">ไม่มีสติกเกอร์? ค้นหารายการ</button></div>`;
   return h;
 }
 let _srvIds = null, _srvRef = null;
@@ -1193,9 +1193,9 @@ function itemSheet(code) {
       <span class="sub">ป้าย + การโอนย้าย (เลือกได้หลายข้อ)</span><div class="chips">${flagChips(s, 'appflag')}</div>
       <div class="row"><input class="in" id="remarkIn" value="${esc(s.remark)}" placeholder="Remark" style="flex:1"><button class="btn sm" data-a="remark" data-v="${esc(code)}">บันทึก</button></div>
       <p class="sub">นับโดย ${esc(s.by)} · ${fmtT(s.t)}${s.room ? ' · ' + esc(s.room) : ''} · ${SRC[s.src][0]}${a && s.src === 'qr' ? ' · QR ครบแล้ว' : ''}</p>
-      <div class="row"><button class="btn dark" data-a="closeitem" style="flex:1">เสร็จ</button>${s.dev === dev ? `<button class="btn red" data-a="undo" data-v="${esc(code)}">ยกเลิกผลนับ</button>` : ''}</div>`;
+      <div class="row"><button class="btn dark" data-a="closeitem" style="flex:1">เสร็จสิ้น</button>${s.dev === dev ? `<button class="btn red" data-a="undo" data-v="${esc(code)}">ยกเลิกผลนับ</button>` : ''}</div>`;
   } else {
-    h += `<p class="sub">ยังไม่มีใครสแกนรายการนี้${(hist.get(code) || []).length ? ' (เคยถูกยกเลิก / สั่งนับซ้ำ)' : ''}</p>${markChoices(code, 'markas')}<button class="btn" data-a="closeitem">ปิด</button>`;
+    h += `<p class="sub">ยังไม่มีใครสแกนรายการนี้${(hist.get(code) || []).length ? ' (เคยถูกยกเลิก / สั่งตรวจนับซ้ำ)' : ''}</p>${markChoices(code, 'markas')}<button class="btn" data-a="closeitem">ปิด</button>`;
   }
   return h + `</div></div>`;
 }
@@ -1205,7 +1205,7 @@ function appFeed() {
   if (S.feedF === 'pending') list = list.filter(s => mine.some(e => e.code === s.code && !isServer(e.id)));
   if (S.feedF === 'other') list = list.filter(isOther);
   if (S.feedF === 'dmg') list = list.filter(s => s.cond !== 'ปกติ');
-  let h = `<div class="pbody"><b style="font-size:23px">สมุดสติ๊กเกอร์</b><div class="cnt3 dark" style="border-radius:20px;padding:12px"><div><b style="color:var(--lime)">${cur.size ? [...cur.values()].filter(s => s.by === S.user.name).length : 0}</b><span style="font-size:12px;color:#c7cbd4">สะสมแล้ว</span></div><div><b>${nToday}</b><span style="font-size:12px;color:#c7cbd4">วันนี้</span></div><div><b>${nRe}</b><span style="font-size:12px;color:#c7cbd4">ป้ายต้องพิมพ์ใหม่</span></div></div>
+  let h = `<div class="pbody"><b style="font-size:23px">สมุดสติกเกอร์</b><div class="cnt3 dark" style="border-radius:20px;padding:12px"><div><b style="color:var(--lime)">${cur.size ? [...cur.values()].filter(s => s.by === S.user.name).length : 0}</b><span style="font-size:12px;color:#c7cbd4">สะสมแล้ว</span></div><div><b>${nToday}</b><span style="font-size:12px;color:#c7cbd4">วันนี้</span></div><div><b>${nRe}</b><span style="font-size:12px;color:#c7cbd4">ป้ายต้องพิมพ์ใหม่</span></div></div>
     <div class="chips">${[['all', 'ทั้งหมด'], ['pending', 'รอส่ง'], ['other', 'ของแผนกอื่น'], ['dmg', 'ชำรุด']].map(([k, l]) => `<button class="tog" aria-pressed="${S.feedF === k}" data-a="feedf" data-v="${k}">${l}</button>`).join('')}</div><div class="book">`;
   for (const s of list.slice(0, 120)) {
     const a = master.get(s.code), col = !a ? 'var(--bad)' : isOther(s) ? 'var(--oth)' : s.cond !== 'ปกติ' ? 'var(--warn)' : 'var(--ok)';
@@ -1218,13 +1218,13 @@ function appFeed() {
 function scannerSetup() {
   const B = window.AndroidBridge, conf = (() => { try { return B?.scannerConflicts ? JSON.parse(B.scannerConflicts()) : []; } catch { return []; } })();
   const st = (n, t, d) => `<div class="row" style="align-items:flex-start;gap:10px"><span class="dot" style="width:26px;height:26px;flex:none;background:var(--blue);color:#fff;font-size:13px">${n}</span><span style="flex:1"><b>${t}</b><br><span class="sub">${d}</span></span></div>`;
-  let h = `<div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ยิง QR ไม่เข้า ทำตามนี้ทีละข้อ แล้วลองยิงที่การ์ด "ทดสอบปุ่มยิง"</p>`;
+  let h = `<div class="card"><b>ตั้งค่าเครื่องสแกน CipherLab</b><p class="sub">สแกน QR ไม่เข้า ทำตามนี้ทีละข้อ แล้วลองยิงที่การ์ด "ทดสอบปุ่มสแกน"</p>`;
   h += conf.length ? `<div class="msg warn">พบแอปที่อาจแย่งหัวอ่าน: ${conf.map(c => `<b>${esc(c.label)}</b>`).join(', ')} · กด Force stop หรือ Uninstall</div><div class="chips">${conf.map(c => `<button class="btn sm red" data-a="appinfo" data-v="${esc(c.pkg)}">เปิด ${esc(c.label)}</button>`).join('')}</div>`
     : st(1, 'ปิดแอป AMS ตัวเก่า', B?.scannerConflicts ? 'ไม่พบแอปที่แย่งหัวอ่าน ✓' : 'ตั้งค่า → แอป → AMS ตัวเก่า → Force stop / Uninstall');
   h += st(2, 'ReaderConfig → โปรไฟล์ Default', 'ตั้งค่าที่โปรไฟล์ Default (หรือสร้างโปรไฟล์ใหม่ Associated App = AssetSync)')
     + st(3, 'Data Output → Keyboard Emulation = KeyEvent', 'ห้ามเป็น None · Auto Enter Character = Decoded data + Enter char')
     + st(4, 'Symbology → เปิด QR Code', 'และ Code 128 สำหรับบาร์โค้ดเดิม')
-    + st(5, 'Data Output → Code ID = AIM', 'ใช้แยก "ยิง QR" กับ "ยิงบาร์โค้ด" · ห้ามเลือก CipherLab ID');
+    + st(5, 'Data Output → Code ID = AIM', 'ใช้แยก "สแกน QR" กับ "สแกนบาร์โค้ด" · ห้ามเลือก CipherLab ID');
   if (B?.openReaderConfig) h += `<button class="btn pri" data-a="openrc">เปิด ReaderConfig</button>`;
   return h + `</div>`;
 }
@@ -1232,10 +1232,10 @@ function appMeBlock() {
   const mineSent = db ? mine.filter(e => isServer(e.id)).length : mine.length, p = pendingCount();
   return `<div class="card"><div class="row" style="align-items:center"><span class="dot" style="width:48px;height:48px;background:var(--orange);color:#1d0e00">${esc(S.user?.name?.slice(0, 1) || '?')}</span><span style="flex:1"><b style="font-size:19px">${esc(S.user?.name || '-')}</b><br><span class="sub">เครื่อง ${esc(dev)}</span></span></div></div>
     ${usbCard()}
-    ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
-    <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
+    ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีอินเทอร์เน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
+    <button class="btn pri" data-a="verify">ส่งข้อมูลและตรวจสอบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
     <div class="card"><b>เกี่ยวกับ</b><p class="sub">AssetSync ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'}${isLead() ? ' · ' + esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า') : ''}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode || !isLead() ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
-    ${!isLead() ? '' : `<div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>`}
+    ${!isLead() ? '' : `<div class="card"><b>ทดสอบปุ่มสแกน</b><p class="sub">กดปุ่มสแกนที่สติกเกอร์ แล้วตรวจสอบว่ามีรายการแสดงด้านล่างหรือไม่</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มสแกน</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>`}
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
 }
 
@@ -1243,31 +1243,31 @@ function appMeBlock() {
 function usbCard() {
   const out = LS.get('usbOut-' + (meta?.id || ''), 0), n = mine.length - out;
   let h = `<div class="card" style="${usbMode ? 'border:2px solid var(--blue)' : ''}"><div class="row" style="justify-content:space-between;align-items:center"><b>เชื่อมต่อแบบไหน</b></div>
-    <div class="seg" role="group" aria-label="โหมดเชื่อมต่อ" style="align-self:flex-start"><button data-a="usbmode" data-v="0" aria-pressed="${!usbMode}">ออนไลน์ (เน็ต)</button><button data-a="usbmode" data-v="1" aria-pressed="${usbMode}">สาย USB (ไม่ใช้เน็ต)</button></div>`;
-  if (!usbMode) return h + `<p class="sub">ใช้สาย USB เมื่อในพื้นที่ไม่มีเน็ต · ผลนับจะส่งเป็นไฟล์ผ่านโฟลเดอร์ Download ของเครื่อง</p></div>`;
-  h += `<p class="sub">1) คอม: หน้า "สาย USB" → ดาวน์โหลดแพ็กเกจ → ต่อสาย แล้ววางไฟล์ไว้ใน Download ของเครื่องยิง</p>
+    <div class="seg" role="group" aria-label="โหมดเชื่อมต่อ" style="align-self:flex-start"><button data-a="usbmode" data-v="0" aria-pressed="${!usbMode}">ออนไลน์ (อินเทอร์เน็ต)</button><button data-a="usbmode" data-v="1" aria-pressed="${usbMode}">สาย USB (ไม่ใช้อินเทอร์เน็ต)</button></div>`;
+  if (!usbMode) return h + `<p class="sub">ใช้สาย USB เมื่อในพื้นที่ไม่มีอินเทอร์เน็ต · ผลนับจะส่งเป็นไฟล์ผ่านโฟลเดอร์ Download ของเครื่อง</p></div>`;
+  h += `<p class="sub">1) คอมพิวเตอร์: หน้า "สาย USB" → ดาวน์โหลดแพ็กเกจ → ต่อสาย แล้ววางไฟล์ไว้ใน Download ของเครื่องสแกน</p>
     <button class="btn" data-a="pick" data-v="pkg">นำเข้าแพ็กเกจจากเครื่อง (.json)</button>
     ${meta ? `<p class="sub">ตอนนี้: <b>${esc(meta.name)}</b> · ${N(master.size)} รหัส</p>` : ''}
-    <p class="sub">2) นับเสร็จ กดส่งออก ไฟล์จะไปอยู่ที่ Download → ต่อสาย แล้วคัดลอกไปคอม</p>
+    <p class="sub">2) นับเสร็จ กดส่งออก ไฟล์จะไปอยู่ที่ Download → ต่อสาย แล้วคัดลอกไปคอมพิวเตอร์</p>
     <div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ผลนับในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${out}</b><span style="font-size:11px">ส่งออกแล้ว</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${Math.max(0, n)}</b><span style="font-size:11px">ยังไม่ส่งออก</span></div></div>
     <button class="btn pri" data-a="usbreport" ${meta && mine.length ? '' : 'disabled'}>ส่งออกผลนับ (Report)</button>`;
   const last = LS.get('usbLast', null);
-  if (last) h += `<div class="card" style="background:var(--ok-soft);padding:12px;gap:4px"><b>ไฟล์ล่าสุดอยู่ที่นี่</b><span class="mono" style="word-break:break-all">${esc(last.where)}/${esc(last.name)}</span><span class="sub">${fmtT(last.at)} · บนคอม: This PC → เครื่องยิง → Internal shared storage → ${esc(last.where.replace(/\//g, ' → '))}</span></div>`;
+  if (last) h += `<div class="card" style="background:var(--ok-soft);padding:12px;gap:4px"><b>ไฟล์ล่าสุดอยู่ที่นี่</b><span class="mono" style="word-break:break-all">${esc(last.where)}/${esc(last.name)}</span><span class="sub">${fmtT(last.at)} · บนคอมพิวเตอร์: This PC → เครื่องสแกน → Internal shared storage → ${esc(last.where.replace(/\//g, ' → '))}</span></div>`;
   if (S.msg.usbApp) h += `<div class="msg ${S.msg.usbApp[1]}">${esc(S.msg.usbApp[0])}</div>`;
   return h + `</div>`;
 }
 function webUsb() {
   const info = LS.get('usbInfo-' + meta.id, {});
-  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>6 · สาย USB</h1></div><div class="row">
-    <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอม → เครื่องยิง</span><h2>ส่งทะเบียนให้เครื่องยิง</h2>
-      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องยิง: แท็บ ฉัน → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องสแกนไม่มีอินเทอร์เน็ต</p><h1>6 · สาย USB</h1></div><div class="row">
+    <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอมพิวเตอร์ → เครื่องสแกน</span><h2>ส่งทะเบียนให้เครื่องสแกน</h2>
+      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องสแกนเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอมพิวเตอร์: This PC → ชื่อเครื่องสแกน → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องสแกน: แท็บ บัญชี → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
       <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของ Admin</p>
       <button class="btn pri" data-a="usbpkg" ${master.size ? '' : 'disabled'}>ดาวน์โหลดแพ็กเกจ</button>${S.msg.pkg ? `<div class="msg ${S.msg.pkg[1]}">${esc(S.msg.pkg[0])}</div>` : ''}</section>
-    <section class="card grow"><span class="chip c-ok" style="align-self:flex-start">ขั้นที่ 2 · เครื่องยิง → คอม</span><h2>รับผลนับจากเครื่องยิง</h2>
-      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal shared storage → <b>Download</b> → ไฟล์ <span class="mono">AssetSync-ผลนับ-….xlsx</span> (ถ้าไม่เห็น ให้ดูชื่อโฟลเดอร์ที่แอปบอกหลังกดส่งออก)</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
-      <div class="drop" data-drop="usb"><b>ลากไฟล์ผลนับจากเครื่องยิงมาวางตรงนี้</b><span class="sub">.xlsx ที่แอปส่งออก · เปิดดูใน Excel ได้ด้วย (ชีต ผลนับ)</span><button class="btn pri" data-a="pick" data-v="usb">เลือกไฟล์ (หลายไฟล์ได้)</button></div>
+    <section class="card grow"><span class="chip c-ok" style="align-self:flex-start">ขั้นที่ 2 · เครื่องสแกน → คอมพิวเตอร์</span><h2>รับผลนับจากเครื่องสแกน</h2>
+      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องสแกน: แท็บ บัญชี → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย USB · บนเครื่องสแกนเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอมพิวเตอร์: This PC → ชื่อเครื่องสแกน → Internal shared storage → <b>Download</b> → ไฟล์ <span class="mono">AssetSync-ผลนับ-….xlsx</span> (ถ้าไม่เห็น ให้ดูชื่อโฟลเดอร์ที่แอปบอกหลังกดส่งออก)</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
+      <div class="drop" data-drop="usb"><b>ลากไฟล์ผลนับจากเครื่องสแกนมาวางตรงนี้</b><span class="sub">.xlsx ที่แอปส่งออก · เปิดดูใน Excel ได้ด้วย (ชีต ผลนับ)</span><button class="btn pri" data-a="pick" data-v="usb">เลือกไฟล์ (หลายไฟล์ได้)</button></div>
       ${S.msg.usb ? `<div class="msg ${S.msg.usb[1]}">${S.msg.usb[0].map(esc).join('<br>')}</div>` : ''}
-      <div class="tbl-wrap"><table><thead><tr><th>คนนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
+      <div class="tbl-wrap"><table><thead><tr><th>ผู้ตรวจนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
   return h;
 }
 const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo]);
@@ -1287,15 +1287,15 @@ async function importPackage(file) {
 }
 async function exportReport() {
   const { cur } = compute(), wb = XLSX.utils.book_new();
-  const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'วิธีตรวจนับ']];
+  const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติกเกอร์ใหม่', 'ชื่อบนสติกเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'วิธีตรวจนับ']];
   for (const s of [...cur.values()].filter(s => s.dev === dev).sort((a, b) => a.t - b.t)) {
     const a = master.get(s.code);
-    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t), SRC[s.src][0]]);
+    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมใช้ชั่วคราว)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t), SRC[s.src][0]]);
   }
   const C = compute(), myLost = new Set(mine.filter(e => e.lost).map(e => e.code));
   for (const [code, L] of C.lost) if (myLost.has(code)) { const a = master.get(code); view.push([code, a?.name || '', a?.ccName || '', '', '', 'สูญหาย', '', '', '', '', L.remark, L.by, fmtT(L.t), '']); }
   const myCC = new Set(mine.filter(e => String(e.code).startsWith('#CC:')).map(e => e.code.slice(4)));
-  for (const [cc, d] of C.ccDone) if (myCC.has(cc)) view.push(['', `ปิดงาน CC ${cc} ${ccNameOf(cc)}`, '', '', '', 'นับครบแล้ว', '', '', '', '', d.left ? `ไม่เจอ ${d.left} รายการ` : '', d.by, fmtT(d.t), '']);
+  for (const [cc, d] of C.ccDone) if (myCC.has(cc)) view.push(['', `ปิดงาน CC ${cc} ${ccNameOf(cc)}`, '', '', '', 'นับครบแล้ว', '', '', '', '', d.left ? `ไม่พบ ${d.left} รายการ` : '', d.by, fmtT(d.t), '']);
   const raw = [['AMS Count USB', 1, meta.id, dev, S.user?.name || '', Date.now(), mine.length]]; let buf = [], len = 0;
   for (const e of mine) { const j = JSON.stringify(e); if (len + j.length > 30000 && buf.length) { raw.push(['[' + buf.join(',') + ']']); buf = []; len = 0; } buf.push(j); len += j.length + 1; }
   if (buf.length) raw.push(['[' + buf.join(',') + ']']);
@@ -1339,8 +1339,8 @@ function gateView() {
     <label class="f">Project URL<input class="in mono" id="cfgUrl" value="${esc(cfg.url)}" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
     <label class="f">anon public key<textarea class="in mono" id="cfgKey" rows="3" placeholder="eyJhbGciOi…">${esc(cfg.key)}</textarea></label>${msg}
     <button class="btn pri" data-a="savecfg">บันทึกและเชื่อมต่อ</button>${Store.auth.configured() ? '<button class="btn" data-a="cancelcfg">ยกเลิก</button>' : ''}<p class="sub">ห้ามใส่ service_role key</p></div>
-    <div class="card"><b>ไม่มีเน็ตที่นี่?</b><p class="sub">ใช้โหมดสาย USB ส่งข้อมูลผ่านไฟล์แทน</p><button class="btn" data-a="usbmode" data-v="1">ใช้โหมดสาย USB</button></div>`);
-  if (S.gate === 'inactive') return wrap(`<div class="card"><h2>รอ Admin เปิดใช้บัญชี</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้เปิดใช้ · ให้ Admin เปิดที่หน้า ทีม + ตั้งค่า บนคอม</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`);
+    <div class="card"><b>ไม่มีอินเทอร์เน็ตที่นี่?</b><p class="sub">ใช้โหมดสาย USB ส่งข้อมูลผ่านไฟล์แทน</p><button class="btn" data-a="usbmode" data-v="1">ใช้โหมดสาย USB</button></div>`);
+  if (S.gate === 'inactive') return wrap(`<div class="card"><h2>รอ Admin เปิดใช้บัญชี</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้เปิดใช้ · ให้ Admin เปิดที่หน้า ทีม + ตั้งค่า บนคอมพิวเตอร์</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`);
   if (S.firstRun) return wrap(`<div class="card"><h2>เริ่มใช้ครั้งแรก · สร้างบัญชี Admin</h2><p class="sub">ระบบยังไม่มีผู้ใช้ บัญชีแรกจะเป็น Admin (นำเข้าทะเบียน มอบงาน ตรวจ ปิดรอบ)</p>
     <label class="f">ชื่อ<input class="in" id="flName" autocomplete="name"></label>
     <label class="f">รหัสพนักงาน<input class="in mono" id="flCode" autocomplete="username"></label>
@@ -1359,7 +1359,7 @@ async function doLogin() {
   if (!code || !pin) { S.gateMsg = 'ใส่รหัสพนักงานและ PIN'; render(); return; }
   S.lgCode = code; S.busy = true; S.gateMsg = null; render();
   try { await Store.auth.login(code, pin); LS.set('lastCode', code); S.busy = false; S.gate = 'boot'; render(); await connect(); }
-  catch (e) { S.busy = false; S.gateMsg = /invalid/i.test(e.message) ? 'รหัสพนักงานหรือ PIN ไม่ถูกต้อง' : /fetch|network/i.test(e.message) ? 'เชื่อมต่อไม่ได้ · ตรวจเน็ตแล้วลองใหม่' : e.message; render(); }
+  catch (e) { S.busy = false; S.gateMsg = /invalid/i.test(e.message) ? 'รหัสพนักงานหรือ PIN ไม่ถูกต้อง' : /fetch|network/i.test(e.message) ? 'เชื่อมต่อไม่ได้ · กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง' : e.message; render(); }
 }
 async function doFirstLead() {
   const name = $('#flName').value.trim(), code = $('#flCode').value.trim(), pin = $('#flPin').value.trim();
@@ -1389,15 +1389,15 @@ function webTeam() {
   let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>7 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
     <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th><th></th>' : ''}</tr></thead><tbody>`;
   for (const u of S.team) h += `<tr><td>${lead && S.editName === u.id ? `<div class="row" style="flex-wrap:nowrap"><input class="in" id="nm-${u.id}" value="${esc(u.name)}" style="width:150px"><button class="btn sm pri" data-a="memname" data-v="${u.id}">บันทึก</button><button class="btn sm" data-a="noname">ยกเลิก</button></div>` : `<b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}${lead ? ` <button class="btn sm" data-a="editname" data-v="${u.id}" aria-label="แก้ชื่อ ${esc(u.name)}" style="min-height:28px;padding:2px 8px">แก้ชื่อ</button>` : ''}`}</td><td class="mono">${esc(u.code)}</td>
-    <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'Admin' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'Admin' : 'คนนับ')}</td>
+    <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'} ⇄</button>` : (u.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ')}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm ${u.active ? '' : 'red'}" data-a="memactive" data-v="${u.id}">${u.active ? 'ใช้งานได้' : 'ปิดใช้อยู่'}</button>` : `<span class="chip ${u.active ? 'c-ok' : 'c-gray'}">${u.active ? 'ใช้งานได้' : 'ปิดใช้'}</span>`}</td>
     ${lead ? `<td><div class="row" style="flex-wrap:nowrap"><input class="in mono" id="pin-${u.id}" type="password" inputmode="numeric" placeholder="PIN ใหม่" style="width:110px"><button class="btn sm" data-a="mempin" data-v="${u.id}">ตั้ง</button></div></td><td>${u.id === S.user?.id ? '' : S.confirmMem === u.id ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm red" data-a="memdel" data-v="${u.id}">ยืนยันลบ</button><button class="btn sm" data-a="nomemdel">ไม่</button></div>` : `<button class="btn sm red" data-a="askmemdel" data-v="${u.id}">ลบ</button>`}</td>` : ''}</tr>`;
   h += `</tbody></table></div>`;
-  if (lead) h += `<b>เพิ่มคนในทีม</b><div class="grid"><label class="f">ชื่อ<input class="in" id="nmName"></label><label class="f">รหัสพนักงาน<input class="in mono" id="nmCode"></label><label class="f">PIN เริ่มต้น<input class="in mono" id="nmPin" inputmode="numeric" placeholder="4–8 หลัก"></label><label class="f">บทบาท<select class="in" id="nmRole"><option value="counter">คนนับ</option><option value="lead">Admin</option></select></label></div>
+  if (lead) h += `<b>เพิ่มคนในทีม</b><div class="grid"><label class="f">ชื่อ<input class="in" id="nmName"></label><label class="f">รหัสพนักงาน<input class="in mono" id="nmCode"></label><label class="f">PIN เริ่มต้น<input class="in mono" id="nmPin" inputmode="numeric" placeholder="4–8 หลัก"></label><label class="f">บทบาท<select class="in" id="nmRole"><option value="counter">ผู้ตรวจนับ</option><option value="lead">Admin</option></select></label></div>
     <button class="btn pri" data-a="addmember" style="align-self:flex-start" ${S.busy ? 'disabled' : ''}>เพิ่มเข้าทีม</button>${S.msg.team ? `<div class="msg ${S.msg.team[1]}">${esc(S.msg.team[0])}</div>` : ''}`;
   h += `</section><aside class="side" style="display:flex;flex-direction:column;gap:12px"><section class="card"><h2>การเชื่อมต่อ</h2><p class="sub">Supabase: <span class="mono">${esc(cfg.url.replace(/^https:\/\//, ''))}</span></p><p class="sub">คุณ: ${esc(S.user?.name || '')} · ${esc(S.user?.code || '')} · เครื่อง ${esc(dev)}</p>
     <div class="row"><button class="btn sm" data-a="editcfg">เปลี่ยนการเชื่อมต่อ</button><button class="btn sm red" data-a="logout">ออกจากระบบ</button></div></section>
-    <section class="card"><h2>ติดตั้งแอปบนเครื่องยิง</h2><p class="sub">เปิดหน้าติดตั้งบนเครื่องยิง หรือยิง QR นี้</p><div class="sticker" style="transform:none;width:180px"><canvas id="installQr" width="360" height="360" aria-label="QR หน้าติดตั้งแอป"></canvas></div><a class="btn" href="install.html" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">เปิดหน้าติดตั้งแอป</a></section></aside></div></main>`;
+    <section class="card"><h2>ติดตั้งแอปบนเครื่องสแกน</h2><p class="sub">เปิดหน้าติดตั้งบนเครื่องสแกน หรือสแกน QR นี้</p><div class="sticker" style="transform:none;width:180px"><canvas id="installQr" width="360" height="360" aria-label="QR หน้าติดตั้งแอป"></canvas></div><a class="btn" href="install.html" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">เปิดหน้าติดตั้งแอป</a></section></aside></div></main>`;
   return h;
 }
 
@@ -1490,7 +1490,7 @@ document.addEventListener('click', async e => {
       if (c2 === 'lost') { pushEvent({ k: 'edit', code: v, round: meta.id, lost: true, remark: rm, area: String(area.code) }); flash('บันทึกว่าสูญหายแล้ว'); if (!web) S.item = null; break; }
       pushEvent({ k: 'scan', code: v, round: meta.id, area: String(area.code), areaName: area.name, shared: !!area.shared, room: web ? '' : S.room, ns: true, src: web ? 'web' : 'manual' });
       if (c2 !== 'ปกติ' || rm) pushEvent({ k: 'edit', code: v, round: meta.id, ...(c2 !== 'ปกติ' ? { cond: c2 } : {}), ...(rm ? { remark: rm } : {}) });
-      flash(`บันทึกว่าพบแล้ว${c2 !== 'ปกติ' ? ' · ' + c2 : ''} · ติด "ต้องพิมพ์สติ๊กเกอร์ใหม่" ให้`);
+      flash(`บันทึกว่าพบแล้ว${c2 !== 'ปกติ' ? ' · ' + c2 : ''} · ติด "ต้องพิมพ์สติกเกอร์ใหม่" ให้`);
       if (!web) { S.cards.unshift({ code: v }); S.item = null; S.search = null; }
       break;
     }
@@ -1507,7 +1507,7 @@ document.addEventListener('click', async e => {
     case 'dupuse': edit(v, { area: String(t.dataset.cc), areaName: t.dataset.ccn }); pushEvent({ k: 'rv', act: 'dup_ack', code: v, round: meta.id }); flash('เปลี่ยนที่พบแล้ว'); return;
     case 'askclose': S.confirmClose = v; break;
     case 'noclose': S.confirmClose = null; break;
-    case 'ccclose': S.confirmClose = null; pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: true, left: +t.dataset.n || 0 }); beep('ok'); flash('ปิดงาน CC แล้ว · ขอบคุณ'); break;
+    case 'ccclose': S.confirmClose = null; pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: true, left: +t.dataset.n || 0 }); beep('ok'); flash('ปิดงาน CC เรียบร้อยแล้ว'); break;
     case 'ccreopen': pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: false }); flash('เปิดนับต่อแล้ว'); break;
     case 'askdel': S.confirmDel = v; break;
     case 'nodel': S.confirmDel = null; break;
@@ -1519,7 +1519,7 @@ document.addEventListener('click', async e => {
     case 'cancelimport': S.imp = null; break;
     case 'adduser': { const n = $('#newUser').value.trim(); if (!n) return; const team = [...(meta.team || [])]; if (!team.some(u => u.name === n)) team.push({ name: n, role: $('#newRole').value }); await saveMeta({ ...meta, team }); return; }
     case 'addarea': { const n = $('#newArea').value.trim(); if (!n) return; const areas = [...(meta.areas || []), { code: 'S' + Date.now().toString(36), name: n, count: 0, assignee: null, shared: true }]; await saveMeta({ ...meta, areas }); return; }
-    case 'release': await saveMeta({ ...meta, status: 'counting', releasedAt: Date.now() }); S.web = 'live'; flash('ปล่อยงานแล้ว · เปิดแท็บ "เครื่องยิง (แอป)" เพื่อเริ่มนับ'); return;
+    case 'release': await saveMeta({ ...meta, status: 'counting', releasedAt: Date.now() }); S.web = 'live'; flash('ปล่อยงานแล้ว · เปิดแท็บ "เครื่องสแกน (แอป)" เพื่อเริ่มนับ'); return;
     case 'livearea': S.liveArea = S.liveArea === v ? null : v; break;
     case 'opencc': S.web = 'cc'; S.ccSel = String(v); S.ccTab = t.dataset.t || 'all'; S.ccPick = null; S.ccItemQ = ''; S.confirmUndo = null; break;
     case 'cctab': S.ccTab = v; S.ccPick = null; break;
@@ -1538,7 +1538,7 @@ document.addEventListener('click', async e => {
       S.editPop = null; flash('บันทึกแล้ว'); render(); return; }
     case 'noundo': S.confirmUndo = null; break;
     case 'wundo': pushEvent({ k: 'del', code: v, round: meta.id }); S.confirmUndo = null; flash('ยกเลิกผลนับแล้ว · กลับเป็นรอตรวจ'); break;
-    case 'wfound': pushEvent({ k: 'scan', code: v, round: meta.id, area: String(t.dataset.cc), areaName: t.dataset.ccn || String(t.dataset.cc), shared: false, room: '', ns: true, src: 'web' }); flash('บันทึกว่าพบแล้ว · ติด "ต้องพิมพ์สติ๊กเกอร์ใหม่" ให้แล้ว'); break;
+    case 'wfound': pushEvent({ k: 'scan', code: v, round: meta.id, area: String(t.dataset.cc), areaName: t.dataset.ccn || String(t.dataset.cc), shared: false, room: '', ns: true, src: 'web' }); flash('บันทึกว่าพบแล้ว · ติด "ต้องพิมพ์สติกเกอร์ใหม่" ให้แล้ว'); break;
     case 'inboxtab': S.web = 'inbox'; S.inboxTab = v; S.inboxSel = null; S.inboxChecked.clear(); break;
     case 'inboxsel': S.inboxSel = v; break;
     case 'openinbox': S.web = 'inbox'; { const s = compute().cur.get(v), c = cats(); S.inboxTab = (Object.keys(c).find(k => c[k].some(x => x.code === v))) || 'cleared'; S.inboxSel = v; } break;
@@ -1586,7 +1586,7 @@ document.addEventListener('click', async e => {
     case 'undo': pushEvent({ k: 'del', code: v, round: meta.id }); S.item = null; flash('ยกเลิกผลนับแล้ว'); break;
     case 'cond': edit(v, { cond: t.dataset.c }); return;
     case 'remark': edit(v, { remark: $('#remarkIn').value.trim() }); flash('บันทึก Remark แล้ว'); return;
-    case 'markfound': if (!S.area) { flash('เลือกแผนกก่อน'); S.areaPick = true; break; } pushEvent({ k: 'scan', code: v, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: true, src: 'manual' }); S.cards.unshift({ code: v }); S.item = null; S.search = null; S.app = 'scan'; flash('บันทึกว่าพบแล้ว · ติด "ต้องพิมพ์สติ๊กเกอร์ใหม่" ให้แล้ว'); break;
+    case 'markfound': if (!S.area) { flash('เลือกแผนกก่อน'); S.areaPick = true; break; } pushEvent({ k: 'scan', code: v, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: true, src: 'manual' }); S.cards.unshift({ code: v }); S.item = null; S.search = null; S.app = 'scan'; flash('บันทึกว่าพบแล้ว · ติด "ต้องพิมพ์สติกเกอร์ใหม่" ให้แล้ว'); break;
     case 'opensearch': S.search = { q: '', all: false }; break;
     case 'closesearch': S.search = null; break;
     case 'srchall': S.search.all = v === '1'; break;
@@ -1796,7 +1796,7 @@ function exportBook(kind) {
       if (t.scanDate >= 0 && L) r[t.scanDate] = dt(L.t);
       if (t.notPlan >= 0) r[t.notPlan] = unk ? 'Y' : '';
     };
-    const extra = ['ผลการนับ', 'พื้นที่ที่พบ', 'ห้อง / Location', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'เครื่อง', 'วิธีตรวจนับ', 'QR'];
+    const extra = ['ผลการนับ', 'พื้นที่ที่พบ', 'ห้อง / Location', 'สภาพ', 'ต้องพิมพ์สติกเกอร์ใหม่', 'ชื่อบนสติกเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'เครื่อง', 'วิธีตรวจนับ', 'QR'];
     const data = [[...h, ...extra]];
     for (const a of master.values()) {
       const s = cur.get(a.code), mv = s && isMoved(s);
@@ -1812,7 +1812,7 @@ function exportBook(kind) {
           if (t.ccNewName >= 0) r[t.ccNewName] = s ? (mv ? s.areaName : a.ccName) : '';
           fillSY(r, s, false);
         }
-        data.push([...r, !s ? (lostOf(a.code) ? 'สูญหาย' : 'ไม่พบ') : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
+        data.push([...r, !s ? (lostOf(a.code) ? 'สูญหาย' : 'ไม่พบ') : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมใช้ชั่วคราว)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
       }
     }
     // scanned but not in the register: one row each at the bottom, marked 'Asset Not In Plan'
@@ -1830,8 +1830,8 @@ function exportBook(kind) {
     add('สรุป write-off', [[], ['สรุป ขออนุมัติ Write - Off'], ['Cost Center', 'Department', 'List', 'Asset Cost', 'Accum.dep._Net', ' Book value_Net', 'Status', 'Remark']].concat([...g.values()].map(e => [...e, 'Loss', 'ขออนุมัติ write - off'])), [1]);
   }
   if (kind === 'main') {
-    add('คิวพิมพ์สติ๊กเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติ๊กเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
-    add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (คนนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจ Admin', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ของเรา' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
+    add('คิวพิมพ์สติกเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติกเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
+    add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (ผู้ตรวจนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจ Admin', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ทรัพย์สินของบริษัท' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
   }
   if (wb.SheetNames.includes(dataSheetName)) wb.SheetNames = [dataSheetName, ...wb.SheetNames.filter(n => n !== dataSheetName)];
   return wb;
@@ -1845,7 +1845,7 @@ async function exportFile(kind) {
   } catch (e) { return ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; }
 }
 async function stickerPdf(test) {
-  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ ลองรีเฟรช', 'bad'];
+  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
   try { await document.fonts?.load('500 20px Prompt'); } catch {}
   const codes = [...S.stSel].slice(0, test ? 1 : 2000), { jsPDF } = window.jspdf;
   const roll = S.stSize === 'roll', w = roll ? 50 : 70, hgt = roll ? 25 : 37.125;
@@ -1857,7 +1857,7 @@ async function stickerPdf(test) {
     if (roll) { if (i) pdf.addPage([w, hgt], 'l'); pdf.addImage(img, 'PNG', 0, 0, w, hgt, undefined, 'FAST'); }
     else { const k = i % 24; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % 3) * w, Math.floor(k / 3) * hgt, w, hgt, undefined, 'FAST'); }
   });
-  return await save(`AssetSync-สติ๊กเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
+  return await save(`AssetSync-สติกเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
 }
 
 function afterRender() {

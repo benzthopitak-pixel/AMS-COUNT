@@ -208,7 +208,7 @@ public class MainActivity extends Activity {
                             .setTitle("มีแอปเวอร์ชันใหม่")
                             .setMessage("รอบนี้ต้องติดตั้งแอปใหม่ทับตัวเดิม 1 ครั้ง (ผลนับไม่หาย)")
                             .setPositiveButton("ดาวน์โหลด", (d, w) -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(base + "install.html"))); } catch (Exception ignored) { } })
-                            .setNegativeButton("ไว้ทีหลัง", null).show());
+                            .setNegativeButton("ภายหลัง", null).show());
                 } else if (build <= have) {
                     result = "latest";
                 } else {
