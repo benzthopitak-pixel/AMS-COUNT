@@ -10,6 +10,9 @@
 <script src="build.js"></script>
 <script src="lib/supabase.js"></script>
 <script src="lib/xlsx.full.min.js"></script>
+<script>window.__XLSX = window.XLSX;</script>
+<script src="lib/xlsx-style.min.js"></script>
+<script>window.XLSXS = window.XLSX; window.XLSX = window.__XLSX;</script>
 <script src="lib/jspdf.umd.min.js"></script>
 <script src="lib/qrcode.js"></script>
 <script src="store.js"></script>
@@ -1043,6 +1046,7 @@ function webStickers(c) {
   h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
     <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option></select></label>
     <div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>
+    <button class="btn" data-a="stxlsx" ${S.stSel.size ? '' : 'disabled'}>⬇ Excel ตามแม่แบบ OGA (${S.stSel.size})</button><span class="sub">ไฟล์สำหรับโปรแกรมพิมพ์สติกเกอร์ · 1 แถวต่อ 1 Sub-number</span>
     <button class="btn lime" data-a="stdone" ${S.stSel.size ? '' : 'disabled'}>บันทึกว่าติดแล้ว</button>${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
   return h;
 }
@@ -1562,6 +1566,7 @@ document.addEventListener('click', async e => {
     case 'stsel': t.checked ? S.stSel.add(v) : S.stSel.delete(v); render(); return;
     case 'stall': { const list = stickerList(cats()); if (t.checked) list.forEach(x => S.stSel.add(x)); else S.stSel.clear(); render(); return; }
     case 'stpdf': S.msg.st = await stickerPdf(v === 'test'); break;
+    case 'stxlsx': S.msg.st = await stickerExcel([...S.stSel]); break;
     case 'stdone': for (const code of S.stSel) { if (compute().cur.has(code)) pushEvent({ k: 'edit', code, round: meta.id, printed: true }); } S.msg.st = [`บันทึกว่าติดแล้ว ${S.stSel.size} ดวง`, 'ok']; S.stSel.clear(); break;
     case 'login': S.user = meta.team[+v]; LS.set('user', S.user); break;
     case 'loginname': { const n = $('#loginName').value.trim(); if (!n) return; S.user = { name: n, role: 'counter' }; LS.set('user', S.user); if (meta) { const team = [...(meta.team || [])]; if (!team.some(u => u.name === n)) { team.push(S.user); await saveMeta({ ...meta, team }); } } break; }
@@ -1851,6 +1856,39 @@ async function exportFile(kind) {
     const nm = { main: 'ผลตรวจนับ', transfer: 'Transfer-AS02', writeoff: 'WriteOff-ABAVN' }[kind];
     return await save(`AssetSync-${nm}${meta.status === 'closed' ? '' : '-ฉบับร่าง'}-${new Date().toISOString().slice(0, 10)}.xlsx`, new Uint8Array(data), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { return ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; }
+}
+// sticker list in the company template (OGA_Templete_AMSCounting_Review): one row per sub-number, same 18 headers, colours and widths
+const OGA = [['Asset ', 'FFFF00', 9.25], ['Inventory No.', '92D050', 11.375], ['Serial Number', '92D050', 10.625], ['Asset Class', '92D050', 22.25], ['Life (year)', '92D050', 9.375], ['Description', 'FFFF00', 44], ['Plant', '92D050', 4.25], ['Plant name', '92D050', 8.25], ['Cost Center', 'FFFF00', 10], ['Cost Center name', '92D050', 14.75], ['Capitalized on', 'FFFF00', 11.625], ['Location', 'FFFF00', 12.125], ['Vendor', '92D050', 8.125], ['Asset Owner', '9BC2E6', 9], ['      Acquis.val.', '92D050', 10.125], ['        Accum.dep.', '92D050', 11.5], ['      Book val.', '92D050', 9.125], ['Crcy', '92D050', 3.75]];
+async function stickerExcel(codes) {
+  const X = window.XLSXS; if (!X) return ['โหลดตัวสร้าง Excel ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
+  const H = meta.headers || [], m0 = meta.map || {}, col = (...re) => { for (const r of re) { const i = H.findIndex(h => r.test(norm(h))); if (i >= 0) return i; } return -1; };
+  const ix = { sub: col(/^SUB-?NUMBER$|^SUBNUMBER$|^SUB\.?NO/, /^SERIAL NUMBER$/), inv: col(/^INVENTORY/), cls: col(/^ASSET CLASS$|^CLASS$/), life: col(/^LIFE/), plant: col(/^PLANT$/), plantName: col(/^PLANT NAME$/), cap: col(/CAPITALIZED/), loc: col(/^LOCATION$/), vendor: col(/^VENDOR$/), owner: col(/^ASSET OWNER$/), acq: col(/ACQUIS|CUM\.ACQ/), dep: col(/^ACCUM/), book: col(/BOOK VAL|END BOOK/), crcy: col(/^CRCY$|^CURRENCY$/) };
+  const v = (raw, i) => i >= 0 ? raw[i] ?? '' : '';
+  const border = { top: { style: 'thin', color: { rgb: 'BFBFBF' } }, bottom: { style: 'thin', color: { rgb: 'BFBFBF' } }, left: { style: 'thin', color: { rgb: 'BFBFBF' } }, right: { style: 'thin', color: { rgb: 'BFBFBF' } } };
+  const ws = {}, put = (r, c, cell) => { ws[X.utils.encode_cell({ r, c })] = cell; };
+  OGA.forEach(([h, fill], c) => put(0, c, { t: 's', v: h, s: { font: { name: 'Tahoma', sz: 9, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: fill } }, alignment: { horizontal: c > 1 && c !== 5 && c !== 8 && c !== 9 ? 'center' : undefined, vertical: 'center' } } }));
+  let r = 1;
+  for (const code of codes) {
+    const a = master.get(code); if (!a) continue;
+    const cc = labelCC(code);
+    for (const raw of a.raws.length ? a.raws : [[]]) {
+      const sub = String(v(raw, ix.sub) || 0).replace(/\.0+$/, ''), cap = String(v(raw, ix.cap) || '');
+      const vals = [`${code}-${sub}`, v(raw, ix.inv), sub, v(raw, ix.cls), v(raw, ix.life), v(raw, m0.name ?? -1) || a.name, v(raw, ix.plant), v(raw, ix.plantName), cc.code, cc.name, cap, v(raw, ix.loc), v(raw, ix.vendor), v(raw, ix.owner), v(raw, ix.acq), v(raw, ix.dep), v(raw, ix.book), v(raw, ix.crcy)];
+      vals.forEach((x, c) => {
+        const base = { font: { name: 'Tahoma', sz: 9 }, border, alignment: { horizontal: [2, 4, 6, 10].includes(c) ? 'center' : undefined, vertical: 'center' } };
+        if (c === 10 && /^\d{4}-\d{2}-\d{2}$/.test(cap)) { const [y, mo, d] = cap.split('-').map(Number); put(r, c, { t: 'n', v: (Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30)) / 864e5, z: 'mm-dd-yy', s: base }); return; }
+        if (c >= 14 && c <= 16 && x !== '' && !isNaN(Number(x))) { put(r, c, { t: 'n', v: Number(x), z: '#,##0.00', s: base }); return; }
+        put(r, c, { t: 's', v: String(x ?? ''), z: '@', s: base });
+      });
+      r++;
+    }
+  }
+  ws['!ref'] = X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, r - 1), c: OGA.length - 1 } });
+  ws['!cols'] = OGA.map(([, , w]) => ({ wch: w }));
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 }; ws['!views'] = [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2' }];
+  const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Sheet1');
+  const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  return await save(`OGA_AMSCounting_Review-สติกเกอร์-${r - 1}แถว-${stamp}.xlsx`, new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 async function stickerPdf(test) {
   if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];

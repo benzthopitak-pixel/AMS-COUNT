@@ -20,6 +20,7 @@ subs = {
     '<script src="config.js"></script>': f'<script>{demo_cfg}</script>',
     '<script src="lib/supabase.js"></script>': f'<script type="application/json" id="demo-seed">{seed}</script>\n<script>{backend}</script>',
     '<script src="lib/xlsx.full.min.js"></script>': f'<script>{js("lib/xlsx.full.min.js")}</script>',
+    '<script src="lib/xlsx-style.min.js"></script>': f'<script>{js("lib/xlsx-style.min.js")}</script>',
     '<script src="lib/jspdf.umd.min.js"></script>': f'<script>{js("lib/jspdf.umd.min.js")}</script>',
     '<script src="lib/qrcode.js"></script>': f'<script>{js("lib/qrcode.js")}</script>',
     '<script src="store.js"></script>': f'<script>{js("store.js")}</script>',
