@@ -24,82 +24,78 @@
 @font-face { font-family: 'Prompt'; font-weight: 700; font-display: swap; src: url(fonts/prompt-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2190-21FF, U+2212, U+2460-24FF, U+2713, U+2715; }
 @font-face { font-family: 'JetBrains Mono'; font-weight: 500; font-display: swap; src: url(fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-display: swap; src: url(fonts/jetbrains-mono-latin-700-normal.woff2) format('woff2'); }
-/* Layout: one shell, two faces. "คอม" = wide web workspace with a glass side menu; "เครื่องยิง" = phone column with bottom bar + center scan button.
-   Look: frosted glass over a soft aqua / blush / mint wash (palettes E3FDFD·CBF1F5·A6E3E9·71C9CE, BAD7DF·FFE2E2·F6F6F6·99DDCC, FFB6B9·FAE3D9·BBDED6·61C0BF).
-   Colour follows meaning: teal = action / progress, mint = found, peach = waiting, blush = problem, blue-grey = moving CC.
+/* Layout: one shell, two faces. "คอม" = wide web workspace with stage pills; "เครื่องยิง" = phone column with bottom bar + center scan button.
    Deliberately single light theme (field devices + office screens), every color set explicitly. */
 :root {
-  --ink: #17363f; --muted: #557079; --bg: #eef9fa; --card: rgb(255 255 255 / .66); --solid: #ffffff; --line: rgb(23 54 63 / .09);
-  --soft: rgb(255 255 255 / .55); --soft2: rgb(227 253 253 / .6); --glass-b: rgb(255 255 255 / .75); --shadow: 0 10px 30px rgb(38 104 112 / .10), 0 1px 2px rgb(38 104 112 / .06);
-  --blue: #2a8f96; --blue-soft: #cbf1f5; --blue-ink: #1d6b71;
-  --lime: #99ddcc; --orange: #ffb6b9;
-  --ok: #2f9e8f; --ok-soft: #dcf2ec; --ok-ink: #1b6b60;
-  --warn: #e8996f; --warn-soft: #fae3d9; --warn-ink: #9a4b26;
-  --bad: #e2737c; --bad-soft: #ffe2e2; --bad-ink: #a5303b;
-  --oth: #5f8fa1; --oth-soft: #dceaef; --oth-ink: #2f5a6b;
-  --deep: linear-gradient(135deg, #1f6a72 0%, #2a8f96 55%, #61c0bf 100%);
+  --ink: #121826; --muted: #5d6676; --bg: #f4f5fa; --card: #ffffff; --line: #e4e7ec;
+  --blue: #3b5bfd; --blue-soft: #eaeeff; --blue-ink: #2e46c9;
+  --lime: #d4f25a; --orange: #ff7a1a;
+  --ok: #12b76a; --ok-soft: #e7f8ef; --ok-ink: #027a48;
+  --warn: #f79009; --warn-soft: #fff1e6; --warn-ink: #b54708;
+  --bad: #f04438; --bad-soft: #fee9e7; --bad-ink: #b42318;
+  --oth: #7a5af8; --oth-soft: #f0ebff; --oth-ink: #5925dc;
   --display: 'Prompt', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
   color-scheme: light;
 }
 html, body { height: 100%; }
-body { margin: 0; background: radial-gradient(1200px 700px at 0% 0%, #e3fdfd 0%, transparent 60%), radial-gradient(900px 600px at 100% 0%, #ffe2e2 0%, transparent 55%), radial-gradient(900px 700px at 100% 100%, #bbded6 0%, transparent 60%), radial-gradient(800px 600px at 0% 100%, #fae3d9 0%, transparent 55%), #eef9fa; background-attachment: fixed; color: var(--ink); font-family: var(--display); font-size: 15px; line-height: 1.5; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--display); font-size: 15px; line-height: 1.5; }
 * { box-sizing: border-box; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .mono { font-family: var(--mono); }
-.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: rgb(255 255 255 / .7); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border-bottom: 1px solid var(--glass-b); }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: rgb(255 255 255 / .8); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
 .top-in { max-width: 1240px; margin: 0 auto; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
 .logo img { width: 36px; height: 28px; display: block; }
-.brand { background: var(--card); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid var(--glass-b); box-shadow: var(--shadow); border-radius: 24px; padding: 22px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.brand { background: var(--card); border-radius: 24px; padding: 22px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 .brand img { width: 120px; height: auto; }
 .brand b { font-size: 22px; line-height: 1.2; } .brand span { color: var(--muted); font-size: 14px; }
-.seg { display: inline-flex; background: rgb(23 54 63 / .07); border-radius: 999px; padding: 3px; }
+.seg { display: inline-flex; background: #e9ebf3; border-radius: 999px; padding: 3px; }
 .seg button { border: none; background: transparent; padding: 7px 14px; border-radius: 999px; font-size: 14px; color: var(--muted); }
 .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; }
-.pill { border: 1px solid var(--glass-b); padding: 7px 13px; border-radius: 999px; background: rgb(255 255 255 / .6); color: var(--ink); font-size: 14px; }
-.pill.on { background: var(--deep); color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgb(42 143 150 / .25); }
+.pill { border: none; padding: 7px 13px; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: 14px; }
+.pill.on { background: var(--blue); color: #fff; font-weight: 600; }
 .pill.done { background: var(--ok-soft); color: var(--ok-ink); }
 .sync { margin-left: auto; font-size: 13px; padding: 5px 10px; border-radius: 999px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; line-height: 1; cursor: help; }
 .sync svg { display: block; }
 .s-bad { background: var(--bad-soft); color: var(--bad-ink); }
 .sync-mini .sync { margin: 0; }
-.s-on { background: var(--ok-soft); color: var(--ok-ink); } .s-wait { background: var(--warn-soft); color: var(--warn-ink); } .s-off { background: rgb(255 255 255 / .7); color: var(--muted); }
+.s-on { background: var(--ok-soft); color: var(--ok-ink); } .s-wait { background: var(--warn-soft); color: var(--warn-ink); } .s-off { background: #f2f4f7; color: var(--muted); }
 .wrap { max-width: 1240px; margin: 0 auto; padding-block: 22px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
 h1 { margin: 0; font-size: 28px; line-height: 1.2; text-wrap: balance; }
 h2 { margin: 0; font-size: 19px; line-height: 1.3; }
 .sub { color: var(--muted); font-size: 14px; margin: 0; }
-.card { background: var(--card); -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%); border: 1px solid var(--glass-b); box-shadow: var(--shadow); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card { background: var(--card); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
 .row > .grow { flex: 999 1 520px; min-width: 0; }
 .row > .side { flex: 1 1 320px; min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-.kpi { border-radius: 18px; padding: 14px 16px; background: var(--card); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid var(--glass-b) !important; box-shadow: var(--shadow); }
+.kpi { border-radius: 18px; padding: 14px 16px; background: var(--card); }
 .kpi b { display: block; font-size: 30px; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .kpi span { font-size: 13px; color: var(--muted); }
-.btn { border: 1px solid rgb(23 54 63 / .14); background: rgb(255 255 255 / .75); color: var(--ink); padding: 10px 16px; border-radius: 999px; font-weight: 600; min-height: 44px; }
-.btn.pri { background: var(--deep); color: #fff; border-color: transparent; box-shadow: 0 6px 16px rgb(42 143 150 / .28); }
+.btn { border: 1px solid #d0d5dd; background: var(--card); color: #344054; padding: 10px 16px; border-radius: 999px; font-weight: 600; min-height: 44px; }
+.btn.pri { background: var(--blue); color: #fff; border-color: var(--blue); }
 .btn.dark { background: var(--ink); color: #fff; border-color: var(--ink); }
-.btn.lime { background: rgb(255 255 255 / .9); color: var(--blue-ink); border-color: transparent; }
+.btn.lime { background: var(--lime); color: var(--ink); border-color: var(--lime); }
 .btn.oth { background: var(--oth); color: #fff; border-color: var(--oth); }
-.btn.red { background: rgb(255 255 255 / .75); color: var(--bad-ink); border-color: #f3b2b6; }
+.btn.red { background: var(--card); color: var(--bad-ink); border-color: #fda29b; }
 .btn.sm { padding: 6px 12px; min-height: 36px; font-size: 13px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .c-ok { background: var(--ok-soft); color: var(--ok-ink); } .c-warn { background: var(--warn-soft); color: var(--warn-ink); }
 .c-bad { background: var(--bad-soft); color: var(--bad-ink); } .c-oth { background: var(--oth-soft); color: var(--oth-ink); }
-.c-blue { background: var(--blue-soft); color: var(--blue-ink); } .c-gray { background: rgb(23 54 63 / .07); color: var(--muted); }
+.c-blue { background: var(--blue-soft); color: var(--blue-ink); } .c-gray { background: #f2f4f7; color: #475467; }
 label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-input.in, select.in, textarea.in { border: 1px solid rgb(23 54 63 / .14); border-radius: 12px; padding: 10px 12px; background: rgb(255 255 255 / .8); width: 100%; min-width: 0; font-size: 15px; color: var(--ink); }
+input.in, select.in, textarea.in { border: 1px solid #d0d5dd; border-radius: 12px; padding: 10px 12px; background: var(--card); width: 100%; min-width: 0; font-size: 15px; color: var(--ink); }
 .tbl-wrap { overflow-x: auto; border-radius: 14px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-tr.click { cursor: pointer; } tr.click:hover { background: rgb(227 253 253 / .6); } tr.sel { background: rgb(166 227 233 / .45); }
+td { padding: 9px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+tr.click { cursor: pointer; } tr.click:hover { background: #f8f9fc; } tr.sel { background: var(--blue-soft); }
 td .chip { white-space: nowrap; }
 /* count pages: left and right boxes share one height, each scrolls inside */
 .pair { align-items: stretch; } .pair > * { height: max(480px, calc(100vh - 300px)); overflow-y: auto; }
@@ -112,71 +108,70 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .compact { font-size: 13px; gap: 8px !important; } .compact .btn { padding: 5px 10px; min-height: 32px; font-size: 12.5px; } .compact .tog { padding: 4px 9px; min-height: 30px; font-size: 12px; }
 .compact .card { padding: 10px !important; } .compact [style*="font-size:22px"] { font-size: 17px !important; } .compact [style*="font-size:17px"] { font-size: 14px !important; } .compact .sub { font-size: 12px; } .compact h2 { font-size: 15px; }
 .compact .sticker { width: 220px; transform: none; filter: drop-shadow(0 4px 10px rgb(18 24 38 / .15)); }
-.ver { font: 600 11px 'JetBrains Mono', monospace; color: var(--blue-ink); background: rgb(203 241 245 / .8); border-radius: 999px; padding: 2px 7px; margin-left: 4px; vertical-align: middle; }
-.tile { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; border: 1px solid rgb(255 255 255 / .7); box-shadow: 0 4px 14px rgb(38 104 112 / .08); transition: transform .15s; } .tile:hover { transform: translateY(-2px); }
+.ver { font: 600 11px 'JetBrains Mono', monospace; color: var(--muted); background: #f2f4f7; border-radius: 999px; padding: 2px 7px; margin-left: 4px; vertical-align: middle; }
+.tile { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; border: none; }
 .tile b { font-size: 15px; } .tile .p { font-size: 24px; font-weight: 700; line-height: 1.2; } .tile small { font-size: 12px; }
-.bar { height: 10px; background: rgb(23 54 63 / .07); border-radius: 6px; overflow: hidden; display: flex; }
+.bar { height: 10px; background: #eef0f6; border-radius: 6px; overflow: hidden; display: flex; }
 .bar i { display: block; height: 100%; }
-.msg { padding: 10px 14px; border-radius: 12px; font-size: 14px; background: rgb(255 255 255 / .6); }
+.msg { padding: 10px 14px; border-radius: 12px; font-size: 14px; background: #f2f4f7; }
 .msg.ok { background: var(--ok-soft); color: var(--ok-ink); } .msg.bad { background: var(--bad-soft); color: var(--bad-ink); } .msg.warn { background: var(--warn-soft); color: var(--warn-ink); }
-.drop { border: 2px dashed #a6e3e9; border-radius: 18px; padding: 22px; background: rgb(227 253 253 / .5); text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.drop { border: 2px dashed #c5cdfd; border-radius: 18px; padding: 22px; background: #f7f8ff; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
 /* phone */
-.phone { max-width: 440px; margin: 0 auto; min-height: calc(100vh - 60px); display: flex; flex-direction: column; background: transparent; }
+.phone { max-width: 440px; margin: 0 auto; min-height: calc(100vh - 60px); display: flex; flex-direction: column; background: var(--bg); }
 .pbody { flex: 1 1 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; padding-bottom: 110px; }
-.bnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: rgb(255 255 255 / .72); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border-top: 1px solid var(--glass-b); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.bnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
 .bnav-in { max-width: 440px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; padding: 6px 6px 10px; }
 .bnav button { border: none; background: none; font-size: 12px; color: var(--muted); padding: 8px 2px; }
 .bnav button.on { color: var(--blue); font-weight: 600; }
-.bnav .fab { justify-self: center; width: 62px; height: 62px; margin-top: -26px; border-radius: 50%; background: var(--deep); color: #fff; font-weight: 700; font-size: 14px; border: 4px solid rgb(255 255 255 / .9); box-shadow: 0 8px 22px rgb(42 143 150 / .35); }
-.hero { background: var(--deep); box-shadow: 0 12px 30px rgb(42 143 150 / .25); color: #fff; border-radius: 24px; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
-.dark { background: var(--deep); color: #fff; }
-.areahead { box-shadow: 0 12px 30px rgb(42 143 150 / .22); border-radius: 0 0 26px 26px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.bnav .fab { justify-self: center; width: 62px; height: 62px; margin-top: -26px; border-radius: 50%; background: var(--lime); color: var(--ink); font-weight: 700; font-size: 14px; border: 4px solid var(--card); }
+.hero { background: var(--blue); color: #fff; border-radius: 24px; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.dark { background: var(--ink); color: #fff; }
+.areahead { border-radius: 0 0 26px 26px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .cnt3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; }
 .cnt3 > * { border-radius: 14px; padding: 8px 4px; display: flex; flex-direction: column; border: none; color: inherit; }
 .cnt3 b { font-size: 22px; line-height: 1.1; }
-.tabs3 { display: flex; gap: 4px; background: rgb(23 54 63 / .07); border-radius: 999px; padding: 4px; }
+.tabs3 { display: flex; gap: 4px; background: #e9ebf3; border-radius: 999px; padding: 4px; }
 .tabs3 button { flex: 1 1 0; border: none; background: transparent; border-radius: 999px; padding: 8px 4px; font-size: 13px; color: #475467; }
 .tabs3 button.on { background: var(--card); color: var(--ink); font-weight: 600; }
-.li { background: var(--card); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid var(--glass-b) !important; box-shadow: 0 4px 14px rgb(38 104 112 / .07); border-radius: 16px; padding: 11px 14px; display: flex; gap: 10px; align-items: center; text-align: left; border: none; width: 100%; }
+.li { background: var(--card); border-radius: 16px; padding: 11px 14px; display: flex; gap: 10px; align-items: center; text-align: left; border: none; width: 100%; }
 .li .t { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .li .t span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .dot { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; }
-.scanbox { border: 2px dashed rgb(227 253 253 / .7); border-radius: 20px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-#scanIn { width: 100%; border: 1px solid rgb(255 255 255 / .35); border-radius: 12px; padding: 12px; font-family: var(--mono); font-size: 20px; background: rgb(255 255 255 / .16); color: #fff; text-transform: uppercase; }
-#roomIn::placeholder { color: rgb(255 255 255 / .7); }
-#scanIn::placeholder { color: rgb(255 255 255 / .7); text-transform: none; }
-.rcard { background: var(--card); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid var(--glass-b); box-shadow: 0 4px 14px rgb(38 104 112 / .07); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.scanbox { border: 2px dashed var(--lime); border-radius: 20px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+#scanIn { width: 100%; border: none; border-radius: 12px; padding: 12px; font-family: var(--mono); font-size: 20px; background: #2a3242; color: #fff; text-transform: uppercase; }
+#scanIn::placeholder { color: #98a2b3; text-transform: none; }
+.rcard { background: var(--card); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .rcard.oth { border: 2px solid var(--oth); } .rcard.unk { border: 2px solid var(--bad); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.tog { border: 1px solid rgb(23 54 63 / .14); background: rgb(255 255 255 / .75); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #344054; min-height: 40px; }
+.tog { border: 1px solid #d0d5dd; background: var(--card); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #344054; min-height: 40px; }
 .tog[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
 .cond { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.cond button { border: 1px solid var(--glass-b); border-radius: 14px; padding: 10px 2px; font-weight: 600; font-size: 13px; background: rgb(255 255 255 / .75); min-height: 44px; }
+.cond button { border: none; border-radius: 14px; padding: 10px 2px; font-weight: 600; font-size: 13px; background: var(--card); min-height: 44px; }
 .cond button[aria-pressed="true"] { background: var(--ok); color: #fff; }
-.cond button.w[aria-pressed="true"] { background: var(--warn); color: #fff; }
-.sheetbg { position: fixed; inset: 0; z-index: 20; background: rgb(23 54 63 / .45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
-.sheet { width: 100%; max-width: 440px; background: rgb(246 252 252 / .92); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-radius: 26px 26px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
+.cond button.w[aria-pressed="true"] { background: var(--warn); color: #1d0e00; }
+.sheetbg { position: fixed; inset: 0; z-index: 20; background: rgb(18 24 38 / .7); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.sheet { width: 100%; max-width: 440px; background: var(--bg); border-radius: 26px 26px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
 .sticker { align-self: center; width: 300px; max-width: 100%; transform: none; }
 .sticker canvas { width: 100%; height: auto; display: block; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 .book { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .mini { background: var(--card); border-radius: 12px; padding: 9px 11px; border: none; border-top: 6px solid var(--ok); text-align: left; display: flex; flex-direction: column; font-size: 12px; min-width: 0; }
 .mini b { font-family: var(--mono); font-size: 14px; } .mini span { overflow-wrap: anywhere; }
-.toast { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); z-index: 30; background: rgb(23 54 63 / .88); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: calc(100% - 32px); }
+.toast { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); z-index: 30; background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: calc(100% - 32px); }
 .confirm { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--bad-soft); color: var(--bad-ink); }
 /* computer: side menu */
 .shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
-.side-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: rgb(255 255 255 / .55); -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%); border-right: 1px solid var(--glass-b); display: flex; flex-direction: column; gap: 14px; padding: 16px 12px 16px max(12px, env(safe-area-inset-left, 0px)); }
+.side-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--card); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; padding: 16px 12px 16px max(12px, env(safe-area-inset-left, 0px)); }
 .side-top { display: flex; flex-direction: column; gap: 10px; padding: 4px 6px; }
 .side-top .sync { margin: 0; align-self: flex-start; }
 .nav-list { display: flex; flex-direction: column; gap: 4px; }
-.nav-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; color: var(--ink); border-radius: 12px; padding: 10px 12px; font-size: 15px; min-height: 44px; }
-.nav-item:hover { background: rgb(255 255 255 / .7); }
-.nav-item.on { background: var(--deep); color: #fff; font-weight: 600; box-shadow: 0 6px 16px rgb(42 143 150 / .28); }
+.nav-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; color: #344054; border-radius: 12px; padding: 10px 12px; font-size: 15px; min-height: 44px; }
+.nav-item:hover { background: #f2f4f7; }
+.nav-item.on { background: var(--blue); color: #fff; font-weight: 600; }
 .nav-item.done:not(.on) .nav-num { background: var(--ok-soft); color: var(--ok-ink); }
-.nav-num { flex: 0 0 28px; height: 28px; border-radius: 9px; background: rgb(255 255 255 / .8); color: var(--blue-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; }
+.nav-num { flex: 0 0 28px; height: 28px; border-radius: 9px; background: #f2f4f7; color: #475467; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; }
 .nav-item.on .nav-num { background: rgb(255 255 255 / .2); color: #fff; }
 .nav-label { flex: 1 1 auto; min-width: 0; }
-.nav-badge { flex: 0 0 auto; background: var(--orange); color: #7a2730; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+.nav-badge { flex: 0 0 auto; background: var(--orange); color: #1d0e00; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
 .nav-sep { height: 1px; background: var(--line); margin: 6px 8px; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .shell-main { min-width: 0; }
@@ -188,8 +183,8 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
   .nav-item { width: auto; white-space: nowrap; padding: 8px 12px; min-height: 40px; }
   .nav-sep, .side-foot { display: none; }
 }
-.dupbg { position: fixed; inset: 0; z-index: 40; background: rgb(23 54 63 / .4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
-.duppop { width: 100%; max-width: 340px; background: rgb(255 255 255 / .9); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 20px 50px rgb(23 54 63 / .25); border-radius: 24px; padding: 22px 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; border-top: 8px solid var(--warn); }
+.dupbg { position: fixed; inset: 0; z-index: 40; background: rgb(18 24 38 / .55); display: flex; align-items: center; justify-content: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+.duppop { width: 100%; max-width: 340px; background: var(--card); border-radius: 24px; padding: 22px 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; border-top: 8px solid var(--warn); }
 .duppop b#dupH { font-size: 24px; color: var(--warn-ink); }
 .duppop.oth { border-top-color: var(--oth); } .duppop.oth b#othH { font-size: 22px; color: var(--oth-ink); } .duppop.oth .dupicon { background: var(--oth); color: #fff; }
 .dupicon { width: 56px; height: 56px; border-radius: 50%; background: var(--warn); color: #1d0e00; font-size: 32px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
@@ -310,7 +305,7 @@ const myDups = () => { const { dups, cur } = compute(), out = []; for (const [co
 function dupSyncPop() {
   const l = myDups(); if (!l.length || S.dupSyncHide === l.length || S.mode !== 'app' || S.dupPop || S.othPop) return '';
   return `<div class="dupbg" role="alertdialog" aria-labelledby="dsH"><div class="duppop" data-stop="1" style="max-width:380px;align-items:stretch;text-align:left"><span class="dupicon" aria-hidden="true" style="align-self:center">!</span><b id="dsH" style="text-align:center">เน็ตกลับมาแล้ว · พบรายการซ้ำ ${l.length} รายการ</b><span class="sub" style="text-align:center">ตอนเน็ตหลุด มีเครื่องอื่นนับรายการเหล่านี้ไปก่อนแล้ว ระบบนับครั้งเดียว</span>
-    <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto">${l.map(d => `<div class="row" style="align-items:center;gap:8px;background:var(--soft);border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(d.code)}</b><br><span class="sub">${esc(master.get(d.code)?.name || '')} · ${esc(d.first?.by || '')} นับก่อน ${d.first ? hm(d.first.t) : ''} ที่ ${esc(d.first?.areaName || '')}</span></span><button class="btn sm red" data-a="dupdrop" data-v="${esc(d.code)}" data-id="${esc(d.id)}">ลบ</button></div>`).join('')}</div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto">${l.map(d => `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(d.code)}</b><br><span class="sub">${esc(master.get(d.code)?.name || '')} · ${esc(d.first?.by || '')} นับก่อน ${d.first ? hm(d.first.t) : ''} ที่ ${esc(d.first?.areaName || '')}</span></span><button class="btn sm red" data-a="dupdrop" data-v="${esc(d.code)}" data-id="${esc(d.id)}">ลบ</button></div>`).join('')}</div>
     <button class="btn red" data-a="dupdropall">ลบรายการซ้ำทั้งหมด (${l.length})</button><button class="btn" data-a="duplater">ไว้ทีหลัง</button></div></div>`;
 }
 const lostOf = code => compute().lost.get(code) || null;
@@ -319,7 +314,7 @@ const markChoices = (code, act, extra = '') => {
   const L = lostOf(code);
   if (L) return `<div class="card" style="background:var(--bad-soft, #fef3f2);padding:12px;gap:6px"><b style="color:var(--bad-ink)">บันทึกว่าสูญหายแล้ว</b><span class="sub">${esc(L.by)} · ${fmtT(L.t)}${L.remark ? ' · ' + esc(L.remark) : ''}</span><div class="row"><button class="btn sm" data-a="unlost" data-v="${esc(code)}">ยกเลิก (กลับเป็นรอตรวจ)</button></div></div>`;
   const B = (c, l, cls) => `<button class="btn ${cls}" data-a="${act}" data-v="${esc(code)}" data-c="${c}" ${extra}>${l}</button>`;
-  return `<div class="card" style="background:var(--soft);padding:12px;gap:8px"><b>บันทึกผลรายการนี้</b><span class="sub">พบของจริงแต่ยิงไม่ได้ / ไม่มีสติ๊กเกอร์ · หรือหาไม่เจอ</span>
+  return `<div class="card" style="background:#f8f9fc;padding:12px;gap:8px"><b>บันทึกผลรายการนี้</b><span class="sub">พบของจริงแต่ยิงไม่ได้ / ไม่มีสติ๊กเกอร์ · หรือหาไม่เจอ</span>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${B('ปกติ', 'พบ · ไม่มีสติ๊กเกอร์', 'pri')}${B('ชำรุด', 'พบ · ชำรุด', '')}${B('รอซ่อม', 'พบ · รอซ่อม', '')}${B('ไม่ใช้งาน', 'พบ · ไม่ใช้งาน', '')}</div>
     <input class="in" id="mkRemark-${esc(code)}" placeholder="Remark (ไม่บังคับ)">${B('lost', 'สูญหาย / หาไม่เจอ', 'red')}</div>`;
 };
@@ -674,7 +669,7 @@ function webReport() {
     <select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select></div>
     ${tab === 'cr' ? crPanel() : ''}${tab === 'mv' ? `<div class="row" style="justify-content:flex-end">${bulkMoveBox(S.repCC || '', 'rep')}</div>` : ''}
     <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
-  for (const r of d.rows.slice(0, 1000)) { const tot = (tab === 'sum' || d.totRow) && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:var(--soft)' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
+  for (const r of d.rows.slice(0, 1000)) { const tot = (tab === 'sum' || d.totRow) && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
   h += `</tbody></table></div>${d.rows.length > 1000 ? `<p class="sub">แสดง 1,000 จาก ${N(d.rows.length)} · ไฟล์ที่ดาวน์โหลดมีครบ</p>` : ''}${d.rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>`;
   if (S.msg.rep) h += `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>`;
   return h + `</main>`;
@@ -836,15 +831,15 @@ function webLive(c) {
     <div class="grid" style="grid-auto-rows:1fr">`;
   for (const x of rows) {
     const r = x.total ? x.found / x.total : 0, p = Math.round(r * 100), mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
-    const bg = r >= 1 ? 'linear-gradient(135deg,#61c0bf,#71c9ce)' : r >= .66 ? 'rgb(166 227 233 / .85)' : r >= .33 ? 'rgb(203 241 245 / .85)' : r > 0 ? 'rgb(227 253 253 / .85)' : 'rgb(255 255 255 / .6)';
-    const fg = r >= 1 ? '#0e3b3e' : '#17363f';
+    const bg = r >= 1 ? '#12b76a' : r >= .66 ? '#6ce9a6' : r >= .33 ? '#a6f4c5' : r > 0 ? '#d1fadf' : '#f2f4f7';
+    const fg = r >= 1 ? '#ffffff' : r > 0 ? '#053321' : '#344054';
     const flags = [mv ? `<span class="chip c-oth">ย้าย CC ${mv}</span>` : '', d ? `<span class="chip c-warn">รอตัดสิน ${d}</span>` : '', u ? `<span class="chip c-bad">นอกทะเบียน ${u}</span>` : '', ccNameDiff(x.code) ? '<span class="chip c-warn" title="ชื่อแผนกในไฟล์ไม่ตรงกัน · ยึดรหัส CC">⚠ ชื่อไม่ตรง</span>' : '', ccClosed(x.code) ? `<span class="chip" style="background:#121826;color:#fff" title="${closeTxt(ccClosed(x.code))}">✓ ปิดงานแล้ว</span>` : ''].join('');
     h += `<button class="tile click" data-a="opencc" data-v="${esc(x.code)}" title="เปิดรายละเอียด ${esc(x.code)}" style="background:${bg};color:${fg};cursor:pointer"><b class="mono">${esc(x.code)}</b>${x.name !== String(x.code) ? `<small style="opacity:.85">${esc(x.name)}</small>` : ''}<span class="p">${p}%</span><small>ตรวจ ${N(x.found)}/${N(x.total)} · เหลือ ${N(x.total - x.found)}</small>${flags ? `<span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${flags}</span>` : ''}</button>`;
   }
   h += `</div>${rows.length ? '' : '<p class="sub">ไม่พบ CC</p>'}</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
   h += teamPanel();
   const last = [...cur.values()].sort((a, b) => b.t - a.t).slice(0, 8);
-  h += `<section class="card"><h2>สแกนล่าสุด</h2>${last.map(s2 => `<button class="li" data-a="openitemcc" data-v="${esc(s2.code)}" style="background:var(--soft)"><span class="t"><b class="mono">${esc(s2.code)}</b><span>${esc(master.get(s2.code)?.name || s2.uname || 'ไม่อยู่ในทะเบียน')} · ${esc(s2.areaName)}</span></span>${badge(s2)}</button>`).join('') || '<p class="sub">—</p>'}</section></aside></div>`;
+  h += `<section class="card"><h2>สแกนล่าสุด</h2>${last.map(s2 => `<button class="li" data-a="openitemcc" data-v="${esc(s2.code)}" style="background:#f8f9fc"><span class="t"><b class="mono">${esc(s2.code)}</b><span>${esc(master.get(s2.code)?.name || s2.uname || 'ไม่อยู่ในทะเบียน')} · ${esc(s2.areaName)}</span></span>${badge(s2)}</button>`).join('') || '<p class="sub">—</p>'}</section></aside></div>`;
   return h + `</main>`;
 }
 // right panel: every device — online now?, counting which CC, how many items it counted · Admin first, then counters
@@ -862,7 +857,7 @@ function teamPanel() {
     const lead = x.role === 'lead', where = x.on && x.p ? (x.p.mode === 'web' ? 'ใช้บนคอม' : x.p.areaName ? `กำลังนับ ${esc(x.p.areaName)}${x.p.area && x.p.areaName !== String(x.p.area) ? ` (${esc(x.p.area)})` : ''}` : 'ยังไม่เลือก CC') : x.areaName ? `ล่าสุดที่ ${esc(x.areaName)}` : '';
     h += `<div class="row" style="align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f2f5"><span class="dot" style="position:relative;flex:none;background:${lead ? 'var(--blue)' : '#e4e7ec'};color:${lead ? '#fff' : '#344054'}">${esc((x.by || '?').slice(0, 1))}<i style="position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;border:2px solid #fff;background:${x.on ? 'var(--ok)' : '#98a2b3'}" aria-label="${x.on ? 'ออนไลน์' : 'ออฟไลน์'}"></i></span>
       <span style="flex:1;min-width:0"><b>${esc(x.by || '?')}</b> <span class="chip ${lead ? 'c-blue' : 'c-gray'}" style="font-size:11px">${lead ? 'Admin' : 'ผู้ตรวจนับ'}</span><br><span class="sub">${x.on ? '<b style="color:var(--ok-ink)">ออนไลน์</b>' : `ออฟไลน์${x.t ? ' · ' + hm(x.t) : ''}`}${where ? ' · ' + where : ''}<br>เครื่อง ${esc(x.dev)}${x.dev === dev ? ' (เครื่องนี้)' : ''}</span></span>
-      <span style="flex:none;min-width:54px;text-align:center;background:var(--orange);color:var(--ink);border-radius:14px;padding:6px 8px;line-height:1.1"><b style="font-size:18px">${N(x.n)}</b><br><span style="font-size:11px">รายการ</span></span></div>`;
+      <span style="flex:none;min-width:54px;text-align:center;background:var(--orange);color:#1d0e00;border-radius:14px;padding:6px 8px;line-height:1.1"><b style="font-size:18px">${N(x.n)}</b><br><span style="font-size:11px">รายการ</span></span></div>`;
   }
   return h + `</section>`;
 }
@@ -932,7 +927,7 @@ function ccDetail(code, ccCode) {
   const { cur } = compute(), s2 = cur.get(code), a = master.get(code);
   if (s2) {
     let h = inboxDetail(code);
-    h += `<div class="card" style="background:var(--soft);padding:12px;gap:8px"><b>แก้ไขผลนับ</b><span class="sub">สภาพ</span><div class="chips">${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(x => `<button class="tog" aria-pressed="${s2.cond === x}" data-a="wcond" data-c="${x}" data-v="${esc(code)}">${x}</button>`).join('')}</div>
+    h += `<div class="card" style="background:#f8f9fc;padding:12px;gap:8px"><b>แก้ไขผลนับ</b><span class="sub">สภาพ</span><div class="chips">${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(x => `<button class="tog" aria-pressed="${s2.cond === x}" data-a="wcond" data-c="${x}" data-v="${esc(code)}">${x}</button>`).join('')}</div>
       <div class="row"><input class="in" id="wRemark" value="${esc(s2.remark)}" placeholder="Remark" style="flex:1"><button class="btn sm" data-a="wremark" data-v="${esc(code)}">บันทึก</button></div>
       ${S.confirmUndo === code ? `<div class="confirm"><b>ยกเลิกผลนับ ${esc(code)}?</b><span>รายการจะกลับไปเป็น "รอตรวจ"</span><div class="row"><button class="btn red" data-a="wundo" data-v="${esc(code)}">ยกเลิกผลนับ</button><button class="btn" data-a="noundo">ไม่ใช่</button></div></div>` : `<button class="btn sm red" data-a="askundo" data-v="${esc(code)}" style="align-self:flex-start">ยกเลิกผลนับ</button>`}</div>`;
     return h;
@@ -974,7 +969,7 @@ function inboxDetail(code) {
   const { cur, hist } = compute(), s = cur.get(code), a = master.get(code);
   if (!s) return '<p class="sub">ไม่มีผลนับ</p>';
   let h = `<div class="row" style="justify-content:space-between"><b class="mono" style="font-size:22px">${esc(code)}</b>${badge(s)}</div><div style="font-size:17px">${esc(a?.name || s.uname || '(คนนับไม่ได้กรอกชื่อ)')}${a ? ` · Class ${esc(a.cls)}` : ''}</div>`;
-  if (a) h += `<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;text-align:center"><div class="card" style="background:var(--soft);padding:12px"><span class="sub">ในทะเบียน</span><b>${esc(a.ccName)}</b>${a.ccName !== String(a.cc) ? `<span class="sub mono">${esc(a.cc)}</span>` : ''}</div><b style="color:var(--oth)">${isOther(s) ? '→' : '='}</b><div class="card" style="background:${isOther(s) ? 'var(--oth-soft)' : 'var(--ok-soft)'};padding:12px"><span class="sub">พบจริงที่</span><b>${esc(s.areaName)}</b><span class="sub">${esc(s.room || '')}</span></div></div>`;
+  if (a) h += `<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;text-align:center"><div class="card" style="background:#f4f5fa;padding:12px"><span class="sub">ในทะเบียน</span><b>${esc(a.ccName)}</b>${a.ccName !== String(a.cc) ? `<span class="sub mono">${esc(a.cc)}</span>` : ''}</div><b style="color:var(--oth)">${isOther(s) ? '→' : '='}</b><div class="card" style="background:${isOther(s) ? 'var(--oth-soft)' : 'var(--ok-soft)'};padding:12px"><span class="sub">พบจริงที่</span><b>${esc(s.areaName)}</b><span class="sub">${esc(s.room || '')}</span></div></div>`;
   if (a && !isOther(s) && !s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc)) h += `<div class="msg warn">⚠ CC ตรงกัน (${esc(a.cc)}) แต่ชื่อแผนกไม่ตรง: ทะเบียน "${esc(a.ccName)}" · พบที่ "${esc(s.areaName)}" · ไม่ต้องย้าย</div>`;
   h += `<p class="sub">${esc(s.by)} · ${fmtT(s.t)} · สภาพ <b>${esc(s.cond)}</b>${s.remark ? ' · ' + esc(s.remark) : ''}</p><div class="row" style="align-items:center">${srcChip(s)}${!a ? '' : s.src === 'qr' ? '<span class="chip c-ok">QR ครบแล้ว · ไม่ต้องสร้างป้าย</span>' : s.printedAt ? `<span class="chip c-ok">ติด QR แล้ว ${fmtT(s.printedAt)}</span>` : '<span class="chip c-blue">ยังไม่มี QR · อยู่ในคิวสร้าง QR</span>'}</div>`;
   const B = (act, label, cls) => `<button class="btn ${cls || ''}" data-a="rv" data-act="${act}" data-v="${esc(code)}">${label}</button>`;
@@ -986,7 +981,7 @@ function inboxDetail(code) {
   if ((s.cond === 'ชำรุด' || s.cond === 'รอซ่อม') && !s.rv.dmg) h += B('dmg_ack', 'รับทราบสภาพ', 'pri');
   if (!isOther(s) || s.rv.move) h += B('recount', 'สั่งนับซ้ำ');
   h += `</div><div><span class="sub">ป้าย + การโอนย้าย (แตะเพื่อเปิด/ปิด)</span><div class="chips" style="margin-top:6px">${flagChips(s, 'leadflag')}</div></div>`;
-  h += `<div class="card" style="background:var(--soft);padding:12px"><b>ประวัติ</b>${(hist.get(code) || []).map(x => `<span class="sub">${fmtT(x.t)} · ${esc(x.by)} · ${esc(x.txt)}</span>`).join('')}</div>`;
+  h += `<div class="card" style="background:#f8f9fc;padding:12px"><b>ประวัติ</b>${(hist.get(code) || []).map(x => `<span class="sub">${fmtT(x.t)} · ${esc(x.by)} · ${esc(x.txt)}</span>`).join('')}</div>`;
   return h;
 }
 function flagChips(s, act) {
@@ -1004,11 +999,11 @@ function webClose(c) {
     h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 2 นับ');
     { const real = (meta.areas || []).filter(a => !a.shared), shut = real.filter(a => ccClosed(a.code)).length; h += ck(shut === real.length, 'ผู้ตรวจนับปิดงานครบทุก CC', `ปิดแล้ว ${shut} / ${real.length} CC${shut < real.length ? ' · ที่ยังไม่ปิดดูได้ที่เมนู 2 นับ' : ''}`); }
     h += ck(open === 0, 'เรื่องที่ต้องตัดสินเคลียร์หมด', open ? `ค้าง ${open} เรื่อง · ดูที่เมนู 2 นับ` : 'ครบ');
-    h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:var(--soft)"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:var(--soft)"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
+    h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
     h += `<button class="btn dark" data-a="closeround">${open ? `ปิดรอบ (ยังค้าง ${open} เรื่อง)` : 'ปิดรอบ'}</button>${open ? '<p class="sub">ปิดได้ แต่เรื่องที่ค้างจะติดไปในไฟล์ส่งออกตามสถานะล่าสุด</p>' : ''}`;
   }
   h += `</section><section class="grow" style="display:flex;flex-direction:column;gap:12px"><h1>ส่งออก</h1>${closed ? '' : '<p class="sub">ก่อนปิดรอบ ไฟล์จะเขียนว่า "ฉบับร่าง"</p>'}<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
-    <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:rgb(255 255 255 / .82)">XLSX · ไฟล์หลัก</span><b style="font-size:18px">ผลนับตามแม่แบบเดิม</b><span style="font-size:14px;color:#e3e8ff">สรุป · Data · Transfer · write-off · สรุป write-off · คิวป้าย · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main">ดาวน์โหลด</button></div>
+    <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:#d6ddff">XLSX · ไฟล์หลัก</span><b style="font-size:18px">ผลนับตามแม่แบบเดิม</b><span style="font-size:14px;color:#e3e8ff">สรุป · Data · Transfer · write-off · สรุป write-off · คิวป้าย · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--oth-ink)">XLSX · SAP AS02</span><b style="font-size:18px">Transfer ย้ายแผนก</b><span class="sub">อนุมัติแล้ว ${c.transfer.length + c.cleared.filter(s => s.rv.move === 'approved' && !s.flags.pendingTransfer).length} รายการ</span><button class="btn" data-a="export" data-v="transfer">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--bad-ink)">XLSX · SAP ABAVN</span><b style="font-size:18px">Write-Off</b><span class="sub">${N(T.left)} รหัสที่ยังไม่พบ</span><button class="btn" data-a="export" data-v="writeoff">ดาวน์โหลด</button></div>
     <div class="card"><span style="font-size:12px;font-weight:600;color:var(--blue-ink)">PDF</span><b style="font-size:18px">สติ๊กเกอร์ QR</b><span class="sub">คิวพิมพ์ ${c.reprint.length + c.namebad.length} ดวง</span><button class="btn" data-a="web" data-v="stickers">ไปหน้าพิมพ์</button></div></div>
@@ -1088,7 +1083,7 @@ function appView(c) {
   if (S.othPop && S.mode === 'app' && !S.dupPop) { const a = master.get(S.othPop.code), s = compute().cur.get(S.othPop.code);
     if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
       h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:var(--soft)"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:#f4f5fa"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
         <span class="sub">บันทึกว่าพบแล้ว · อยู่ที่นี่เพราะ?</span><div class="chips" style="justify-content:center">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}</div>
         <button class="btn dark" data-a="closeoth" style="align-self:stretch">ตกลง</button></div></div>`; } }
   if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
@@ -1106,9 +1101,9 @@ function myAreas() { return (meta.areas || []).filter(a => a.assignee === S.user
 function appHome(c) {
   const st = areaStats(), T = totals(), { cur } = compute();
   const mineN = [...cur.values()].filter(x => x.by === S.user.name).length;
-  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:var(--ink)">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span></div>`;
+  let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span></div>`;
   if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
-  h += `<div class="hero"><span style="font-size:13px;color:rgb(255 255 255 / .82)">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:rgb(255 255 255 / .82)">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:rgb(255 255 255 / .25)"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:rgb(255 255 255 / .82)">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
+  h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
     ${jobList().filter(j => j.status !== 'closed').length > 1 ? `<div class="card" style="gap:6px;padding:12px"><span class="sub">งานที่นับอยู่ (แตะเพื่อสลับ)</span><div class="chips">${jobList().filter(j => j.status !== 'closed').map(j => `<button class="tog" aria-pressed="${j.id === meta.id}" data-a="pickjob" data-v="${esc(j.id)}">${j.id === meta.id ? '✓ ' : ''}${esc(j.name)}</button>`).join('')}</div></div>` : ''}
     <b style="font-size:18px">เลือก Cost Center ที่จะนับ</b><input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">`;
   const list = (meta.areas || []).slice().sort((a, b) => { const pa = st.get(String(a.code)), pb = st.get(String(b.code)); const da = pa && pa.total && pa.found >= pa.total, dbb = pb && pb.total && pb.found >= pb.total; const ca = !!ccClosed(a.code), cb = !!ccClosed(b.code); return (ca - cb) || (da - dbb) || a.name.localeCompare(b.name); });
@@ -1138,9 +1133,9 @@ function appArea() {
   // own items found elsewhere
   const elsewhere = new Map(); for (const s of cur.values()) { const a = master.get(s.code); if (a && String(a.cc) === code && String(s.area) !== code) elsewhere.set(s.code, s.areaName); }
   const list = S.areaTab === 'left' ? left : S.areaTab === 'found' ? own : oth;
-  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#e3fdfd;font-weight:600">คุณอยู่ที่นี่</span><br><b style="font-size:21px">${esc(S.area.name)}</b>${S.area.shared ? '' : ` <span class="mono" style="font-size:13px;color:rgb(255 255 255 / .8)">${esc(code)}</span>`}</span><button class="btn sm lime" data-a="areapick">เปลี่ยน</button></div>
-    <label class="f" style="color:rgb(255 255 255 / .8)">ห้อง / จุดย่อย<input class="in" id="roomIn" value="${esc(S.room)}" placeholder="เช่น ห้องธุรการ ชั้น 2" style="background:rgb(255 255 255 / .16);border-color:rgb(255 255 255 / .35);color:#fff"></label>
-    <div class="cnt3"><button data-a="areatab" data-v="found" style="background:var(--ok);color:#fff"><b>${own.length}</b><span style="font-size:12px">เจอแล้ว</span></button><button data-a="areatab" data-v="left" style="background:var(--warn);color:var(--ink)"><b>${S.area.shared ? '—' : left.length}</b><span style="font-size:12px">ยังไม่เจอ</span></button><button data-a="areatab" data-v="other" style="background:var(--oth);color:#fff"><b>${oth.length}</b><span style="font-size:12px">ของแผนกอื่น</span></button></div></div>
+  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:var(--lime);font-weight:600">คุณอยู่ที่นี่</span><br><b style="font-size:21px">${esc(S.area.name)}</b>${S.area.shared ? '' : ` <span class="mono" style="font-size:13px;color:#c7cbd4">${esc(code)}</span>`}</span><button class="btn sm lime" data-a="areapick">เปลี่ยน</button></div>
+    <label class="f" style="color:#c7cbd4">ห้อง / จุดย่อย<input class="in" id="roomIn" value="${esc(S.room)}" placeholder="เช่น ห้องธุรการ ชั้น 2" style="background:#2a3242;border-color:#2a3242;color:#fff"></label>
+    <div class="cnt3"><button data-a="areatab" data-v="found" style="background:var(--ok);color:#fff"><b>${own.length}</b><span style="font-size:12px">เจอแล้ว</span></button><button data-a="areatab" data-v="left" style="background:var(--warn);color:#1d0e00"><b>${S.area.shared ? '—' : left.length}</b><span style="font-size:12px">ยังไม่เจอ</span></button><button data-a="areatab" data-v="other" style="background:var(--oth);color:#fff"><b>${oth.length}</b><span style="font-size:12px">ของแผนกอื่น</span></button></div></div>
     <div class="pbody"><div class="tabs3">${[['left', 'ยังไม่เจอ'], ['found', 'เจอแล้ว'], ['other', 'แผนกอื่น']].map(([k, l]) => `<button class="${S.areaTab === k ? 'on' : ''}" data-a="areatab" data-v="${k}">${l}</button>`).join('')}</div>`;
   for (const x of list.slice(0, 80)) {
     const c2 = x.code, a = master.get(c2);
@@ -1151,7 +1146,7 @@ function appArea() {
   const dn = S.area.shared ? null : ccClosed(code);
   if (dn) h += `<div class="msg ok" style="display:flex;flex-direction:column;gap:6px"><b>✓ CC นี้นับครบแล้ว</b><span>${closeTxt(dn)}</span><button class="btn sm" data-a="ccreopen" data-v="${esc(code)}" style="align-self:flex-start">เปิดนับต่อ</button></div>`;
   else {
-    h += `<button class="btn pri" data-a="app" data-v="scan" style="font-size:17px;padding:14px">สแกนในพื้นที่นี้</button>`;
+    h += `<button class="btn lime" data-a="app" data-v="scan" style="font-size:17px;padding:14px">สแกนในพื้นที่นี้</button>`;
     if (!S.area.shared) h += S.confirmClose === code
       ? `<div class="confirm"><b>ปิดงาน CC ${esc(S.area.name)}?</b><span>${left.length ? `ยังไม่เจอ <b>${left.length}</b> รายการ · ระบบจะบันทึกว่า "ไม่พบ" ให้ Admin ตัดสินต่อ` : 'เจอครบทุกรายการแล้ว'}</span><div class="row"><button class="btn pri" data-a="ccclose" data-v="${esc(code)}" data-n="${left.length}">ยืนยัน นับครบแล้ว</button><button class="btn" data-a="noclose">ยังก่อน</button></div></div>`
       : `<button class="btn dark" data-a="askclose" data-v="${esc(code)}">✓ ปิดงาน CC นี้ (นับครบแล้ว)</button>`;
@@ -1163,13 +1158,13 @@ function appScan() {
   if (!checkArea()) { S.app = 'area'; return appArea(); }
   if (!S.area.shared && ccClosed(S.area.code)) { S.app = 'area'; flash('CC นี้ปิดงานแล้ว · กด "เปิดนับต่อ" ถ้าจะนับเพิ่ม'); return appArea(); }
   const closed = meta.status === 'closed', { cur } = compute(), st = areaStats().get(String(S.area.code));
-  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:rgb(255 255 255 / .8)">กำลังนับที่ (แผนกที่ยืนอยู่จริง)</span><br><b style="font-size:20px">${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:#e3fdfd;font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span><button class="btn sm lime" data-a="areapick" style="margin-left:8px">เปลี่ยน</button></div>
-    <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:#e3fdfd">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มยิงข้างเครื่อง'}</b>
+  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#c7cbd4">กำลังนับที่ (แผนกที่ยืนอยู่จริง)</span><br><b style="font-size:20px">${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:var(--lime);font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span><button class="btn sm lime" data-a="areapick" style="margin-left:8px">เปลี่ยน</button></div>
+    <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:var(--lime)">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มยิงข้างเครื่อง'}</b>
     <input id="scanIn" ${S.manual ? 'inputmode="text"' : 'inputmode="none"'} placeholder="${S.manual ? 'เลข Asset' : 'ยิงสติ๊กเกอร์ QR / บาร์โค้ด'}" aria-label="รหัสที่สแกน" enterkeyhint="done" ${closed ? 'disabled' : ''}>
-    <span style="font-size:12px;color:rgb(255 255 255 / .8)">ยิงต่อได้เลย ไม่ต้องกดบันทึก · บนคอมพิมพ์รหัสแล้ว Enter ได้</span></form></div><div class="pbody">`;
+    <span style="font-size:12px;color:#c7cbd4">ยิงต่อได้เลย ไม่ต้องกดบันทึก · บนคอมพิมพ์รหัสแล้ว Enter ได้</span></form></div><div class="pbody">`;
   for (const card of S.cards.slice(0, 25)) {
     const s = cur.get(card.code), a = master.get(card.code);
-    if (card.dup) { h += `<div class="rcard"><div class="row" style="align-items:center"><span class="dot" style="background:var(--warn);color:var(--ink)">2</span><span class="t" style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--warn-ink)">นับซ้ำ · ${esc(card.dupBy)} นับไปแล้ว ${hm(card.dupT)}</span></span><button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">แก้</button></div></div>`; continue; }
+    if (card.dup) { h += `<div class="rcard"><div class="row" style="align-items:center"><span class="dot" style="background:var(--warn);color:#1d0e00">2</span><span class="t" style="flex:1;display:flex;flex-direction:column"><b class="mono">${esc(card.code)}</b><span class="sub" style="color:var(--warn-ink)">นับซ้ำ · ${esc(card.dupBy)} นับไปแล้ว ${hm(card.dupT)}</span></span><button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">แก้</button></div></div>`; continue; }
     if (!s) { h += `<div class="rcard" style="opacity:.6"><b class="mono">${esc(card.code)}</b><span class="sub">ยกเลิกแล้ว</span></div>`; continue; }
     const tick = pendingCount() && mine.some(e => e.code === card.code && !isServer(e.id)) ? '<span class="chip c-warn">รอส่ง</span>' : db ? '<span class="chip c-ok">✓✓</span>' : '';
     if (!a) {
@@ -1210,7 +1205,7 @@ function appFeed() {
   if (S.feedF === 'pending') list = list.filter(s => mine.some(e => e.code === s.code && !isServer(e.id)));
   if (S.feedF === 'other') list = list.filter(isOther);
   if (S.feedF === 'dmg') list = list.filter(s => s.cond !== 'ปกติ');
-  let h = `<div class="pbody"><b style="font-size:23px">สมุดสติ๊กเกอร์</b><div class="cnt3 dark" style="border-radius:20px;padding:12px"><div><b style="color:#e3fdfd">${cur.size ? [...cur.values()].filter(s => s.by === S.user.name).length : 0}</b><span style="font-size:12px;color:rgb(255 255 255 / .8)">สะสมแล้ว</span></div><div><b>${nToday}</b><span style="font-size:12px;color:rgb(255 255 255 / .8)">วันนี้</span></div><div><b>${nRe}</b><span style="font-size:12px;color:rgb(255 255 255 / .8)">ป้ายต้องพิมพ์ใหม่</span></div></div>
+  let h = `<div class="pbody"><b style="font-size:23px">สมุดสติ๊กเกอร์</b><div class="cnt3 dark" style="border-radius:20px;padding:12px"><div><b style="color:var(--lime)">${cur.size ? [...cur.values()].filter(s => s.by === S.user.name).length : 0}</b><span style="font-size:12px;color:#c7cbd4">สะสมแล้ว</span></div><div><b>${nToday}</b><span style="font-size:12px;color:#c7cbd4">วันนี้</span></div><div><b>${nRe}</b><span style="font-size:12px;color:#c7cbd4">ป้ายต้องพิมพ์ใหม่</span></div></div>
     <div class="chips">${[['all', 'ทั้งหมด'], ['pending', 'รอส่ง'], ['other', 'ของแผนกอื่น'], ['dmg', 'ชำรุด']].map(([k, l]) => `<button class="tog" aria-pressed="${S.feedF === k}" data-a="feedf" data-v="${k}">${l}</button>`).join('')}</div><div class="book">`;
   for (const s of list.slice(0, 120)) {
     const a = master.get(s.code), col = !a ? 'var(--bad)' : isOther(s) ? 'var(--oth)' : s.cond !== 'ปกติ' ? 'var(--warn)' : 'var(--ok)';
@@ -1235,9 +1230,9 @@ function scannerSetup() {
 }
 function appMeBlock() {
   const mineSent = db ? mine.filter(e => isServer(e.id)).length : mine.length, p = pendingCount();
-  return `<div class="card"><div class="row" style="align-items:center"><span class="dot" style="width:48px;height:48px;background:var(--orange);color:var(--ink)">${esc(S.user?.name?.slice(0, 1) || '?')}</span><span style="flex:1"><b style="font-size:19px">${esc(S.user?.name || '-')}</b><br><span class="sub">เครื่อง ${esc(dev)}</span></span></div></div>
+  return `<div class="card"><div class="row" style="align-items:center"><span class="dot" style="width:48px;height:48px;background:var(--orange);color:#1d0e00">${esc(S.user?.name?.slice(0, 1) || '?')}</span><span style="flex:1"><b style="font-size:19px">${esc(S.user?.name || '-')}</b><br><span class="sub">เครื่อง ${esc(dev)}</span></span></div></div>
     ${usbCard()}
-    ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:var(--soft)"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
+    ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
     <div class="card"><b>เกี่ยวกับ</b><p class="sub">AssetSync ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'}${isLead() ? ' · ' + esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า') : ''}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode || !isLead() ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
     ${!isLead() ? '' : `<div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>`}
@@ -1254,7 +1249,7 @@ function usbCard() {
     <button class="btn" data-a="pick" data-v="pkg">นำเข้าแพ็กเกจจากเครื่อง (.json)</button>
     ${meta ? `<p class="sub">ตอนนี้: <b>${esc(meta.name)}</b> · ${N(master.size)} รหัส</p>` : ''}
     <p class="sub">2) นับเสร็จ กดส่งออก ไฟล์จะไปอยู่ที่ Download → ต่อสาย แล้วคัดลอกไปคอม</p>
-    <div class="cnt3"><div style="background:var(--soft)"><b>${mine.length}</b><span style="font-size:11px">ผลนับในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${out}</b><span style="font-size:11px">ส่งออกแล้ว</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${Math.max(0, n)}</b><span style="font-size:11px">ยังไม่ส่งออก</span></div></div>
+    <div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ผลนับในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${out}</b><span style="font-size:11px">ส่งออกแล้ว</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${Math.max(0, n)}</b><span style="font-size:11px">ยังไม่ส่งออก</span></div></div>
     <button class="btn pri" data-a="usbreport" ${meta && mine.length ? '' : 'disabled'}>ส่งออกผลนับ (Report)</button>`;
   const last = LS.get('usbLast', null);
   if (last) h += `<div class="card" style="background:var(--ok-soft);padding:12px;gap:4px"><b>ไฟล์ล่าสุดอยู่ที่นี่</b><span class="mono" style="word-break:break-all">${esc(last.where)}/${esc(last.name)}</span><span class="sub">${fmtT(last.at)} · บนคอม: This PC → เครื่องยิง → Internal shared storage → ${esc(last.where.replace(/\//g, ' → '))}</span></div>`;
