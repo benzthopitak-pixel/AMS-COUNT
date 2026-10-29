@@ -538,7 +538,7 @@ function render() {
 
 /* ================= WEB ================= */
 function webView(c) {
-  if (S.web === 'team' && !usbMode) return webTeam();
+  if (S.web === 'team' && !usbMode && isLead()) return webTeam();
   if (!isLead()) return meta && master.size ? (S.web === 'cc' ? webCC() : webLive(c)) : `<main class="wrap"><div class="card"><h2>ยังไม่มีรอบนับที่เปิดอยู่</h2><p class="sub">บัญชีคนนับดูผลบนคอมได้อย่างเดียว · งานเตรียม ตรวจ และปิดรอบเป็นของ Admin</p></div></main>`;
   if (!meta || S.web === 'rounds') return webRounds(c);
   if (S.web === 'live') return webLive(c);
@@ -1209,8 +1209,8 @@ function appMeBlock() {
     ${usbCard()}
     ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
-    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AssetSync ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
-    <div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>
+    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AssetSync ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'}${isLead() ? ' · ' + esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า') : ''}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode || !isLead() ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
+    ${!isLead() ? '' : `<div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>`}
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
 }
 
@@ -1320,7 +1320,7 @@ function gateView() {
     <label class="f">รหัสพนักงาน<input class="in mono" id="lgCode" autocomplete="username" value="${esc(S.lgCode ?? LS.get('lastCode', ''))}"></label>
     <label class="f">PIN<input class="in mono" id="lgPin" type="password" inputmode="numeric" autocomplete="current-password"></label>${msg}
     <button class="btn pri" type="submit" ${S.busy ? 'disabled' : ''}>${S.busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button></form>
-    <div class="row"><button class="btn sm" data-a="editcfg">ตั้งค่าการเชื่อมต่อ</button><button class="btn sm" data-a="usbmode" data-v="1">โหมดสาย USB</button></div>
+    <div class="row"><button class="btn sm" data-a="editcfg">ตั้งค่าการเชื่อมต่อ (Admin)</button><button class="btn sm" data-a="usbmode" data-v="1">โหมดสาย USB</button></div>
     <p class="sub">ลืม PIN? ให้ Admin ตั้งใหม่ที่หน้า ทีม + ตั้งค่า · เครื่องนี้: ${esc(dev)}</p>`);
 }
 async function doLogin() {
