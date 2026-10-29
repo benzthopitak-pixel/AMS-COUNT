@@ -1155,6 +1155,7 @@ const LBL_STD = { id: 'std', name: 'ป้ายมาตรฐาน (แบบ
   { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
   { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
   { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset}' }] };
+const LBL_SIZES = [[50, 25], [50, 30], [50, 40], [40, 30], [60, 40], [70, 40], [80, 50], [100, 50], [100, 75], [100, 100], [100, 150], [32, 25], [30, 20], [25, 15]];   // common thermal rolls in Thailand
 const LBL_TYPES = { text: 'ข้อความ', qr: 'QR Code', bar: 'บาร์โค้ด', box: 'กรอบ', line: 'เส้น / แถบทึบ' };
 const clone = o => JSON.parse(JSON.stringify(o));
 const lk = k => String(k ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -1265,7 +1266,8 @@ function webStickers(c) {
     ${tplPick()}
     ${(() => { const have = new Set(lblFieldNames().map(lk)), miss = [...new Set(tpl.els.flatMap(e => [...String(e.text || '') .matchAll(/\{([^{}]+)\}/g), ...String(e.data || '').matchAll(/\{([^{}]+)\}/g)].map(m => m[1].trim())))].filter(f => !have.has(lk(f)));
       return miss.length ? `<div class="msg warn">แม่แบบนี้ใช้ช่อง ${miss.map(f => '{' + esc(f) + '}').join(' ')} ที่ไม่มีใน${xls ? 'ไฟล์ Excel' : 'ข้อมูล'} · ช่องนี้จะว่าง · แก้ที่ "ออกแบบป้าย"</div>` : ''; })()}
-    <label class="f">กระดาษ<select class="in" id="stSize"><option value="roll" ${a4 ? '' : 'selected'}>ม้วน · 1 ดวงต่อแผ่น (${tpl.w} × ${tpl.h} มม.)</option><option value="a4" ${a4 ? 'selected' : ''} ${per ? '' : 'disabled'}>A4 · ${per} ดวงต่อแผ่น</option></select></label>
+    <label class="f">เครื่องพิมพ์ / กระดาษ<select class="in" id="stSize"><option value="roll" ${a4 ? '' : 'selected'}>เครื่องพิมพ์สติกเกอร์ · ม้วน (${tpl.w} × ${tpl.h} มม.)</option><option value="a4" ${a4 ? 'selected' : ''} ${per ? '' : 'disabled'}>เครื่องพิมพ์ธรรมดา · A4 ${per} ดวงต่อแผ่น</option></select></label>
+    ${a4 ? '' : prnBox(tpl)}
     <div class="row" style="gap:8px"><label class="f" style="flex:1">ความละเอียด<select class="in" id="lblDpi">${[203, 300, 600].map(d => `<option value="${d}" ${lblDpi() === d ? 'selected' : ''}>${d} dpi</option>`).join('')}</select></label>
       <label class="f" style="flex:1">จำนวนต่อรายการ<input class="in" id="stCopies" type="number" min="1" max="50" value="${copies}"></label></div>
     ${Store.isApp ? `<div class="row"><button class="btn" data-a="stpdf" data-v="test" ${dis}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${dis}>PDF ${nSel * copies} ดวง</button></div>`
@@ -1275,6 +1277,19 @@ function webStickers(c) {
     <button class="btn lime" data-a="stdone" ${dis}>บันทึกว่าติดแล้ว</button>`}${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
   return h;
 }
+// label-printer setup (per computer: it belongs to the printer, not the template)
+const PRN0 = { across: 1, gap: 2, left: 0, dx: 0, dy: 0, rot: 0 };
+const prn = () => ({ ...PRN0, ...LS.get('prn', {}) });
+function prnBox(tpl) {
+  const p = prn(), o = S.prnOpen, n = (k, l, step, min, max) => `<label class="f" style="flex:1">${l}<input class="in" type="number" data-prn="${k}" step="${step}" min="${min}" max="${max}" value="${p[k]}"></label>`;
+  const pw = p.rot % 180 ? tpl.h : tpl.w, ph = p.rot % 180 ? tpl.w : tpl.h, W = +(p.left + p.across * pw + (p.across - 1) * p.gap).toFixed(2);
+  return `<div class="card" style="background:#f8f9fc;padding:10px 12px;gap:8px"><button class="row" data-a="prnopen" style="all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><b>⚙ ตั้งค่าเครื่องพิมพ์สติกเกอร์</b><span class="sub">${p.across} ดวง/แถว${p.rot ? ' · หมุน ' + p.rot + '°' : ''}${p.dx || p.dy ? ' · เลื่อน' : ''} ${o ? '▲' : '▼'}</span></button>
+    ${o ? `<div class="row" style="gap:8px">${n('across', 'ดวงต่อแถว (ม้วนกี่ดวงขวาง)', 1, 1, 6)}${n('gap', 'ช่องว่างระหว่างดวง (มม.)', .5, 0, 20)}</div>
+    <div class="row" style="gap:8px">${n('left', 'ขอบซ้ายกระดาษรอง (มม.)', .5, 0, 30)}<label class="f" style="flex:1">หมุนป้าย<select class="in" data-prn="rot">${[0, 90, 180, 270].map(r => `<option value="${r}" ${p.rot === r ? 'selected' : ''}>${r}°</option>`).join('')}</select></label></div>
+    <div class="row" style="gap:8px">${n('dx', 'เลื่อนซ้าย-ขวา (มม.)', .5, -20, 20)}${n('dy', 'เลื่อนขึ้น-ลง (มม.)', .5, -20, 20)}</div>
+    <span class="sub">ในไดรเวอร์เครื่องพิมพ์ตั้งขนาดกระดาษ = <b>${W} × ${+ph.toFixed(2)} มม.</b> · ชนิดกระดาษ = มีช่องว่าง (Gap) หรือรอยดำ (Black mark) ตามม้วนจริง · พิมพ์ทดสอบ 1 ดวง ถ้าตำแหน่งเหลื่อมให้ปรับ "เลื่อน" · ค่านี้จำไว้เฉพาะคอมเครื่องนี้</span>` : ''}</div>`;
+}
+document.addEventListener('change', ev => { const t = ev.target; if (RENDERING || !t.dataset.prn) return; const v = +t.value; if (!isFinite(v)) return; LS.set('prn', { ...prn(), [t.dataset.prn]: t.dataset.prn === 'across' ? Math.max(1, Math.min(6, Math.round(v))) : v }); setTimeout(render); });
 async function readLabelXls(f) {
   const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: false }), ws = wb.Sheets[wb.SheetNames[0]];
   const all = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: false }).filter(r => r.some(v => String(v).trim() !== ''));
@@ -1295,17 +1310,20 @@ function lblRecords(test) {
 async function lblImages(recs) {
   try { await document.fonts?.load('500 20px Prompt'); await document.fonts?.load('700 20px Prompt'); } catch {}
   const tpl = lblActive(), k = lblDpi() / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(tpl.w * k); cv.height = Math.round(tpl.h * k);
-  const ctx = cv.getContext('2d');
-  return recs.map(r => { lblDraw(ctx, tpl, r, k); return cv.toDataURL('image/png'); });
+  const ctx = cv.getContext('2d'), rot = S.stSize === 'a4' ? 0 : prn().rot;
+  const rc = document.createElement('canvas'); rc.width = rot % 180 ? cv.height : cv.width; rc.height = rot % 180 ? cv.width : cv.height; const rx = rc.getContext('2d');
+  return recs.map(r => { lblDraw(ctx, tpl, r, k); if (!rot) return cv.toDataURL('image/png');
+    rx.setTransform(1, 0, 0, 1, 0, 0); rx.fillStyle = '#fff'; rx.fillRect(0, 0, rc.width, rc.height); rx.translate(rc.width / 2, rc.height / 2); rx.rotate(rot * Math.PI / 180); rx.drawImage(cv, -cv.width / 2, -cv.height / 2); return rc.toDataURL('image/png'); });
 }
 async function stickerPrint(test) {
   const recs = lblRecords(test); if (!recs.length) return ['ยังไม่ได้เลือกรายการ', 'warn'];
   const tpl = lblActive(), { w, h } = tpl, cols = Math.floor(210 / w), rows = Math.floor(297 / h), a4 = S.stSize === 'a4' && cols * rows > 0, per = cols * rows, imgs = await lblImages(recs);
+  const P = prn(), lw = P.rot % 180 ? h : w, lh = P.rot % 180 ? w : h, across = Math.max(1, P.across), pageW = +(P.left + across * lw + (across - 1) * P.gap).toFixed(3);
   const css = a4 ? `@page{size:A4;margin:0}body{margin:0}.pg{width:210mm;height:297mm;display:grid;grid-template-columns:repeat(${cols},${w}mm);grid-auto-rows:${h}mm;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{width:${w}mm;height:${h}mm;display:block}`
-    : `@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{width:${w}mm;height:${h}mm;display:block;page-break-after:always;break-after:page}img:last-child{page-break-after:auto;break-after:auto}`;
+    : `@page{size:${pageW}mm ${lh}mm;margin:0}html,body{margin:0;padding:0}.pg{position:relative;width:${pageW}mm;height:${lh}mm;overflow:hidden;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{position:absolute;top:${P.dy}mm;width:${lw}mm;height:${lh}mm;display:block}`;
   let body = '';
   if (a4) for (let i = 0; i < imgs.length; i += per) body += `<div class="pg">${imgs.slice(i, i + per).map(src => `<img src="${src}">`).join('')}</div>`;
-  else body = imgs.map(src => `<img src="${src}">`).join('');
+  else for (let i = 0; i < imgs.length; i += across) body += `<div class="pg">${imgs.slice(i, i + across).map((src, j) => `<img src="${src}" style="left:${+(P.left + P.dx + j * (lw + P.gap)).toFixed(3)}mm">`).join('')}</div>`;
   document.getElementById('stFrame')?.remove();
   const fr = document.createElement('iframe'); fr.id = 'stFrame'; fr.setAttribute('aria-hidden', 'true');
   fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
@@ -1319,9 +1337,10 @@ async function stickerPdf(test) {
   if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
   const recs = lblRecords(test); if (!recs.length) return ['ยังไม่ได้เลือกรายการ', 'warn'];
   const tpl = lblActive(), { w, h } = tpl, { jsPDF } = window.jspdf, cols = Math.floor(210 / w), rows = Math.floor(297 / h), a4 = S.stSize === 'a4' && cols * rows > 0, per = cols * rows;
-  const pdf = a4 ? new jsPDF({ unit: 'mm', format: 'a4' }) : new jsPDF({ unit: 'mm', format: [w, h], orientation: w >= h ? 'l' : 'p' });
+  const P = prn(), lw = P.rot % 180 ? h : w, lh = P.rot % 180 ? w : h, across = Math.max(1, P.across), pw = P.left + across * lw + (across - 1) * P.gap, ori = pw >= lh ? 'l' : 'p';
+  const pdf = a4 ? new jsPDF({ unit: 'mm', format: 'a4' }) : new jsPDF({ unit: 'mm', format: [pw, lh], orientation: ori });
   (await lblImages(recs)).forEach((img, i) => {
-    if (!a4) { if (i) pdf.addPage([w, h], w >= h ? 'l' : 'p'); pdf.addImage(img, 'PNG', 0, 0, w, h, undefined, 'FAST'); }
+    if (!a4) { const j = i % across; if (i && !j) pdf.addPage([pw, lh], ori); pdf.addImage(img, 'PNG', P.left + P.dx + j * (lw + P.gap), P.dy, lw, lh, undefined, 'FAST'); }
     else { const k = i % per; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % cols) * w, Math.floor(k / cols) * h, w, h, undefined, 'FAST'); }
   });
   return await save(`AssetSync-สติกเกอร์-${recs.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
@@ -1350,6 +1369,7 @@ function webLabelDesign() {
       <span class="sub">ตัวอย่างข้อมูล: ${S.stTab === 'xls' && S.xls ? 'แถวแรกที่เลือกในไฟล์ Excel' : 'รายการแรกที่เลือกในหน้าพิมพ์'} · ${t.w} × ${t.h} มม. · ${t.els.length} ชิ้น</span>
     </section><aside class="card side" style="gap:10px"><b>ป้าย</b>
       <label class="f">ชื่อแม่แบบ<input class="in" data-lt="name" value="${esc(t.name)}"></label>
+      <label class="f">ขนาดสติกเกอร์สำเร็จรูป<select class="in" id="lblPreset"><option value="">— เลือกขนาดม้วนที่ใช้ (กว้าง × สูง มม.) —</option>${LBL_SIZES.map(([w, h]) => `<option value="${w}x${h}" ${t.w === w && t.h === h ? 'selected' : ''}>${w} × ${h} มม.</option>`).join('')}</select></label>
       <div class="row" style="gap:8px"><label class="f" style="flex:1">กว้าง (มม.)<input class="in" type="number" step="0.5" min="10" max="200" data-lt="w" value="${t.w}"></label><label class="f" style="flex:1">สูง (มม.)<input class="in" type="number" step="0.5" min="5" max="200" data-lt="h" value="${t.h}"></label></div>`;
   if (!e) h += `<p class="sub">คลิกชิ้นบนป้ายเพื่อแก้ไข หรือกดปุ่ม ＋ ด้านซ้ายเพื่อเพิ่ม</p>`;
   else {
@@ -1426,6 +1446,9 @@ document.addEventListener('change', async ev => {
   if (t.dataset.lt && S.lblEdit) { if (t.dataset.lt === 'name') S.lblEdit.name = t.value.trim() || 'แม่แบบ'; else { const v = +t.value; if (v >= 5 && v <= 200) S.lblEdit[t.dataset.lt] = v; } lblTouch(); setTimeout(render); return; }
   if (t.dataset.lfield !== undefined && t.value) { const e = lblEl(); if (e) { e[t.dataset.lfield] = (e[t.dataset.lfield] || '') + `{${t.value}}`; lblTouch(); } setTimeout(render); return; }
   if (t.id === 'lblPick') { if (S.lblDirty && S.stMode === 'design' && !confirm('ยังไม่ได้บันทึกแม่แบบที่แก้ไว้ · เปลี่ยนแม่แบบและทิ้งการแก้ไข?')) { t.value = S.lblEdit.id; return; } S.lblId = t.value; LS.set('lblId', t.value); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null; setTimeout(render); return; }
+  if (t.id === 'lblPreset' && t.value && S.lblEdit) { const [w, h] = t.value.split('x').map(Number), d = S.lblEdit, fx = w / d.w, fy = h / d.h;
+    if (d.els.length) for (const e of d.els) { e.x = snap(e.x * fx); e.y = snap(e.y * fy); if (e.t === 'qr') { e.w = e.h = snap(Math.min(e.w * fx, e.h * fy)); } else { e.w = snap(e.w * fx); e.h = Math.max(.3, snap(e.h * fy)); } }
+    d.w = w; d.h = h; lblTouch(); setTimeout(render); return; }
   if (t.id === 'lblDpi') { LS.set('lblDpi', +t.value); return; }
   if (t.id === 'stCopies') { S.stCopies = Math.max(1, Math.min(50, +t.value || 1)); setTimeout(render); return; }
   if (t.id === 'xlsFile' && t.files?.[0]) { try { await readLabelXls(t.files[0]); S.msg.st = [`อ่านไฟล์แล้ว ${N(S.xls.recs.length)} แถว`, 'ok']; } catch (e) { S.msg.st = ['อ่านไฟล์ไม่ได้: ' + e.message, 'bad']; } render(); return; }
@@ -1460,6 +1483,7 @@ async function lblAction(a, v) {
       try { await lblSaveAll(); S.msg.lbl = [`บันทึกแม่แบบ "${x.name}" แล้ว · ทุกคนในทีมใช้แม่แบบนี้ได้`, 'ok']; } catch (e) { S.msg.lbl = ['บันทึกขึ้นระบบไม่สำเร็จ (เก็บไว้ในเครื่องนี้แล้ว): ' + e.message, 'warn']; }
       break; }
     case 'lblexp': S.msg.lbl = await save(`AssetSync-แม่แบบป้าย-${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`, JSON.stringify({ app: 'AssetSync label', ver: 1, ...clone(t), builtin: undefined }, null, 2), 'application/json'); break;
+    case 'prnopen': S.prnOpen = !S.prnOpen; break;
     case 'xlssel': { const i = +v; S.xlsSel.has(i) ? S.xlsSel.delete(i) : S.xlsSel.add(i); break; }
     case 'xlsall': if (S.xls) S.xlsSel = S.xlsSel.size === S.xls.recs.length ? new Set() : new Set(S.xls.recs.map((_, i) => i)); break;
     default: return false;
@@ -1894,7 +1918,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.a.startsWith('close') && e.target.closest('[data-stop]') && e.target.closest('[data-a]') !== t) return;
   if ((t.dataset.a === 'closeitem' || t.dataset.a === 'closepick' || t.dataset.a === 'closesearch') && t.classList.contains('sheetbg') && e.target !== t) return;
   const a = t.dataset.a, v = t.dataset.v;
-  if (/^(lbl|xls)/.test(a) && await lblAction(a, v)) return;
+  if (/^(lbl|xls|prn)/.test(a) && await lblAction(a, v)) return;
   switch (a) {
     case 'mode': S.mode = v; LS.set('mode', v); break;
     case 'web': S.web = v; S.msg = {}; break;
