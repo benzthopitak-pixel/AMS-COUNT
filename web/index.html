@@ -96,13 +96,17 @@ th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; p
 td { padding: 9px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
 tr.click { cursor: pointer; } tr.click:hover { background: #f8f9fc; } tr.sel { background: var(--blue-soft); }
 td .chip { white-space: nowrap; }
+/* count pages: left and right boxes share one height, each scrolls inside */
+.pair { align-items: stretch; } .pair > * { height: max(480px, calc(100vh - 300px)); overflow-y: auto; }
+.pair > .card.grow { display: flex; flex-direction: column; } .pair > .card.grow > .tbl-wrap { flex: 1; min-height: 0; overflow-y: auto; } .pair > .card.grow > .grid { flex: none; }
+@media (max-width: 860px) { .pair > * { height: auto; overflow: visible; } }
 /* equal rows: fixed columns, one line per cell */
 table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; height: 44px; padding-top: 6px; padding-bottom: 6px; }
 .fbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .fbar .in { width: auto; min-height: 38px; padding: 6px 10px; font-size: 13px; }
 /* small right-hand detail panel */
 .compact { font-size: 13px; gap: 8px !important; } .compact .btn { padding: 5px 10px; min-height: 32px; font-size: 12.5px; } .compact .tog { padding: 4px 9px; min-height: 30px; font-size: 12px; }
 .compact .card { padding: 10px !important; } .compact [style*="font-size:22px"] { font-size: 17px !important; } .compact [style*="font-size:17px"] { font-size: 14px !important; } .compact .sub { font-size: 12px; } .compact h2 { font-size: 15px; }
-.compact .sticker { width: 220px; transform: rotate(-2deg); filter: drop-shadow(0 4px 10px rgb(18 24 38 / .15)); }
+.compact .sticker { width: 220px; transform: none; filter: drop-shadow(0 4px 10px rgb(18 24 38 / .15)); }
 .tile { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; border: none; }
 .tile b { font-size: 15px; } .tile .p { font-size: 24px; font-weight: 700; line-height: 1.2; } .tile small { font-size: 12px; }
 .bar { height: 10px; background: #eef0f6; border-radius: 6px; overflow: hidden; display: flex; }
@@ -638,7 +642,7 @@ function webLive(c) {
     <button class="kpi" data-a="opencc" data-v="*" data-t="left" style="border:none;text-align:left"><span>รอตรวจ</span><b style="color:var(--warn-ink)">${N(T.left)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="move" style="border:none;text-align:left"><span>ต้องย้าย CC</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>${decAll ? `รอตัดสิน ${decAll} เรื่อง →` : 'ดูรายการ →'}</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ดูรายการ →</span></button></div>`;
-  h += `<div class="row"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
+  h += `<div class="row pair"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
     <div class="row" style="align-items:center"><input class="in" id="ccQ" value="${esc(S.ccQ || '')}" placeholder="ค้นหา CC" style="width:160px" aria-label="ค้นหา Cost Center"><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
     <div class="grid" style="grid-auto-rows:1fr">`;
   for (const x of rows) {
@@ -722,7 +726,7 @@ function webCC() {
       <select class="in" data-ccf="cond" aria-label="สภาพ"><option value="">สภาพ: ทั้งหมด</option>${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(c => `<option ${F.cond === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
       <select class="in" data-ccf="qr" aria-label="QR"><option value="">QR: ทั้งหมด</option><option value="done" ${F.qr === 'done' ? 'selected' : ''}>QR ครบแล้ว</option><option value="need" ${F.qr === 'need' ? 'selected' : ''}>ต้องสร้าง QR</option></select>
       ${Object.values(F).some(Boolean) ? '<button class="btn sm" data-a="ccfclear">ล้างตัวกรอง</button>' : ''}<span class="sub">แสดง ${N(rows.length)} รายการ</span></div>
-    <div class="row"><section class="card grow" style="min-width:0"><div class="tbl-wrap" style="max-height:70vh;overflow-y:auto"><table class="tfix"><colgroup><col style="width:88px"><col style="min-width:180px">${all ? '<col style="width:76px">' : ''}<col style="width:118px"><col style="width:78px"><col style="width:70px"><col style="width:92px"><col style="width:58px"><col style="width:100px"></colgroup><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th></tr></thead><tbody>`;
+    <div class="row pair"><section class="card grow" style="min-width:0"><div class="tbl-wrap"><table class="tfix"><colgroup><col style="width:88px"><col style="min-width:180px">${all ? '<col style="width:76px">' : ''}<col style="width:118px"><col style="width:78px"><col style="width:70px"><col style="width:92px"><col style="width:58px"><col style="width:100px"></colgroup><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th></tr></thead><tbody>`;
   const ST = { left: '<span class="chip c-warn">รอตรวจ</span>', done: '<span class="chip c-ok">ตรวจแล้ว</span>', unk: '<span class="chip c-bad">ไม่อยู่ในทะเบียน</span>' };
   for (const r of rows.slice(0, 500)) {
     const s2 = r.s, mvTxt = r.state === 'moveout' ? `<span class="chip c-oth">ต้องย้ายไป ${esc(s2.areaName)}</span>` : r.state === 'movein' ? `<span class="chip c-oth">ย้ายมาจาก ${esc(r.a.cc)}</span>` : ST[r.state];
@@ -730,7 +734,7 @@ function webCC() {
     h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td></tr>`;
   }
   h += `</tbody></table></div>${rows.length > 500 ? `<p class="sub">แสดง 500 จาก ${N(rows.length)} รายการ · ค้นหาเพื่อกรอง</p>` : ''}${rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>
-    <aside class="card side compact" style="position:sticky;top:16px;flex:0 0 300px;max-height:calc(100vh - 32px);overflow-y:auto">${S.ccPick ? `<div class="sticker"><canvas id="ccSticker" width="560" height="296" aria-label="สติ๊กเกอร์ ${esc(S.ccPick)}"></canvas></div>` + ccDetail(S.ccPick, ccCode) : '<div class="sticker" style="opacity:.35"><canvas id="ccSticker" width="560" height="296" aria-hidden="true"></canvas></div><p class="sub" style="text-align:center">แตะรายการทางซ้ายเพื่อดูสติ๊กเกอร์ รายละเอียด และแก้ไข</p>'}</aside></div></main>`;
+    <aside class="card side compact" style="flex:0 0 300px">${S.ccPick ? `<div class="sticker"><canvas id="ccSticker" width="560" height="296" aria-label="สติ๊กเกอร์ ${esc(S.ccPick)}"></canvas></div>` + ccDetail(S.ccPick, ccCode) : '<div class="sticker" style="opacity:.35"><canvas id="ccSticker" width="560" height="296" aria-hidden="true"></canvas></div><p class="sub" style="text-align:center">แตะรายการทางซ้ายเพื่อดูสติ๊กเกอร์ รายละเอียด และแก้ไข</p>'}</aside></div></main>`;
   return h;
 }
 function ccDetail(code, ccCode) {
