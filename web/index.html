@@ -261,10 +261,11 @@ function compute() {
   const evs = allEvents();
   const key = evs.length + ':' + (evs.at(-1)?.id || '') + ':' + Object.keys(serverEv).length + ':' + master.size;
   if (_cache && key === _cacheKey) return _cache;
-  const cur = new Map(), recount = new Set(), hist = new Map();
+  const cur = new Map(), recount = new Set(), hist = new Map(), ccDone = new Map();
   const H = (c, txt, e) => { let h = hist.get(c); if (!h) hist.set(c, h = []); h.push({ t: e.t, by: e.by, txt }); };
   for (const e of evs) {
     const c = e.code; let s = cur.get(c);
+    if (String(c).startsWith('#CC:')) { const k = c.slice(4); if (e.areaDone) ccDone.set(k, { by: e.by, t: e.t, left: e.left || 0, dev: e.dev }); else ccDone.delete(k); continue; }   // "นับครบแล้ว" for one Cost Center
     if (e.k === 'scan') {
       if (s) { H(c, `สแกนซ้ำที่ ${e.areaName || ''}`, e); continue; }
       cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, src: e.src || (e.ns ? 'manual' : 'barcode'), cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0 });
@@ -287,13 +288,15 @@ function compute() {
       if (e.act === 'transferred') { s.flags.pendingTransfer = false; s.flags.transferred = true; H(c, 'ทำ AS02 ใน SAP แล้ว', e); }
     }
   }
-  _cacheKey = key; _cache = { cur, recount, hist, evs };
+  _cacheKey = key; _cache = { cur, recount, hist, evs, ccDone };
   return _cache;
 }
 // where a count came from: QR sticker, barcode, typed / searched on the scanner, or recorded on the web
 const SRC = { qr: ['ยิง QR', 'c-ok'], barcode: ['ยิงบาร์โค้ด', 'c-gray'], manual: ['พิมพ์ / ค้นหาบนเครื่อง', 'c-warn'], web: ['บันทึกบนเว็บ', 'c-blue'] };
 const srcChip = s => s ? `<span class="chip ${SRC[s.src][1]}">${SRC[s.src][0]}</span>` : '';
 const needQR = s => !!s && master.has(s.code) && s.src !== 'qr' && !s.printedAt;   // QR scanned = sticker already done
+const ccClosed = code => compute().ccDone.get(String(code)) || null;
+const closeTxt = d => `ปิดงานโดย ${esc(d.by)} · ${fmtT(d.t)}${d.left ? ` · ไม่เจอ ${d.left} รายการ` : ''}`;
 const isOther = s => { const a = master.get(s.code); return !!(a && !s.shared && s.area && a.cc && ccKey(s.area) !== ccKey(a.cc)); };
 // same CC code but the file spells the department differently → warn only, never counts as a move
 const ccNameOf = code => (meta?.areas || []).find(x => String(x.code) === String(code))?.name || String(code);
@@ -657,7 +660,7 @@ function webLive(c) {
     const r = x.total ? x.found / x.total : 0, p = Math.round(r * 100), mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
     const bg = r >= 1 ? '#12b76a' : r >= .66 ? '#6ce9a6' : r >= .33 ? '#a6f4c5' : r > 0 ? '#d1fadf' : '#f2f4f7';
     const fg = r >= 1 ? '#ffffff' : r > 0 ? '#053321' : '#344054';
-    const flags = [mv ? `<span class="chip c-oth">ย้าย CC ${mv}</span>` : '', d ? `<span class="chip c-warn">รอตัดสิน ${d}</span>` : '', u ? `<span class="chip c-bad">นอกทะเบียน ${u}</span>` : '', ccNameDiff(x.code) ? '<span class="chip c-warn" title="ชื่อแผนกในไฟล์ไม่ตรงกัน · ยึดรหัส CC">⚠ ชื่อไม่ตรง</span>' : ''].join('');
+    const flags = [mv ? `<span class="chip c-oth">ย้าย CC ${mv}</span>` : '', d ? `<span class="chip c-warn">รอตัดสิน ${d}</span>` : '', u ? `<span class="chip c-bad">นอกทะเบียน ${u}</span>` : '', ccNameDiff(x.code) ? '<span class="chip c-warn" title="ชื่อแผนกในไฟล์ไม่ตรงกัน · ยึดรหัส CC">⚠ ชื่อไม่ตรง</span>' : '', ccClosed(x.code) ? `<span class="chip" style="background:#121826;color:#fff" title="${closeTxt(ccClosed(x.code))}">✓ ปิดงานแล้ว</span>` : ''].join('');
     h += `<button class="tile click" data-a="opencc" data-v="${esc(x.code)}" title="เปิดรายละเอียด ${esc(x.code)}" style="background:${bg};color:${fg};cursor:pointer"><b class="mono">${esc(x.code)}</b>${x.name !== String(x.code) ? `<small style="opacity:.85">${esc(x.name)}</small>` : ''}<span class="p">${p}%</span><small>ตรวจ ${N(x.found)}/${N(x.total)} · เหลือ ${N(x.total - x.found)}</small>${flags ? `<span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${flags}</span>` : ''}</button>`;
   }
   h += `</div>${rows.length ? '' : '<p class="sub">ไม่พบ CC</p>'}</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
@@ -724,6 +727,7 @@ function webCC() {
   let h = `<main class="wrap"><div><button class="btn sm" data-a="web" data-v="live">← กลับหน้ารวม</button></div>
     <div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · 2 · นับ</p><h1>${title}</h1></div>
     <div class="chips"><span class="chip c-gray">ทั้งหมด ${N(totalOwn)}</span><span class="chip c-ok">ตรวจแล้ว ${N(doneOwn)}</span><span class="chip c-warn">เหลือ ${N(totalOwn - doneOwn)}</span>${n.move ? `<span class="chip c-oth">ต้องย้าย CC ${n.move}</span>` : ''}${n.unk ? `<span class="chip c-bad">ไม่อยู่ในทะเบียน ${n.unk}</span>` : ''}</div></div>
+    ${!all && ccClosed(ccCode) ? `<div class="msg ok row" style="align-items:center;justify-content:space-between"><span><b>✓ ผู้ตรวจนับปิดงาน CC นี้แล้ว</b> · ${closeTxt(ccClosed(ccCode))}</span>${isLead() ? `<button class="btn sm" data-a="ccreopen" data-v="${esc(ccCode)}">เปิดให้นับต่อ</button>` : ''}</div>` : ''}
     ${!all && ccNameDiff(ccCode) ? `<div class="msg warn">⚠ ชื่อแผนกของ CC ${esc(ccCode)} ในไฟล์ไม่ตรงกัน: ${ccNameDiff(ccCode).map(esc).join(' / ')} · ระบบยึดรหัส CC เป็นหลัก ไม่นับว่าต้องย้าย</div>` : ''}
     <div class="bar" aria-label="ความคืบหน้า"><i style="width:${totalOwn ? doneOwn / totalOwn * 100 : 0}%;background:var(--ok)"></i></div>
     <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${CC_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="cctab" data-v="${k}">${l} [${n[k]}]</button>`).join('')}</div>
@@ -818,6 +822,7 @@ function webClose(c) {
   if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
   else {
     h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 2 นับ');
+    { const real = (meta.areas || []).filter(a => !a.shared), shut = real.filter(a => ccClosed(a.code)).length; h += ck(shut === real.length, 'ผู้ตรวจนับปิดงานครบทุก CC', `ปิดแล้ว ${shut} / ${real.length} CC${shut < real.length ? ' · ที่ยังไม่ปิดดูได้ที่เมนู 2 นับ' : ''}`); }
     h += ck(open === 0, 'เรื่องที่ต้องตัดสินเคลียร์หมด', open ? `ค้าง ${open} เรื่อง · ดูที่เมนู 2 นับ` : 'ครบ');
     h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
     h += `<button class="btn dark" data-a="closeround">${open ? `ปิดรอบ (ยังค้าง ${open} เรื่อง)` : 'ปิดรอบ'}</button>${open ? '<p class="sub">ปิดได้ แต่เรื่องที่ค้างจะติดไปในไฟล์ส่งออกตามสถานะล่าสุด</p>' : ''}`;
@@ -925,13 +930,13 @@ function appHome(c) {
   h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
     ${jobList().filter(j => j.status !== 'closed').length > 1 ? `<div class="card" style="gap:6px;padding:12px"><span class="sub">งานที่นับอยู่ (แตะเพื่อสลับ)</span><div class="chips">${jobList().filter(j => j.status !== 'closed').map(j => `<button class="tog" aria-pressed="${j.id === meta.id}" data-a="pickjob" data-v="${esc(j.id)}">${j.id === meta.id ? '✓ ' : ''}${esc(j.name)}</button>`).join('')}</div></div>` : ''}
     <b style="font-size:18px">เลือก Cost Center ที่จะนับ</b><input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">`;
-  const list = (meta.areas || []).slice().sort((a, b) => { const pa = st.get(String(a.code)), pb = st.get(String(b.code)); const da = pa && pa.total && pa.found >= pa.total, dbb = pb && pb.total && pb.found >= pb.total; return (da - dbb) || a.name.localeCompare(b.name); });
+  const list = (meta.areas || []).slice().sort((a, b) => { const pa = st.get(String(a.code)), pb = st.get(String(b.code)); const da = pa && pa.total && pa.found >= pa.total, dbb = pb && pb.total && pb.found >= pb.total; const ca = !!ccClosed(a.code), cb = !!ccClosed(b.code); return (ca - cb) || (da - dbb) || a.name.localeCompare(b.name); });
   for (const a of areaFilter(list)) h += areaCard(a, st.get(String(a.code)));
   return h + `</div>`;
 }
 function areaCard(a, x) {
-  const p = x && x.total ? x.found / x.total : 0;
-  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><span style="display:flex;flex-direction:column;min-width:0"><b style="font-size:17px">${esc(a.name)}</b>${!a.shared && a.name !== String(a.code) ? `<span class="sub mono">CC ${esc(a.code)}</span>` : ''}</span><span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · เจอของแผนกอื่น ${x.other}` : ''}</span></button>`;
+  const p = x && x.total ? x.found / x.total : 0, dn = !a.shared && ccClosed(a.code);
+  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><span style="display:flex;flex-direction:column;min-width:0"><b style="font-size:17px">${esc(a.name)}</b>${!a.shared && a.name !== String(a.code) ? `<span class="sub mono">CC ${esc(a.code)}</span>` : ''}</span><span style="display:flex;gap:4px;flex:none">${dn ? '<span class="chip c-ok">✓ ปิดแล้ว</span>' : ''}<span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · เจอของแผนกอื่น ${x.other}` : ''}</span></button>`;
 }
 const areaFilter = list => { const q = norm(S.areaQ || ''); return q ? list.filter(a => norm(a.name).includes(q) || norm(a.code).includes(q)) : list; };
 function areaPicker() {
@@ -962,11 +967,20 @@ function appArea() {
   }
   if (list.length > 80) h += `<p class="sub" style="text-align:center">+ อีก ${list.length - 80} รายการ</p>`;
   if (!list.length) h += `<p class="sub" style="text-align:center">ไม่มีรายการ</p>`;
-  h += `<button class="btn lime" data-a="app" data-v="scan" style="font-size:17px;padding:14px">สแกนในพื้นที่นี้</button></div>`;
+  const dn = S.area.shared ? null : ccClosed(code);
+  if (dn) h += `<div class="msg ok" style="display:flex;flex-direction:column;gap:6px"><b>✓ CC นี้นับครบแล้ว</b><span>${closeTxt(dn)}</span><button class="btn sm" data-a="ccreopen" data-v="${esc(code)}" style="align-self:flex-start">เปิดนับต่อ</button></div>`;
+  else {
+    h += `<button class="btn lime" data-a="app" data-v="scan" style="font-size:17px;padding:14px">สแกนในพื้นที่นี้</button>`;
+    if (!S.area.shared) h += S.confirmClose === code
+      ? `<div class="confirm"><b>ปิดงาน CC ${esc(S.area.name)}?</b><span>${left.length ? `ยังไม่เจอ <b>${left.length}</b> รายการ · ระบบจะบันทึกว่า "ไม่พบ" ให้ Admin ตัดสินต่อ` : 'เจอครบทุกรายการแล้ว'}</span><div class="row"><button class="btn pri" data-a="ccclose" data-v="${esc(code)}" data-n="${left.length}">ยืนยัน นับครบแล้ว</button><button class="btn" data-a="noclose">ยังก่อน</button></div></div>`
+      : `<button class="btn dark" data-a="askclose" data-v="${esc(code)}">✓ ปิดงาน CC นี้ (นับครบแล้ว)</button>`;
+  }
+  h += `</div>`;
   return h;
 }
 function appScan() {
   if (!checkArea()) { S.app = 'area'; return appArea(); }
+  if (!S.area.shared && ccClosed(S.area.code)) { S.app = 'area'; flash('CC นี้ปิดงานแล้ว · กด "เปิดนับต่อ" ถ้าจะนับเพิ่ม'); return appArea(); }
   const closed = meta.status === 'closed', { cur } = compute(), st = areaStats().get(String(S.area.code));
   let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#c7cbd4">กำลังนับที่ (แผนกที่ยืนอยู่จริง)</span><br><b style="font-size:20px">${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:var(--lime);font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span><button class="btn sm lime" data-a="areapick" style="margin-left:8px">เปลี่ยน</button></div>
     <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:var(--lime)">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มยิงข้างเครื่อง'}</b>
@@ -1250,6 +1264,7 @@ function resolve(raw) {
 const AIM = /^\][A-Za-z][0-9A-Za-z]/;
 const srcOf = raw => S.manual ? 'manual' : /^\]Q/i.test(String(raw).trim()) ? 'qr' : 'barcode';
 function doScan(raw) {
+  if (S.area && !S.area.shared && ccClosed(S.area.code)) { beep('dup'); flash('CC นี้ปิดงานแล้ว · เปิดนับต่อก่อน'); S.app = 'area'; render(); return; }
   const src = srcOf(raw); raw = String(raw ?? '').trim().replace(AIM, '');
   const code = resolve(raw); if (!code || !S.area) return;
   if (meta.status === 'closed') { flash('รอบนี้ปิดแล้ว'); return; }
@@ -1286,6 +1301,10 @@ document.addEventListener('click', async e => {
       loadMine(); evRound = null; subscribeEvents(); S.web = 'prepare'; S.cards = []; break;
     }
     case 'pickjob': pickJob(v); S.web = S.mode === 'web' ? 'live' : S.web; S.app = 'home'; break;
+    case 'askclose': S.confirmClose = v; break;
+    case 'noclose': S.confirmClose = null; break;
+    case 'ccclose': S.confirmClose = null; pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: true, left: +t.dataset.n || 0 }); beep('ok'); flash('ปิดงาน CC แล้ว · ขอบคุณ'); break;
+    case 'ccreopen': pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: false }); flash('เปิดนับต่อแล้ว'); break;
     case 'askdel': S.confirmDel = v; break;
     case 'nodel': S.confirmDel = null; break;
     case 'deljob': S.confirmDel = null; await deleteJob(v); return;
@@ -1544,8 +1563,8 @@ function exportBook(kind) {
   if (kind === 'main' || kind === 'summary') {
     const by = new Map();
     for (const a of master.values()) { if (!counted(a)) continue; const s = cur.get(a.code), e = by.get(a.cc) || { code: a.cc, total: 0, found: 0, moved: 0, dmg: 0, re: 0 }; e.total++; if (s) { e.found++; if (isMoved(s)) e.moved++; if (s.cond !== 'ปกติ') e.dmg++; if (s.flags.reprint || s.flags.namebad) e.re++; } by.set(a.cc, e); }
-    const sum = [[`สรุปผลตรวจนับ · ${meta.name}${draft ? ' · ฉบับร่าง' : ''}`], [], ['Cost Center', 'Department', 'รหัสที่ต้องนับ', 'นับพบ', 'ยังไม่พบ', 'ย้ายแผนก', 'ชำรุด / รอซ่อม / ไม่ใช้งาน', 'ต้องพิมพ์ป้ายใหม่', '% นับพบ']];
-    for (const [k, e] of [...by].sort((x, y) => String(x[1].code).localeCompare(String(y[1].code)))) sum.push([e.code, ccNameOf(k), e.total, e.found, e.total - e.found, e.moved, e.dmg, e.re, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%']);
+    const sum = [[`สรุปผลตรวจนับ · ${meta.name}${draft ? ' · ฉบับร่าง' : ''}`], [], ['Cost Center', 'Department', 'รหัสที่ต้องนับ', 'นับพบ', 'ยังไม่พบ', 'ย้ายแผนก', 'ชำรุด / รอซ่อม / ไม่ใช้งาน', 'ต้องพิมพ์ป้ายใหม่', '% นับพบ', 'ปิดงานนับ']];
+    for (const [k, e] of [...by].sort((x, y) => String(x[1].code).localeCompare(String(y[1].code)))) sum.push([e.code, ccNameOf(k), e.total, e.found, e.total - e.found, e.moved, e.dmg, e.re, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%', ccClosed(k) ? `${ccClosed(k).by} · ${fmtT(ccClosed(k).t)}` : 'ยังไม่ปิด']);
     sum.push([], ['ไม่อยู่ในทะเบียน', [...cur.values()].filter(s => !master.has(s.code)).length], ['ไม่นับ (Write-Off เดิม)', meta.woCount || 0], ['ส่งออกเมื่อ', new Date().toLocaleString('th-TH')]);
     add('สรุป', sum, [1]);
   }
