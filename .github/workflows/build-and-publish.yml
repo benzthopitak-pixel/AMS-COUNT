@@ -41,6 +41,9 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ams-count.jks"
           echo "AMS_KEYSTORE_FILE=$RUNNER_TEMP/ams-count.jks" >> "$GITHUB_ENV"
 
+      - name: Stamp version
+        run: echo "window.AMS_BUILD = '1.0.${{ github.run_number }}'; window.AMS_BUILT = '$(TZ=Asia/Bangkok date +'%d/%m/%Y %H:%M')';" > web/build.js
+
       - name: Build APK
         env:
           AMS_BUILD_NUMBER: ${{ github.run_number }}

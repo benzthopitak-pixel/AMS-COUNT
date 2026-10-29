@@ -7,6 +7,7 @@
 <title>AMS Count</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script src="config.js"></script>
+<script src="build.js"></script>
 <script src="lib/supabase.js"></script>
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
@@ -107,6 +108,7 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .compact { font-size: 13px; gap: 8px !important; } .compact .btn { padding: 5px 10px; min-height: 32px; font-size: 12.5px; } .compact .tog { padding: 4px 9px; min-height: 30px; font-size: 12px; }
 .compact .card { padding: 10px !important; } .compact [style*="font-size:22px"] { font-size: 17px !important; } .compact [style*="font-size:17px"] { font-size: 14px !important; } .compact .sub { font-size: 12px; } .compact h2 { font-size: 15px; }
 .compact .sticker { width: 220px; transform: none; filter: drop-shadow(0 4px 10px rgb(18 24 38 / .15)); }
+.ver { font: 600 11px 'JetBrains Mono', monospace; color: var(--muted); background: #f2f4f7; border-radius: 999px; padding: 2px 7px; margin-left: 4px; vertical-align: middle; }
 .tile { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; border: none; }
 .tile b { font-size: 15px; } .tile .p { font-size: 24px; font-weight: 700; line-height: 1.2; } .tile small { font-size: 12px; }
 .bar { height: 10px; background: #eef0f6; border-radius: 6px; overflow: hidden; display: flex; }
@@ -211,6 +213,8 @@ const fmtT = t => t ? new Date(t).toLocaleString('th-TH', { day: 'numeric', mont
 const hm = t => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 const Store = window.AMSStore;
 async function cap(n) { if (n === 'downloads') return Store.downloads; if (n === 'db') return S.authed ? Store.db : null; return null; }
+const VER = () => { const b = window.AMS_BUILD || 'dev'; return /^\d/.test(b) ? 'v' + b : b; };
+const verTag = () => `<span class="ver" title="เวอร์ชัน${window.AMS_BUILT ? ' · สร้างเมื่อ ' + esc(window.AMS_BUILT) : ''}">${esc(VER())}</span>`;
 const isLead = () => usbMode || S.user?.role === 'lead';
 
 /* ================= state ================= */
@@ -498,11 +502,11 @@ function render() {
     if (meta && !isLead()) items = I('live', '2', 'นับ (ดูอย่างเดียว)', 0, 99);
     else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('close', '3', 'ปิด + ส่งออก', 0, 99)
       + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '4', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '5', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '6', 'ทีม + ตั้งค่า', 0, 99));
-    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div>
+    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
-    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count</span>${syncHtml()}</div></header>`;
+    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count ${verTag()}</span>${syncHtml()}</div></header>`;
   }
   html += S.mode === 'web' ? webView(c) + '</div></div>' : appView(c);
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
@@ -1036,9 +1040,8 @@ function appMeBlock() {
     ${usbCard()}
     ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
-    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(window.AndroidBridge?.appVersion?.() || 'เว็บ')}${window.AndroidBridge?.webVersion ? ' · หน้าจอ ' + esc(window.AndroidBridge.webVersion()) : ''} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
+    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
     <div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>
-    ${scannerSetup()}
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
 }
 
@@ -1130,7 +1133,7 @@ async function importReports(files) {
 function gateView() {
   const cfg = Store.auth.config(), msg = S.gateMsg ? `<div class="msg bad">${esc(S.gateMsg)}</div>` : '';
   const wrap = inner => `<div class="phone" style="min-height:100vh;justify-content:center"><div class="pbody" style="padding-bottom:40px">
-    <div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>ระบบตรวจนับทรัพย์สิน</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
+    <div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>ระบบตรวจนับทรัพย์สิน · ${esc(VER())}</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
   if (S.gate === 'boot') return wrap(`<div class="card"><p class="sub">กำลังเชื่อมต่อ…</p></div>`);
   if (S.gate === 'setup') return wrap(`<div class="card"><h2>ตั้งค่าการเชื่อมต่อ</h2><p class="sub">ใส่ค่าจาก Supabase → Project Settings → API (ทำครั้งเดียวต่อเครื่อง)</p>
     <label class="f">Project URL<input class="in mono" id="cfgUrl" value="${esc(cfg.url)}" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
@@ -1167,7 +1170,7 @@ async function doFirstLead() {
   catch (e) { S.busy = false; S.gateMsg = e.message; render(); }
 }
 async function teamOp(fn, ok) {
-  try { await fn(); await loadTeam(); if (meta && isLead()) await saveMeta({ ...meta }); flash(ok); } catch (e) { flash('ไม่สำเร็จ: ' + e.message); }
+  try { await fn(); await loadTeam(); if (meta && isLead()) await saveMeta({ ...meta }); flash(ok); S.msg.team = null; } catch (e) { flash('ไม่สำเร็จ'); S.msg.team = ['ไม่สำเร็จ: ' + e.message, 'bad']; }
   render();
 }
 async function addMember() {
@@ -1184,11 +1187,11 @@ async function addMember() {
 function webTeam() {
   const cfg = Store.auth.config(), lead = S.user?.role === 'lead';
   let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>6 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
-    <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th>' : ''}</tr></thead><tbody>`;
-  for (const u of S.team) h += `<tr><td><b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}</td><td class="mono">${esc(u.code)}</td>
+    <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th><th></th>' : ''}</tr></thead><tbody>`;
+  for (const u of S.team) h += `<tr><td>${lead && S.editName === u.id ? `<div class="row" style="flex-wrap:nowrap"><input class="in" id="nm-${u.id}" value="${esc(u.name)}" style="width:150px"><button class="btn sm pri" data-a="memname" data-v="${u.id}">บันทึก</button><button class="btn sm" data-a="noname">ยกเลิก</button></div>` : `<b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}${lead ? ` <button class="btn sm" data-a="editname" data-v="${u.id}" aria-label="แก้ชื่อ ${esc(u.name)}" style="min-height:28px;padding:2px 8px">แก้ชื่อ</button>` : ''}`}</td><td class="mono">${esc(u.code)}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'Admin' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'Admin' : 'คนนับ')}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm ${u.active ? '' : 'red'}" data-a="memactive" data-v="${u.id}">${u.active ? 'ใช้งานได้' : 'ปิดใช้อยู่'}</button>` : `<span class="chip ${u.active ? 'c-ok' : 'c-gray'}">${u.active ? 'ใช้งานได้' : 'ปิดใช้'}</span>`}</td>
-    ${lead ? `<td><div class="row" style="flex-wrap:nowrap"><input class="in mono" id="pin-${u.id}" type="password" inputmode="numeric" placeholder="PIN ใหม่" style="width:110px"><button class="btn sm" data-a="mempin" data-v="${u.id}">ตั้ง</button></div></td>` : ''}</tr>`;
+    ${lead ? `<td><div class="row" style="flex-wrap:nowrap"><input class="in mono" id="pin-${u.id}" type="password" inputmode="numeric" placeholder="PIN ใหม่" style="width:110px"><button class="btn sm" data-a="mempin" data-v="${u.id}">ตั้ง</button></div></td><td>${u.id === S.user?.id ? '' : S.confirmMem === u.id ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm red" data-a="memdel" data-v="${u.id}">ยืนยันลบ</button><button class="btn sm" data-a="nomemdel">ไม่</button></div>` : `<button class="btn sm red" data-a="askmemdel" data-v="${u.id}">ลบ</button>`}</td>` : ''}</tr>`;
   h += `</tbody></table></div>`;
   if (lead) h += `<b>เพิ่มคนในทีม</b><div class="grid"><label class="f">ชื่อ<input class="in" id="nmName"></label><label class="f">รหัสพนักงาน<input class="in mono" id="nmCode"></label><label class="f">PIN เริ่มต้น<input class="in mono" id="nmPin" inputmode="numeric" placeholder="4–8 หลัก"></label><label class="f">บทบาท<select class="in" id="nmRole"><option value="counter">คนนับ</option><option value="lead">Admin</option></select></label></div>
     <button class="btn pri" data-a="addmember" style="align-self:flex-start" ${S.busy ? 'disabled' : ''}>เพิ่มเข้าทีม</button>${S.msg.team ? `<div class="msg ${S.msg.team[1]}">${esc(S.msg.team[0])}</div>` : ''}`;
@@ -1328,6 +1331,12 @@ document.addEventListener('click', async e => {
     case 'editcfg': S.gate = 'setup'; break;
     case 'cancelcfg': S.gateMsg = null; S.gate = S.authed ? null : 'login'; break;
     case 'addmember': await addMember(); return;
+    case 'editname': S.editName = v; break;
+    case 'noname': S.editName = null; break;
+    case 'memname': { const n = ($('#nm-' + v)?.value || '').trim(); if (!n) { flash('ใส่ชื่อก่อน'); return; } S.editName = null; await teamOp(() => Store.auth.updateMember(v, { name: n }), 'แก้ชื่อแล้ว'); return; }
+    case 'askmemdel': S.confirmMem = v; break;
+    case 'nomemdel': S.confirmMem = null; break;
+    case 'memdel': { S.confirmMem = null; const u = S.team.find(x => x.id === v); await teamOp(() => Store.auth.deleteMember(v), `ลบ ${u?.name || ''} แล้ว · ผลนับที่เคยส่งยังอยู่`); return; }
     case 'memrole': { const u = S.team.find(x => x.id === v); if (!u) return; await teamOp(() => Store.auth.updateMember(v, { role: u.role === 'lead' ? 'counter' : 'lead' }), 'เปลี่ยนบทบาทแล้ว'); return; }
     case 'memactive': { const u = S.team.find(x => x.id === v); if (!u) return; if (u.id === S.user?.id) { flash('ปิดใช้บัญชีตัวเองไม่ได้'); return; } await teamOp(() => Store.auth.updateMember(v, { active: !u.active }), u.active ? 'ปิดใช้แล้ว' : 'เปิดใช้แล้ว'); return; }
     case 'mempin': { const pin = ($('#pin-' + v)?.value || '').trim(); const u = S.team.find(x => x.id === v); if (!/^\d{4,8}$/.test(pin)) { flash('PIN ต้องเป็นตัวเลข 4–8 หลัก'); return; } await teamOp(() => Store.auth.setPin(v, u.code, pin), `ตั้ง PIN ใหม่ให้ ${u.name} แล้ว`); return; }

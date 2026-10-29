@@ -90,6 +90,10 @@
       const { error } = await client().from('profiles').update(patch).eq('id', id);
       if (error) throw err(error);
     },
+    async deleteMember(id) {
+      const { error } = await client().rpc('ams_delete_user', { p_user: id });
+      if (error) { const e = err(error); if (/ams_delete_user|function|schema cache/i.test(error.message || '') && !/เฉพาะ|ตัวเอง/.test(error.message || '')) { e.message = 'ยังไม่ได้เพิ่มคำสั่งลบในฐานข้อมูล · ให้ Admin รันไฟล์ supabase/add-delete-user.sql ใน Supabase ก่อน'; } throw e; }
+    },
     async setPin(id, code, pin) {
       const { error } = await client().rpc('ams_set_pin', { p_user: id, p_password: passOf(code, pin) });
       if (error) throw err(error);

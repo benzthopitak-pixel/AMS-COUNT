@@ -23,6 +23,7 @@ subs = {
     '<script src="lib/jspdf.umd.min.js"></script>': f'<script>{js("lib/jspdf.umd.min.js")}</script>',
     '<script src="lib/qrcode.js"></script>': f'<script>{js("lib/qrcode.js")}</script>',
     '<script src="store.js"></script>': f'<script>{js("store.js")}</script>',
+    '<script src="build.js"></script>': "<script>window.AMS_BUILD = 'ตัวอย่าง'; window.AMS_BUILT = '" + __import__('datetime').datetime.now().strftime('%d/%m/%Y %H:%M') + "';</script>",
     '<link rel="icon" href="icon.svg" type="image/svg+xml">': f'<link rel="icon" href="{b64("icon.svg", "image/svg+xml")}" type="image/svg+xml">',
 }
 for a, b in subs.items():

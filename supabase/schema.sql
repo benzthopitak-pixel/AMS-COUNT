@@ -131,3 +131,14 @@ begin
 end $$;
 revoke all on function public.ams_set_pin(uuid, text) from public;
 grant execute on function public.ams_set_pin(uuid, text) to authenticated;
+
+-- ---------- 9) Admin ลบบัญชีคนในทีม (ลบตัวเองไม่ได้ · ผลนับที่เคยส่งยังอยู่) ----------
+create or replace function public.ams_delete_user(p_user uuid) returns void
+language plpgsql security definer set search_path = public, auth as $$
+begin
+  if public.ams_role() is distinct from 'lead' then raise exception 'เฉพาะ Admin'; end if;
+  if p_user = auth.uid() then raise exception 'ลบบัญชีตัวเองไม่ได้'; end if;
+  delete from auth.users where id = p_user;   -- profiles ลบตามอัตโนมัติ (on delete cascade)
+end $$;
+revoke all on function public.ams_delete_user(uuid) from public;
+grant execute on function public.ams_delete_user(uuid) to authenticated;

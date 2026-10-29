@@ -48,7 +48,8 @@
     if (op.op === 'signin') { const u = T.users.find(x => x.email === op.email && x.password === op.password); return u ? { session: { access_token: 't' + u.id, user: { id: u.id } } } : { error: { message: 'Invalid login credentials' } }; }
     if (op.op === 'rpc') {
       if (op.name === 'ams_has_users') return { data: T.profiles.length > 0, error: null };
-      if (op.name === 'ams_set_pin') { const u = T.users.find(x => x.id === op.args.p_user); if (u) u.password = op.args.p_password; persist(); return { data: null, error: null }; }
+      if (op.name === 'ams_delete_user') { if (role(op.uid) !== 'lead') return { data: null, error: { message: 'เฉพาะ Admin' } }; if (op.args.p_user === op.uid) return { data: null, error: { message: 'ลบบัญชีตัวเองไม่ได้' } }; T.users = T.users.filter(u => u.id !== op.args.p_user); T.profiles = T.profiles.filter(u => u.id !== op.args.p_user); persist(); return { data: null, error: null }; }
+            if (op.name === 'ams_set_pin') { const u = T.users.find(x => x.id === op.args.p_user); if (u) u.password = op.args.p_password; persist(); return { data: null, error: null }; }
       return { data: null, error: null };
     }
     const q = op.q, t = T[q.table], r = role(op.uid), match = row => q.eq.every(([f, v]) => row[f] === v) && (!q.like || String(row[q.like[0]]).startsWith(q.like[1].replace(/%$/, '')));
