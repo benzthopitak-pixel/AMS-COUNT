@@ -515,8 +515,8 @@ function render() {
     const I = (v, num, label, n, doneAt) => { const on = S.web === v || (v === 'live' && S.web === 'cc'); return `<button class="nav-item ${on ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}" ${on ? 'aria-current="page"' : ''}><span class="nav-num">${num}</span><span class="nav-label">${label}</span>${n ? `<span class="nav-badge">${n}</span>` : ''}</button>`; };
     let items;
     if (meta && !isLead()) items = I('live', '2', 'นับ (ดูอย่างเดียว)', 0, 99);
-    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('close', '3', 'ปิด + ส่งออก', 0, 99)
-      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '4', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '5', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '6', 'ทีม + ตั้งค่า', 0, 99));
+    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิด + ส่งออก', 0, 99)
+      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '5', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '6', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '7', 'ทีม + ตั้งค่า', 0, 99));
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
@@ -543,10 +543,85 @@ function webView(c) {
   if (S.web === 'live') return webLive(c);
   if (S.web === 'cc') return webCC();
   if (S.web === 'inbox') return webLive(c);
+  if (S.web === 'report') return webReport();
   if (S.web === 'close') return webClose(c);
   if (S.web === 'stickers') return webStickers(c);
   if (S.web === 'usb') return webUsb();
   return webRounds(c);
+}
+/* ---------- 3 · summary reports: on screen, Excel and PDF ---------- */
+const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก']];
+function reportData(kind) {
+  const { cur } = compute(), ccF = S.repCC || '', inCC = a => !ccF || String(a.cc) === ccF;
+  if (kind === 'sum') {
+    const by = new Map();
+    for (const a of master.values()) { if (!counted(a) || !inCC(a)) continue; const s2 = cur.get(a.code), e = by.get(String(a.cc)) || { cc: String(a.cc), total: 0, found: 0, lost: 0, mv: 0, dmg: 0, qr: 0 }; e.total++; if (s2) { e.found++; if (isMoved(s2)) e.mv++; if (s2.cond !== 'ปกติ') e.dmg++; if (needQR(s2) || s2.flags.reprint) e.qr++; } else if (lostOf(a.code)) e.lost++; by.set(e.cc, e); }
+    const rows = [...by.values()].sort((x, y) => x.cc.localeCompare(y.cc)).map(e => [e.cc, ccNameOf(e.cc), e.total, e.found, e.total - e.found - e.lost, e.lost, e.mv, e.dmg, e.qr, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%', ccClosed(e.cc) ? 'ปิดแล้ว' : '']);
+    const tot = rows.reduce((t, r) => { for (let i = 2; i <= 8; i++) t[i] += r[i]; return t; }, ['รวม', '', 0, 0, 0, 0, 0, 0, 0]);
+    tot.push(tot[2] ? Math.round(tot[3] / tot[2] * 1000) / 10 + '%' : '0%', ''); rows.push(tot);
+    return { title: 'สรุปผลตรวจนับ', head: ['Cost Center', 'ชื่อ CC', 'ทั้งหมด', 'ตรวจแล้ว', 'ไม่พบ', 'สูญหาย', 'ย้ายแผนก', 'ชำรุด ฯลฯ', 'ต้องพิมพ์ QR', '% ตรวจแล้ว', 'ปิดงาน'], rows, w: [11, 22, 8, 8, 8, 8, 8, 9, 10, 9, 8], num: [2, 3, 4, 5, 6, 7, 8] };
+  }
+  if (kind === 'nf') {
+    const rows = [...master.values()].filter(a => counted(a) && inCC(a) && !cur.has(a.code)).sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code))
+      .map(a => { const L = lostOf(a.code); return [a.code, a.name, String(a.cc), ccNameOf(a.cc), L ? 'สูญหาย' : 'ไม่พบ', L ? `${L.by} · ${fmtT(L.t)}` : '', L?.remark || '']; });
+    return { title: 'รายการที่ตรวจไม่พบ', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC', 'ชื่อ CC', 'สถานะ', 'บันทึกโดย', 'Remark'], rows, w: [11, 30, 10, 16, 8, 16, 18] };
+  }
+  if (kind === 'qr') {
+    const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && inCC(a) && (needQR(s2) || s2.flags.reprint || s2.flags.namebad || s2.rv.move === 'approved'); }).sort((x, y) => x.code.localeCompare(y.code))
+      .map(s2 => { const a = master.get(s2.code), cc = labelCC(s2.code); return [s2.code, a.name, cc.code, cc.name, [needQR(s2) && 'ยังไม่มี QR', s2.flags.reprint && 'ขอพิมพ์ใหม่', s2.flags.namebad && 'ชื่อไม่ตรง', s2.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · '), SRC[s2.src][0], s2.printedAt ? fmtT(s2.printedAt) : '']; });
+    return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
+  }
+  const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
+    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.flags.transferred ? 'โอนแล้ว (AS02)' : s2.rv.move === 'approved' ? 'อนุมัติแล้ว · รอโอน' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
+  return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'คนนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
+}
+function webReport() {
+  const tab = S.repTab || 'sum', d = reportData(tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  const n = Object.fromEntries(REP_TABS.map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด${meta.status === 'closed' ? '' : ' · ฉบับร่าง (ยังไม่ปิดรอบ)'}</p><h1>3 · สรุปผล</h1></div>
+    <div class="row"><button class="btn" data-a="repdl" data-v="xlsx">⬇ Excel</button><button class="btn pri" data-a="repdl" data-v="pdf">⬇ PDF</button></div></div>
+    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l} [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]</button>`).join('')}</div>
+    <select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select></div>
+    <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
+  for (const r of d.rows.slice(0, 1000)) { const tot = tab === 'sum' && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
+  h += `</tbody></table></div>${d.rows.length > 1000 ? `<p class="sub">แสดง 1,000 จาก ${N(d.rows.length)} · ไฟล์ที่ดาวน์โหลดมีครบ</p>` : ''}${d.rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>`;
+  if (S.msg.rep) h += `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>`;
+  return h + `</main>`;
+}
+async function reportFile(kind, fmt) {
+  const d = reportData(kind), stamp = new Date().toLocaleString('th-TH'), name = `AMS-${d.title}${S.repCC ? '-CC' + S.repCC : ''}-${meta.name}`.replace(/[\\/:*?"<>|]/g, '_');
+  const sub = `${meta.name}${S.repCC ? ' · CC ' + S.repCC : ''} · ${meta.status === 'closed' ? 'ปิดรอบแล้ว' : 'ฉบับร่าง'} · พิมพ์เมื่อ ${stamp}`;
+  if (fmt === 'xlsx') {
+    const ws = XLSX.utils.aoa_to_sheet([[d.title], [sub], [], d.head, ...d.rows]);
+    ws['!cols'] = d.w.map(x => ({ wch: Math.max(8, Math.round(x * 1.4)) })); ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 3, c: 0 }, e: { r: 3 + d.rows.length, c: d.head.length - 1 } }) };
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, d.title.slice(0, 31));
+    return await save(name + '.xlsx', new Blob([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  }
+  // PDF: Thai needs the app font, so each A4 page is drawn on a canvas and placed as an image
+  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ ลองรีเฟรช', 'bad'];
+  try { await document.fonts?.load('500 20px Prompt'); await document.fonts?.load('700 20px Prompt'); } catch {}
+  const { jsPDF } = window.jspdf, pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'l' });
+  const K = 4, W = 297 * K, H = 210 * K, M = 10 * K, rowH = 6.4 * K, fs = 2.7 * K, top0 = M + 16 * K, perPage = Math.floor((H - top0 - M - 6 * K) / rowH);
+  const tw = d.w.reduce((a, b) => a + b, 0), cols = d.w.map(x => x / tw * (W - 2 * M)), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d'), pages = Math.max(1, Math.ceil(d.rows.length / perPage));
+  const cut = (t, w) => { let s2 = String(t ?? ''); if (ctx.measureText(s2).width <= w) return s2; while (s2.length > 1 && ctx.measureText(s2 + '…').width > w) s2 = s2.slice(0, -1); return s2 + '…'; };
+  for (let pg = 0; pg < pages; pg++) {
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#121826'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${5 * K}px Prompt, sans-serif`; ctx.fillText(d.title, M, M + 3 * K);
+    ctx.font = `400 ${2.6 * K}px Prompt, sans-serif`; ctx.fillStyle = '#667085'; ctx.fillText(sub, M, M + 9 * K); ctx.textAlign = 'right'; ctx.fillText(`หน้า ${pg + 1} / ${pages}`, W - M, M + 9 * K); ctx.textAlign = 'left';
+    let y = top0; ctx.fillStyle = '#eef1fb'; ctx.fillRect(M, y, W - 2 * M, rowH); ctx.fillStyle = '#121826'; ctx.font = `600 ${fs}px Prompt, sans-serif`;
+    let x = M; d.head.forEach((t, i) => { ctx.fillText(cut(t, cols[i] - 2 * K), x + K, y + rowH / 2); x += cols[i]; }); y += rowH;
+    ctx.font = `400 ${fs}px Prompt, sans-serif`;
+    for (const r of d.rows.slice(pg * perPage, (pg + 1) * perPage)) {
+      const tot = kind === 'sum' && r[0] === 'รวม'; if (tot) { ctx.fillStyle = '#f4f5fa'; ctx.fillRect(M, y, W - 2 * M, rowH); ctx.font = `700 ${fs}px Prompt, sans-serif`; }
+      ctx.fillStyle = '#121826'; x = M;
+      r.forEach((t, i) => { const right = (d.num || []).includes(i) || (kind === 'sum' && i === 9); ctx.textAlign = right ? 'right' : 'left'; ctx.fillText(cut(t, cols[i] - 2 * K), right ? x + cols[i] - K : x + K, y + rowH / 2); x += cols[i]; });
+      ctx.textAlign = 'left'; ctx.strokeStyle = '#eaecf0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(M, y + rowH); ctx.lineTo(W - M, y + rowH); ctx.stroke(); y += rowH;
+    }
+    if (!d.rows.length) ctx.fillText('ไม่มีรายการ', M + K, y + rowH / 2);
+    if (pg) pdf.addPage('a4', 'l'); pdf.addImage(cv.toDataURL('image/png'), 'PNG', 0, 0, 297, 210, undefined, 'FAST');
+  }
+  return await save(name + '.pdf', pdf.output('blob'), 'application/pdf');
 }
 function totals() {
   const { cur } = compute(); let total = 0, found = 0;
@@ -830,7 +905,7 @@ function flagChips(s, act) {
 function webClose(c) {
   const T = totals(), areas = meta.areas || [], unassigned = areas.filter(a => !a.shared && !a.assignee).length, open = c.move.length + c.unk.length + c.dmg.length, closed = meta.status === 'closed';
   const ck = (ok, title, sub) => `<div class="row" style="align-items:flex-start"><span class="dot" style="width:28px;height:28px;background:${ok ? 'var(--ok)' : 'var(--warn)'}">${ok ? '✓' : '!'}</span><span style="flex:1"><b>${title}</b><br><span class="sub">${sub}</span></span></div>`;
-  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>3 · ปิดรอบ</h1>`;
+  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>4 · ปิดรอบ</h1>`;
   if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
   else {
     h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 2 นับ');
@@ -862,7 +937,7 @@ function stickerList(c) {
 function webStickers(c) {
   const list = stickerList(c), { cur } = compute();
   for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>4 · พิมพ์สติ๊กเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>5 · พิมพ์สติ๊กเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
     <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR (ยิงบาร์โค้ด / พิมพ์เอง / เว็บ)', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติ๊กเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
     <div class="row"><section class="card grow">`;
   if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
@@ -1092,7 +1167,7 @@ function usbCard() {
 }
 function webUsb() {
   const info = LS.get('usbInfo-' + meta.id, {});
-  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>5 · สาย USB</h1></div><div class="row">
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องยิงไม่มีเน็ต</p><h1>6 · สาย USB</h1></div><div class="row">
     <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอม → เครื่องยิง</span><h2>ส่งทะเบียนให้เครื่องยิง</h2>
       <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องยิง: แท็บ ฉัน → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
       <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของ Admin</p>
@@ -1216,7 +1291,7 @@ async function addMember() {
 }
 function webTeam() {
   const cfg = Store.auth.config(), lead = S.user?.role === 'lead';
-  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>6 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
+  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>7 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
     <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th><th></th>' : ''}</tr></thead><tbody>`;
   for (const u of S.team) h += `<tr><td>${lead && S.editName === u.id ? `<div class="row" style="flex-wrap:nowrap"><input class="in" id="nm-${u.id}" value="${esc(u.name)}" style="width:150px"><button class="btn sm pri" data-a="memname" data-v="${u.id}">บันทึก</button><button class="btn sm" data-a="noname">ยกเลิก</button></div>` : `<b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}${lead ? ` <button class="btn sm" data-a="editname" data-v="${u.id}" aria-label="แก้ชื่อ ${esc(u.name)}" style="min-height:28px;padding:2px 8px">แก้ชื่อ</button>` : ''}`}</td><td class="mono">${esc(u.code)}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'Admin' : 'คนนับ'} ⇄</button>` : (u.role === 'lead' ? 'Admin' : 'คนนับ')}</td>
@@ -1325,6 +1400,8 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
+    case 'reptab': S.repTab = v; S.msg.rep = null; break;
+    case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); S.msg.rep = await reportFile(S.repTab || 'sum', v); break;
     case 'askclose': S.confirmClose = v; break;
     case 'noclose': S.confirmClose = null; break;
     case 'ccclose': S.confirmClose = null; pushEvent({ k: 'edit', code: '#CC:' + v, round: meta.id, areaDone: true, left: +t.dataset.n || 0 }); beep('ok'); flash('ปิดงาน CC แล้ว · ขอบคุณ'); break;
@@ -1456,6 +1533,7 @@ document.addEventListener('change', async e => {
   if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
   if (t.id === 'jobSel') { pickJob(t.value); render(); }
+  if (t.id === 'repCC') { S.repCC = t.value; render(); }
   if (t.dataset.ccf) { S.ccF = { ...(S.ccF || {}), [t.dataset.ccf]: t.value }; render(); }
 
 });
