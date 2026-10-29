@@ -792,6 +792,7 @@ function appView(c) {
     const B = (v, l) => `<button class="${S.app === v ? 'on' : ''}" data-a="app" data-v="${v}">${l}</button>`;
     h += `<nav class="bnav" aria-label="เมนูแอป"><div class="bnav-in">${B('home', 'ภารกิจ')}${B('area', 'พื้นที่')}<button class="fab" data-a="app" data-v="scan" aria-label="สแกน">สแกน</button>${B('feed', 'ผลนับ')}${B('me', 'ฉัน')}</div></nav>`;
   }
+  if (S.updReady && S.mode === 'app') h += `<div style="position:fixed;left:12px;right:12px;top:calc(8px + env(safe-area-inset-top, 0px));z-index:35;max-width:440px;margin:0 auto"><div class="card dark" style="flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:#121826;color:#fff"><span style="flex:1;font-size:14px">มีหน้าจอเวอร์ชันใหม่ (${esc(S.updReady)})</span><button class="btn sm lime" data-a="applyupd">อัปเดตเลย</button></div></div>`;
   if (S.item) h += itemSheet(S.item);
   if (S.areaPick) h += areaPicker();
   if (S.search && !S.item) h += searchSheet();
@@ -925,7 +926,7 @@ function appMeBlock() {
     ${usbCard()}
     ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
-    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(window.AndroidBridge?.appVersion?.() || 'เว็บ')} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
+    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(window.AndroidBridge?.appVersion?.() || 'เว็บ')}${window.AndroidBridge?.webVersion ? ' · หน้าจอ ' + esc(window.AndroidBridge.webVersion()) : ''} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
     <div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>
     <div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ReaderConfig → Data Output → <b>Keyboard Emulation</b> (หรือ <b>Intent</b>: Action = <span class="mono">com.ams.count.SCAN</span> · Extra = <span class="mono">data</span>) · Suffix = Enter · เปิด QR Code + Code 128</p></div>
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
@@ -1234,6 +1235,8 @@ document.addEventListener('click', async e => {
     case 'srchsave': { const q = S.search.q.trim(); if (!q) return; S.search = null; S.manual = true; doScan(q); S.manual = false; return; }
     case 'closedup': clearTimeout(S.dupT); S.dupPop = null; break;
     case 'closeoth': S.othPop = null; break;
+    case 'chkupd': flash('กำลังตรวจหาอัปเดต…'); window.AndroidBridge.checkUpdate(); return;
+    case 'applyupd': flush().finally(() => window.AndroidBridge?.reload ? window.AndroidBridge.reload() : location.reload()); return;
     case 'popdec': edit(v, { dec: t.dataset.d }); S.othPop = null; render(); return;
     case 'manual': S.manual = !S.manual; break;
     case 'feedf': S.feedF = v; break;
@@ -1298,6 +1301,11 @@ function routeScan(code) {
   if (S.app !== 'scan') S.app = 'scan';
   doScan(code);
 }
+// the Android app downloaded a newer set of screens from the web (see MainActivity.checkWebUpdate)
+window.AMSUpdate = (r, manual) => {
+  if (r.startsWith('ready:')) { S.updReady = r.slice(6); render(); return; }
+  if (manual) flash(r === 'latest' ? 'เป็นเวอร์ชันล่าสุดแล้ว' : r === 'apk' ? 'ต้องติดตั้งแอปใหม่' : 'ตรวจอัปเดตไม่ได้ · ' + r.replace(/^error:/, ''));
+};
 window.AMSScan = code => { logScan('Intent', code); routeScan(code); return true; };
 let keyBuf = '', keyT = 0, keyTimer = null;
 document.addEventListener('keydown', e => {

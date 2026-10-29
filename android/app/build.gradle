@@ -16,7 +16,11 @@ android {
         targetSdk 34
         versionCode buildNo
         versionName "1.0.${buildNo}"
+        // หน้าจอแอปอัปเดตเองจาก GitHub Pages · SHELL เพิ่มเมื่อแก้โค้ด Android (ต้องติดตั้ง APK ใหม่)
+        buildConfigField 'String', 'UPDATE_URL', "\"${System.getenv('AMS_UPDATE_URL') ?: ''}\""
+        buildConfigField 'int', 'SHELL', (file("$rootDir/shell-version.txt").text.trim())
     }
+    buildFeatures { buildConfig true }
 
     signingConfigs {
         release {

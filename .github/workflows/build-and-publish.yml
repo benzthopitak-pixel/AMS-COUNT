@@ -46,6 +46,7 @@ jobs:
           AMS_BUILD_NUMBER: ${{ github.run_number }}
           AMS_KEYSTORE_PASSWORD: ${{ secrets.AMS_KEYSTORE_PASSWORD }}
           AMS_KEY_ALIAS: ams-count
+          AMS_UPDATE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: gradle -p android assembleRelease --no-daemon
 
       - name: Assemble website
@@ -55,6 +56,17 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk _site/download/ams-count.apk
           echo "{\"version\":\"1.0.${{ github.run_number }}\",\"date\":\"$(TZ=Asia/Bangkok date +'%d/%m/%Y %H:%M')\"}" > _site/download/version.json
           touch _site/.nojekyll
+          # list of the app's screen files + checksums → the scanner app downloads a newer set by itself
+          python3 - "${{ github.run_number }}" "$(cat android/shell-version.txt)" <<'PY'
+          import hashlib, json, os, sys
+          files = []
+          for root, _, names in os.walk('web'):
+              for n in sorted(names):
+                  full = os.path.join(root, n); rel = os.path.relpath(full, 'web').replace(os.sep, '/')
+                  if rel == 'install.html' or rel.startswith('download/'): continue
+                  files.append({'p': rel, 'sha256': hashlib.sha256(open(full, 'rb').read()).hexdigest()})
+          json.dump({'build': int(sys.argv[1]), 'shell': int(sys.argv[2]), 'files': files}, open('_site/download/web-manifest.json', 'w'))
+          PY
 
       - uses: actions/upload-artifact@v4
         with:

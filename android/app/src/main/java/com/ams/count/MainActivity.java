@@ -32,7 +32,15 @@ import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 import androidx.webkit.WebViewCompat;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
+
+import android.content.SharedPreferences;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -41,7 +49,7 @@ import java.io.OutputStream;
 
 /**
  * AMS Count — หน้าจอแอปคือหน้าเว็บที่บรรจุมาใน APK (assets/www) แสดงด้วย WebView ภายในแอป
- * ไม่ได้เปิด Chrome และไม่ต้องโหลดหน้าจากอินเทอร์เน็ต · เน็ตใช้แค่ซิงก์ข้อมูลกับ Supabase
+ * ไม่ได้เปิด Chrome · เปิดได้แม้ไม่มีเน็ต · เมื่อมีเน็ต แอปโหลดหน้าจอชุดใหม่จากเว็บมาเก็บไว้เอง (checkWebUpdate)
  * เครื่องยิง CipherLab ทำงานแบบ Keyboard Emulation: รหัสที่ยิงจะพิมพ์ลงช่องสแกนแล้วตามด้วย Enter
  */
 public class MainActivity extends Activity {
@@ -59,8 +67,17 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        final WebViewAssetLoader.AssetsPathHandler assets = new WebViewAssetLoader.AssetsPathHandler(this);
+        // หน้าจอแอป: ใช้ชุดที่อัปเดตจากเว็บ (files/www-live) ถ้าใหม่กว่าชุดที่มากับ APK · ไม่งั้นใช้ชุดใน APK
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
-                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .addPathHandler("/assets/www/", path -> {
+                    File f = liveFile(path);
+                    if (f != null) {
+                        try { return new WebResourceResponse(mimeOf(path), null, new FileInputStream(f)); } catch (Exception ignored) { }
+                    }
+                    return assets.handle("www/" + path);
+                })
+                .addPathHandler("/assets/", assets)
                 .build();
 
         web = new WebView(this);
@@ -121,6 +138,96 @@ public class MainActivity extends Activity {
         web.setFocusableInTouchMode(true);
         web.requestFocus();
         warnIfOldWebView();
+        checkWebUpdate(false);
+    }
+
+    /* ---------- อัปเดตหน้าจอแอปอัตโนมัติจากเว็บ (ไม่ต้องติดตั้ง APK ใหม่) ----------
+     * ทุกครั้งที่เปิดแอปและมีเน็ต: อ่าน download/web-manifest.json → ถ้ามีชุดใหม่กว่า โหลดไฟล์ทั้งหมด ตรวจ sha256
+     * แล้วสลับเข้า files/www-live ในครั้งเดียว · ข้อมูลผลนับอยู่ที่เดิม (origin เดียวกัน) ไม่หาย
+     * ถ้าชุดใหม่ต้องใช้แอปตัวใหม่กว่า (shell) จะไม่สลับ แต่ชวนให้ติดตั้ง APK ใหม่แทน */
+    private SharedPreferences prefs() { return getSharedPreferences("ams-web", MODE_PRIVATE); }
+    private int bundledBuild() { return BuildConfig.VERSION_CODE; }
+    private int liveBuild() { return prefs().getInt("liveBuild", 0); }
+    private File liveDir() { return new File(getFilesDir(), "www-live"); }
+    private File liveFile(String path) {
+        if (liveBuild() <= bundledBuild() || path.contains("..")) return null;
+        File f = new File(liveDir(), path.isEmpty() ? "index.html" : path);
+        return f.isFile() ? f : null;
+    }
+    private static String mimeOf(String p) {
+        String l = p.toLowerCase();
+        if (l.endsWith(".html") || l.isEmpty()) return "text/html";
+        if (l.endsWith(".js")) return "application/javascript";
+        if (l.endsWith(".css")) return "text/css";
+        if (l.endsWith(".svg")) return "image/svg+xml";
+        if (l.endsWith(".woff2")) return "font/woff2";
+        if (l.endsWith(".json")) return "application/json";
+        if (l.endsWith(".png")) return "image/png";
+        return "application/octet-stream";
+    }
+    private static byte[] fetch(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(8000); c.setReadTimeout(20000); c.setUseCaches(false);
+        c.setRequestProperty("Cache-Control", "no-cache");
+        try (InputStream in = c.getInputStream()) {
+            if (c.getResponseCode() != 200) throw new Exception("HTTP " + c.getResponseCode());
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[16384]; int n; while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toByteArray();
+        } finally { c.disconnect(); }
+    }
+    private static String sha256(byte[] b) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        for (byte x : MessageDigest.getInstance("SHA-256").digest(b)) sb.append(String.format("%02x", x));
+        return sb.toString();
+    }
+    private static void wipe(File f) { if (f.isDirectory()) { File[] k = f.listFiles(); if (k != null) for (File c : k) wipe(c); } f.delete(); }
+    private volatile boolean updating = false;
+    private void checkWebUpdate(boolean manual) {
+        if (updating || BuildConfig.UPDATE_URL.isEmpty()) return;
+        updating = true; lastCheck = System.currentTimeMillis();
+        new Thread(() -> {
+            String result;
+            try {
+                String base = BuildConfig.UPDATE_URL;
+                JSONObject m = new JSONObject(new String(fetch(base + "download/web-manifest.json?t=" + System.currentTimeMillis()), StandardCharsets.UTF_8));
+                int build = m.getInt("build"), shell = m.optInt("shell", 1);
+                int have = Math.max(liveBuild(), bundledBuild());
+                if (shell > BuildConfig.SHELL) {
+                    result = "apk";
+                    runOnUiThread(() -> new AlertDialog.Builder(this)
+                            .setTitle("มีแอปเวอร์ชันใหม่")
+                            .setMessage("รอบนี้ต้องติดตั้งแอปใหม่ทับตัวเดิม 1 ครั้ง (ผลนับไม่หาย)")
+                            .setPositiveButton("ดาวน์โหลด", (d, w) -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(base + "install.html"))); } catch (Exception ignored) { } })
+                            .setNegativeButton("ไว้ทีหลัง", null).show());
+                } else if (build <= have) {
+                    result = "latest";
+                } else {
+                    File next = new File(getFilesDir(), "www-next"); wipe(next);
+                    JSONArray files = m.getJSONArray("files");
+                    for (int i = 0; i < files.length(); i++) {
+                        JSONObject f = files.getJSONObject(i);
+                        String p = f.getString("p");
+                        if (p.contains("..")) throw new Exception("bad path");
+                        byte[] b = fetch(base + p + "?v=" + build);
+                        if (!sha256(b).equals(f.getString("sha256"))) throw new Exception("checksum " + p);
+                        File out = new File(next, p); out.getParentFile().mkdirs();
+                        try (FileOutputStream os = new FileOutputStream(out)) { os.write(b); }
+                    }
+                    File live = liveDir(), old = new File(getFilesDir(), "www-old"); wipe(old);
+                    if (live.exists() && !live.renameTo(old)) throw new Exception("swap");
+                    if (!next.renameTo(live)) { old.renameTo(live); throw new Exception("swap"); }
+                    wipe(old);
+                    prefs().edit().putInt("liveBuild", build).apply();
+                    result = "ready:1.0." + build;
+                }
+            } catch (Exception e) {
+                result = "error:" + e.getMessage();
+            }
+            final String r = result;
+            updating = false;
+            runOnUiThread(() -> { if (web != null) web.evaluateJavascript("window.AMSUpdate && window.AMSUpdate(" + JSONObject.quote(r) + "," + manual + ")", null); });
+        }).start();
     }
 
     /* ---------- รับรหัสจากเครื่องยิงแบบ Intent (ReaderConfig → Data Output → Intent) ---------- */
@@ -161,7 +268,10 @@ public class MainActivity extends Activity {
         for (String a : SCAN_ACTIONS) f.addAction(a);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(scanReceiver, f, Context.RECEIVER_EXPORTED);
         else registerReceiver(scanReceiver, f);
+        // กลับเข้าแอปหลังพักไว้นาน → ตรวจอัปเดตหน้าจออีกครั้ง (ไม่เกินชั่วโมงละครั้ง)
+        if (System.currentTimeMillis() - lastCheck > 3_600_000L) checkWebUpdate(false);
     }
+    private long lastCheck = 0;
 
     @Override
     protected void onPause() {
@@ -263,6 +373,16 @@ public class MainActivity extends Activity {
                 return "ERR:" + e.getMessage();
             }
         }
+
+        /** เวอร์ชันหน้าจอที่ใช้อยู่ (อัปเดตจากเว็บได้) */
+        @JavascriptInterface
+        public String webVersion() { return "1.0." + Math.max(liveBuild(), bundledBuild()); }
+
+        @JavascriptInterface
+        public void checkUpdate() { checkWebUpdate(true); }
+
+        @JavascriptInterface
+        public void reload() { runOnUiThread(() -> { if (web != null) web.loadUrl(START_URL); }); }
 
         @JavascriptInterface
         public String appVersion() {
