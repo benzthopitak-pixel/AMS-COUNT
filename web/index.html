@@ -2013,6 +2013,9 @@ function pivotRecords() {
     const res = { 'ผลการนับ': s2 ? (isBorrowed(s2) ? 'ยืมมา' : isMoveCase(s2) ? 'ต้องย้าย CC' : 'ตรวจแล้ว') : L ? 'สูญหาย' : 'ยังไม่พบ', 'สภาพ': s2?.cond || '', 'CC ที่พบ': s2 ? String(s2.area) : '', 'ชื่อ CC ที่พบ': s2?.areaName || '', 'ผู้นับ': s2?.by || '', 'วิธีตรวจนับ': s2 ? SRC[s2.src][0] : '', 'QR': !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', 'สถานะย้าย': s2 && isMoveCase(s2) ? (s2.rv.move === 'approved' ? 'รอโอนย้าย' : 'รออนุมัติ') : '', 'วันที่นับ': s2 ? new Date(s2.t).toLocaleDateString('th-TH') : '', 'ปิดงาน CC': ccClosed(a.cc) ? 'ปิดแล้ว' : 'ยังไม่ปิด' };
     for (const raw of a.raws.length ? a.raws : [[]]) { const rec = {}; H.forEach((h, i) => { if (h) rec[h] = num(raw[i] ?? ''); }); out.push(Object.assign(rec, res)); }
   }
+  // only what the imported file really has (drop its blank answer columns) + the count results
+  const empty = H.filter(h => h && out.every(r => r[h] === '' || r[h] == null));
+  for (const r of out) for (const h of empty) delete r[h];
   return out;
 }
 async function mountPivot() {
