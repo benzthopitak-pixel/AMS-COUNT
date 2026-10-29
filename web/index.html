@@ -249,7 +249,7 @@ const S = {
   web: 'rounds', app: 'home', user: LS.get('user', null),
   area: LS.get('area', null), room: LS.get('room', ''), manual: false,
   areaTab: 'left', inboxTab: 'move', inboxSel: null, inboxChecked: new Set(),
-  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: 'a4', stPaste: '',
+  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: LS.get('stSize', 'a4'), stPaste: '',
   cards: [], item: null, imp: null, msg: {}, closeChoice: 'writeoff', confirmReset: false, verify: null, areaPick: false, liveArea: null,
   gate: 'boot', authed: false, team: LS.get('team', []), firstRun: false, gateMsg: null, busy: false
 };
@@ -1144,8 +1144,11 @@ function webStickers(c) {
   for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
     h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
   h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
-    <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option></select></label>
-    <div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>
+    <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option><option value="custom" ${S.stSize === 'custom' ? 'selected' : ''}>ม้วน กำหนดขนาดเอง${S.stSize === 'custom' ? ` (${stDim().w} × ${stDim().h} มม.)` : ''}</option></select></label>
+    ${S.stSize === 'custom' ? `<div class="row" style="gap:8px"><label class="f" style="flex:1">กว้าง (มม.)<input class="in" id="stW" type="number" min="20" max="150" step="0.5" value="${stDim().w}"></label><label class="f" style="flex:1">สูง (มม.)<input class="in" id="stH" type="number" min="10" max="100" step="0.5" value="${stDim().h}"></label></div>` : ''}
+    ${Store.isApp ? '' : `<button class="btn pri" data-a="stprint" data-v="all" ${S.stSel.size ? '' : 'disabled'}>🖨 พิมพ์ ${S.stSel.size} ดวง</button><div class="row"><button class="btn" data-a="stprint" data-v="test" ${S.stSel.size ? '' : 'disabled'}>🖨 ทดสอบ 1 ดวง</button><button class="btn" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>⬇ PDF</button></div>
+    <span class="sub">พิมพ์ตรงจากเว็บ ไม่ต้องใช้ BarTender · หน้าพิมพ์: เลือกเครื่องพิมพ์สติกเกอร์ · ขอบกระดาษ = ไม่มี · สเกล = 100%</span>`}
+    ${Store.isApp ? `<div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>` : ''}
     <button class="btn" data-a="stxlsx" ${S.stSel.size ? '' : 'disabled'}>⬇ Excel ตามแม่แบบ OGA (${S.stSel.size})</button><span class="sub">ไฟล์สำหรับโปรแกรมพิมพ์สติกเกอร์ · 1 แถวต่อ 1 Sub-number</span>
     <button class="btn lime" data-a="stdone" ${S.stSel.size ? '' : 'disabled'}>บันทึกว่าติดแล้ว</button>${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
   return h;
@@ -1680,6 +1683,7 @@ document.addEventListener('click', async e => {
     case 'stsel': t.checked ? S.stSel.add(v) : S.stSel.delete(v); render(); return;
     case 'stall': { const list = stickerList(cats()); if (t.checked) list.forEach(x => S.stSel.add(x)); else S.stSel.clear(); render(); return; }
     case 'stpdf': S.msg.st = await stickerPdf(v === 'test'); break;
+    case 'stprint': S.msg.st = await stickerPrint(v === 'test'); break;
     case 'stxlsx': S.msg.st = await stickerExcel([...S.stSel]); break;
     case 'stdone': for (const code of S.stSel) { if (compute().cur.has(code)) pushEvent({ k: 'edit', code, round: meta.id, printed: true }); } S.msg.st = [`บันทึกว่าติดแล้ว ${S.stSel.size} ดวง`, 'ok']; S.stSel.clear(); break;
     case 'login': S.user = meta.team[+v]; LS.set('user', S.user); break;
@@ -1767,7 +1771,8 @@ document.addEventListener('change', async e => {
   if (t.dataset.map) { S.imp.map[t.dataset.map] = +t.value; render(); }
   if (t.dataset.assign !== undefined) { const areas = [...meta.areas]; areas[+t.dataset.assign] = { ...areas[+t.dataset.assign], assignee: t.value || null }; await saveMeta({ ...meta, areas }); }
   if (t.id === 'roomIn') { S.room = t.value.trim(); LS.set('room', S.room); }
-  if (t.id === 'stSize') { S.stSize = t.value; }
+  if (t.id === 'stSize') { S.stSize = t.value; LS.set('stSize', t.value); setTimeout(render); }
+  if (t.id === 'stW' || t.id === 'stH') { const d = stDim(), v = +t.value; if (v >= 10 && v <= 150) { LS.set('stDim', { ...d, [t.id === 'stW' ? 'w' : 'h']: v }); setTimeout(render); } }
   if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
   if (t.id === 'jobSel') { pickJob(t.value); render(); }
@@ -2005,11 +2010,33 @@ async function stickerExcel(codes) {
   const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   return await save(`OGA_AMSCounting_Review-สติกเกอร์-${r - 1}แถว-${stamp}.xlsx`, new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
+const stDim = () => { const d = LS.get('stDim', null); return d && d.w && d.h ? d : { w: 50, h: 25 }; };
+const stSizeMM = () => S.stSize === 'a4' ? { w: 70, h: 37.125 } : S.stSize === 'roll' ? { w: 50, h: 25 } : stDim();
+// print straight from the browser to the label printer: one page per sticker for a roll (page size = sticker size), 3 × 8 on A4
+async function stickerPrint(test) {
+  try { await document.fonts?.load('500 20px Prompt'); } catch {}
+  const codes = [...S.stSel].slice(0, test ? 1 : 2000), a4 = S.stSize === 'a4', { w, h } = stSizeMM();
+  const cv = document.createElement('canvas'); cv.width = Math.round(w * 12); cv.height = Math.round(h * 12);
+  const imgs = codes.map(code => { drawSticker(cv, code); return cv.toDataURL('image/png'); });
+  const css = a4 ? `@page{size:A4;margin:0}body{margin:0}.pg{width:210mm;height:297mm;display:grid;grid-template-columns:repeat(3,${w}mm);grid-auto-rows:${h}mm;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{width:${w}mm;height:${h}mm;display:block}`
+    : `@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{width:${w}mm;height:${h}mm;display:block;page-break-after:always;break-after:page}img:last-child{page-break-after:auto;break-after:auto}`;
+  let body = '';
+  if (a4) for (let i = 0; i < imgs.length; i += 24) body += `<div class="pg">${imgs.slice(i, i + 24).map(src => `<img src="${src}">`).join('')}</div>`;
+  else body = imgs.map(src => `<img src="${src}">`).join('');
+  document.getElementById('stFrame')?.remove();
+  const fr = document.createElement('iframe'); fr.id = 'stFrame'; fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(fr);
+  const d = fr.contentDocument; d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"><title>AssetSync สติกเกอร์</title><style>${css}</style></head><body>${body}</body></html>`); d.close();
+  await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+  fr.contentWindow.focus(); fr.contentWindow.print();
+  return [`ส่งพิมพ์ ${codes.length} ดวง (${a4 ? 'A4' : `${w} × ${h} มม.`}) · พิมพ์ครบแล้วกด "บันทึกว่าติดแล้ว"`, 'ok'];
+}
 async function stickerPdf(test) {
   if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
   try { await document.fonts?.load('500 20px Prompt'); } catch {}
   const codes = [...S.stSel].slice(0, test ? 1 : 2000), { jsPDF } = window.jspdf;
-  const roll = S.stSize === 'roll', w = roll ? 50 : 70, hgt = roll ? 25 : 37.125;
+  const roll = S.stSize !== 'a4', { w, h: hgt } = stSizeMM();
   const pdf = roll ? new jsPDF({ unit: 'mm', format: [w, hgt], orientation: 'l' }) : new jsPDF({ unit: 'mm', format: 'a4' });
   const cv = document.createElement('canvas'); cv.width = Math.round(w * 12); cv.height = Math.round(hgt * 12);
   codes.forEach((code, i) => {
