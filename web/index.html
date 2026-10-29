@@ -1226,6 +1226,8 @@ function usbCard() {
     <p class="sub">2) นับเสร็จ กดส่งออก ไฟล์จะไปอยู่ที่ Download → ต่อสาย แล้วคัดลอกไปคอม</p>
     <div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ผลนับในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${out}</b><span style="font-size:11px">ส่งออกแล้ว</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${Math.max(0, n)}</b><span style="font-size:11px">ยังไม่ส่งออก</span></div></div>
     <button class="btn pri" data-a="usbreport" ${meta && mine.length ? '' : 'disabled'}>ส่งออกผลนับ (Report)</button>`;
+  const last = LS.get('usbLast', null);
+  if (last) h += `<div class="card" style="background:var(--ok-soft);padding:12px;gap:4px"><b>ไฟล์ล่าสุดอยู่ที่นี่</b><span class="mono" style="word-break:break-all">${esc(last.where)}/${esc(last.name)}</span><span class="sub">${fmtT(last.at)} · บนคอม: This PC → เครื่องยิง → Internal shared storage → ${esc(last.where.replace(/\//g, ' → '))}</span></div>`;
   if (S.msg.usbApp) h += `<div class="msg ${S.msg.usbApp[1]}">${esc(S.msg.usbApp[0])}</div>`;
   return h + `</div>`;
 }
@@ -1237,7 +1239,7 @@ function webUsb() {
       <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของ Admin</p>
       <button class="btn pri" data-a="usbpkg" ${master.size ? '' : 'disabled'}>ดาวน์โหลดแพ็กเกจ</button>${S.msg.pkg ? `<div class="msg ${S.msg.pkg[1]}">${esc(S.msg.pkg[0])}</div>` : ''}</section>
     <section class="card grow"><span class="chip c-ok" style="align-self:flex-start">ขั้นที่ 2 · เครื่องยิง → คอม</span><h2>รับผลนับจากเครื่องยิง</h2>
-      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย · คัดลอกไฟล์ <span class="mono">AssetSync-ผลนับ-….xlsx</span> จาก Download ของเครื่องยิงมาไว้ที่คอม</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
+      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย USB · บนเครื่องยิงเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอม: This PC → ชื่อเครื่องยิง → Internal shared storage → <b>Download</b> → ไฟล์ <span class="mono">AssetSync-ผลนับ-….xlsx</span> (ถ้าไม่เห็น ให้ดูชื่อโฟลเดอร์ที่แอปบอกหลังกดส่งออก)</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
       <div class="drop" data-drop="usb"><b>ลากไฟล์ผลนับจากเครื่องยิงมาวางตรงนี้</b><span class="sub">.xlsx ที่แอปส่งออก · เปิดดูใน Excel ได้ด้วย (ชีต ผลนับ)</span><button class="btn pri" data-a="pick" data-v="usb">เลือกไฟล์ (หลายไฟล์ได้)</button></div>
       ${S.msg.usb ? `<div class="msg ${S.msg.usb[1]}">${S.msg.usb[0].map(esc).join('<br>')}</div>` : ''}
       <div class="tbl-wrap"><table><thead><tr><th>คนนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
@@ -1260,11 +1262,15 @@ async function importPackage(file) {
 }
 async function exportReport() {
   const { cur } = compute(), wb = XLSX.utils.book_new();
-  const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ']];
+  const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'วิธีตรวจนับ']];
   for (const s of [...cur.values()].filter(s => s.dev === dev).sort((a, b) => a.t - b.t)) {
     const a = master.get(s.code);
-    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t)]);
+    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t), SRC[s.src][0]]);
   }
+  const C = compute(), myLost = new Set(mine.filter(e => e.lost).map(e => e.code));
+  for (const [code, L] of C.lost) if (myLost.has(code)) { const a = master.get(code); view.push([code, a?.name || '', a?.ccName || '', '', '', 'สูญหาย', '', '', '', '', L.remark, L.by, fmtT(L.t), '']); }
+  const myCC = new Set(mine.filter(e => String(e.code).startsWith('#CC:')).map(e => e.code.slice(4)));
+  for (const [cc, d] of C.ccDone) if (myCC.has(cc)) view.push(['', `ปิดงาน CC ${cc} ${ccNameOf(cc)}`, '', '', '', 'นับครบแล้ว', '', '', '', '', d.left ? `ไม่เจอ ${d.left} รายการ` : '', d.by, fmtT(d.t), '']);
   const raw = [['AMS Count USB', 1, meta.id, dev, S.user?.name || '', Date.now(), mine.length]]; let buf = [], len = 0;
   for (const e of mine) { const j = JSON.stringify(e); if (len + j.length > 30000 && buf.length) { raw.push(['[' + buf.join(',') + ']']); buf = []; len = 0; } buf.push(j); len += j.length + 1; }
   if (buf.length) raw.push(['[' + buf.join(',') + ']']);
@@ -1273,7 +1279,7 @@ async function exportReport() {
   wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
   const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
   const r = await save(`AssetSync-ผลนับ-${S.user?.name || 'ไม่ระบุ'}-${dev}-${stamp}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  if (r[1] === 'ok') LS.set('usbOut-' + meta.id, mine.length);
+  if (r[1] === 'ok') { LS.set('usbOut-' + meta.id, mine.length); LS.set('usbLast', { name: r[0].replace(/^บันทึกไฟล์แล้ว: /, '').split(' · ')[0], where: r[0].split(' · ')[1] || 'Download', at: Date.now() }); }
   return r;
 }
 async function importReports(files) {

@@ -14,6 +14,8 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.provider.Settings;
+import android.media.MediaScannerConnection;
+import android.Manifest;
 import java.util.List;
 import android.net.Uri;
 import android.os.Build;
@@ -143,6 +145,9 @@ public class MainActivity extends Activity {
         web.requestFocus();
         warnIfOldWebView();
         checkWebUpdate(false);
+        // Android 7–9: ask once for storage so exported files land in the public Download folder (visible over USB)
+        if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 7);
     }
 
     /* ---------- อัปเดตหน้าจอแอปอัตโนมัติจากเว็บ (ไม่ต้องติดตั้ง APK ใหม่) ----------
@@ -355,25 +360,27 @@ public class MainActivity extends Activity {
                     ContentValues v = new ContentValues();
                     v.put(MediaStore.MediaColumns.DISPLAY_NAME, safe);
                     v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AssetSync");
+                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                     Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                     if (uri == null) return "ERR:สร้างไฟล์ไม่ได้";
                     try (OutputStream os = cr.openOutputStream(uri)) { os.write(bytes); }
-                    where = "Download/AssetSync";
+                    where = "Download";
                 } else {
                     File f;
                     try {
-                        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AssetSync");
+                        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
                         if (!dir.exists() && !dir.mkdirs()) throw new Exception("no access");
                         f = new File(dir, safe);
                         try (FileOutputStream os = new FileOutputStream(f)) { os.write(bytes); }
-                        where = "Download/AssetSync";
+                        where = "Download";
                     } catch (Exception noPublicAccess) {
                         // Android 7–9 ที่ยังไม่ให้สิทธิ์ storage: เก็บในโฟลเดอร์ของแอปแทน
                         f = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), safe);
                         try (FileOutputStream os = new FileOutputStream(f)) { os.write(bytes); }
-                        where = f.getParent();
+                        where = "Android/data/" + getPackageName() + "/files/Download";
                     }
+                    // without a media scan a file written this way does not show up on the computer over USB
+                    MediaScannerConnection.scanFile(MainActivity.this, new String[]{f.getAbsolutePath()}, null, null);
                 }
                 final String msg = "บันทึกแล้ว: " + where + "/" + safe;
                 runOnUiThread(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show());

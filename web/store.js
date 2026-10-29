@@ -214,7 +214,7 @@
       const blob = data instanceof Blob ? data : new Blob([data], { type: type || 'application/octet-stream' });
       if (window.AndroidBridge && window.AndroidBridge.saveFile) {
         const r = String(window.AndroidBridge.saveFile(filename, await blobToB64(blob), blob.type || type || 'application/octet-stream'));
-        if (r.startsWith('OK')) return { status: 'saved', where: r.slice(3) || 'Download/AssetSync' };
+        if (r.startsWith('OK')) return { status: 'saved', where: r.slice(3) || 'Download' };
         const e = new Error(r.replace(/^ERR:/, '')); e.code = 'save_failed'; throw e;
       }
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
