@@ -199,6 +199,17 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .pv-wrap table.pvtTable { font-family: var(--display); font-size: 12.5px; } .pv-wrap table.pvtTable thead tr th, .pv-wrap table.pvtTable tbody tr th { background: #eaeeff; border-color: #d0d5dd; font-size: 12px; }
 .pv-wrap table.pvtTable tbody tr td { border-color: #e4e7ec; font-variant-numeric: tabular-nums; }
 .pv-wrap .pvtFilterBox { border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .15); font-family: var(--display); }
+/* dashboard */
+.dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.dash .card { gap: 10px; } .dash h2 { font-size: 16px; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ok-ink); font-weight: 600; background: var(--ok-soft); border-radius: 999px; padding: 3px 10px; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgb(18 183 106 / .5); } 70% { box-shadow: 0 0 0 7px rgb(18 183 106 / 0); } 100% { box-shadow: 0 0 0 0 rgb(18 183 106 / 0); } }
+.stack { display: flex; gap: 2px; height: 22px; border-radius: 6px; overflow: hidden; background: #fff; } .stack i { display: block; min-width: 3px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; } .legend > span { display: inline-flex; align-items: center; gap: 6px; } .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.hb { display: grid; grid-template-columns: minmax(0, 40%) 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+.hb-l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .hb-t { height: 10px; background: #eef0f6; border-radius: 5px; overflow: hidden; } .hb-t i { display: block; height: 100%; border-radius: 5px; }
+.hb-v { font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -549,8 +560,8 @@ function render() {
     const I = (v, num, label, n, doneAt) => { const on = S.web === v || (v === 'live' && S.web === 'cc'); return `<button class="nav-item ${on ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}" ${on ? 'aria-current="page"' : ''}><span class="nav-num">${num}</span><span class="nav-label">${label}</span>${n ? `<span class="nav-badge">${n}</span>` : ''}</button>`; };
     let items;
     if (meta && !isLead()) items = I('live', '2', 'นับ (ดูได้อย่างเดียว)', 0, 99);
-    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิด + ส่งออก', 0, 99)
-      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '5', 'พิมพ์สติกเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '6', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '7', 'ทีม + ตั้งค่า', 0, 99));
+    else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิดงาน', 0, 99) + I('export', '5', 'ส่งรายงาน', 0, 99)
+      + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '6', 'พิมพ์สติกเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '7', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '8', 'ทีม + ตั้งค่า', 0, 99));
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
@@ -583,6 +594,7 @@ function webView(c) {
   if (S.web === 'inbox') return webLive(c);
   if (S.web === 'report') return webReport();
   if (S.web === 'close') return webClose(c);
+  if (S.web === 'export') return webExport(c);
   if (S.web === 'stickers') return webStickers(c);
   if (S.web === 'usb') return webUsb();
   return webRounds(c);
@@ -856,6 +868,7 @@ function webLive(c) {
     <button class="kpi" data-a="opencc" data-v="*" data-t="move" style="border:none;text-align:left"><span>ต้องย้าย CC</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>${decAll ? `รอตัดสิน ${decAll} เรื่อง →` : 'ดูรายการ →'}</span></button>
  <button class="kpi" data-a="opencc" data-v="*" data-t="borrow" style="border:none;text-align:left"><span>ยืมมา (ไม่ย้าย CC)</span><b style="color:var(--muted)">${N(T.borrow)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ดูรายการ →</span></button></div>`;
+  h += dashboard();
   h += `<div class="row pair"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
     <div class="row" style="align-items:center"><input class="in" id="ccQ" value="${esc(S.ccQ || '')}" placeholder="ค้นหา CC" style="width:160px" aria-label="ค้นหา Cost Center"><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
     <div class="grid" style="grid-auto-rows:1fr">`;
@@ -873,6 +886,46 @@ function webLive(c) {
   return h + `</main>`;
 }
 // right panel: every device — online now?, counting which CC, how many items it counted · Admin first, then counters
+// ---------- live dashboard (menu 2): one glance at progress, status, pace, people, method ----------
+function dashboard() {
+  const { cur, evs } = compute(), T = totals(), pct = T.total ? T.found / T.total : 0;
+  const real = (meta.areas || []).filter(a => !a.shared), shut = real.filter(a => ccClosed(a.code)).length, onl = Object.keys(S.pres || {}).length || 1;
+  // status of every register item
+  let ok = 0, mv = 0, bw = 0, lost = 0, left = 0;
+  for (const a of master.values()) { if (!counted(a)) continue; const s2 = cur.get(a.code); if (!s2) { if (lostOf(a.code)) lost++; else left++; } else if (isBorrowed(s2)) bw++; else if (isOther(s2)) mv++; else ok++; }
+  const parts = [['ตรวจแล้ว', ok, 'var(--ok)'], ['ต้องย้าย CC', mv, 'var(--oth)'], ['ยืมมา', bw, '#98a2b3'], ['สูญหาย', lost, 'var(--bad)'], ['ยังไม่พบ', left, '#e4e7ec']];
+  const tot = parts.reduce((x, p) => x + p[1], 0) || 1;
+  // donut
+  const R0 = 52, C = 2 * Math.PI * R0, dash = Math.max(0, Math.min(1, pct)) * C;
+  const donut = `<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="ตรวจแล้ว ${Math.round(pct * 100)}%"><circle cx="70" cy="70" r="${R0}" fill="none" stroke="#eef0f6" stroke-width="14"/><circle cx="70" cy="70" r="${R0}" fill="none" stroke="var(--ok)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${dash} ${C}" transform="rotate(-90 70 70)"><title>ตรวจแล้ว ${N(T.found)} จาก ${N(T.total)}</title></circle><text x="70" y="68" text-anchor="middle" font-size="26" font-weight="700" fill="var(--ink)">${Math.round(pct * 100)}%</text><text x="70" y="88" text-anchor="middle" font-size="11" fill="var(--muted)">${N(T.found)} / ${N(T.total)}</text></svg>`;
+  // pace: scans per hour today
+  const now = new Date(), day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(), hours = Array(24).fill(0);
+  for (const e of evs) if (e.k === 'scan' && e.t >= day0) hours[new Date(e.t).getHours()]++;
+  let h0 = hours.findIndex(x => x), h1 = now.getHours(); if (h0 < 0 || h0 > h1) h0 = Math.max(0, h1 - 7); if (h1 - h0 < 7) h0 = Math.max(0, h1 - 7);
+  const hs = hours.slice(h0, h1 + 1), hmax = Math.max(1, ...hs), bw0 = 100 / hs.length, today = hs.reduce((a, b) => a + b, 0);
+  const pace = `<svg viewBox="0 0 100 46" preserveAspectRatio="none" width="100%" height="120" role="img" aria-label="จำนวนสแกนรายชั่วโมงวันนี้">${hs.map((v, i) => `<rect x="${i * bw0 + bw0 * .15}" y="${40 - v / hmax * 36}" width="${bw0 * .7}" height="${Math.max(v ? 1 : 0, v / hmax * 36)}" rx="1" fill="var(--blue)"><title>${String(h0 + i).padStart(2, '0')}:00 · ${v} รายการ</title></rect>`).join('')}<line x1="0" y1="40" x2="100" y2="40" stroke="#e4e7ec" stroke-width=".4"/></svg>
+    <div class="row" style="justify-content:space-between;font-size:11px;color:var(--muted);margin-top:-4px"><span>${String(h0).padStart(2, '0')}:00</span><span>${String(h1).padStart(2, '0')}:00</span></div>`;
+  // people + method
+  const by = new Map(), how = new Map(); for (const s2 of cur.values()) { by.set(s2.by, (by.get(s2.by) || 0) + 1); how.set(s2.src, (how.get(s2.src) || 0) + 1); }
+  const hbar = (rows, color) => { const mx = Math.max(1, ...rows.map(r => r[1])); return rows.map(([l, v, extra]) => `<div class="hb" title="${esc(l)} · ${N(v)}"><span class="hb-l">${esc(l)}</span><span class="hb-t"><i style="width:${v / mx * 100}%;background:${color}"></i></span><b class="hb-v">${N(v)}${extra || ''}</b></div>`).join('') || '<p class="sub">ยังไม่มีข้อมูล</p>'; };
+  const people = [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const method = Object.keys(SRC).map(k => [SRC[k][0], how.get(k) || 0]);
+  // CC with the most left to count
+  const st = areaStats(), behind = [...st.values()].filter(x => x.total && !x.shared).map(x => [x.name !== String(x.code) ? `${x.code} · ${x.name}` : String(x.code), x.total - x.found, ` <span class="sub">(${Math.round(x.found / x.total * 100)}%)</span>`]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const lastT = evs.length ? Math.max(...evs.map(e => e.t)) : 0;
+  return `<div class="dash">
+    <section class="card dash-hero"><div class="row" style="justify-content:space-between;align-items:center"><h2>ความคืบหน้า</h2><span class="live"><i></i>สด${lastT ? ' · ล่าสุด ' + hm(lastT) : ''}</span></div>
+      <div class="row" style="align-items:center;gap:18px;flex-wrap:nowrap">${donut}<div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+        <div><span class="sub">ปิดงานแล้ว</span><br><b style="font-size:22px">${shut}</b><span class="sub"> / ${real.length} CC</span></div>
+        <div><span class="sub">สแกนวันนี้</span><br><b style="font-size:22px">${N(today)}</b><span class="sub"> รายการ</span></div>
+        <div><span class="sub">ออนไลน์ตอนนี้</span><br><b style="font-size:22px">${onl}</b><span class="sub"> เครื่อง</span></div></div></div></section>
+    <section class="card"><h2>สถานะทรัพย์สิน</h2><div class="stack" role="img" aria-label="สัดส่วนสถานะ">${parts.filter(p => p[1]).map(([l, v, c]) => `<i style="flex:${v};background:${c}" title="${l} ${N(v)} (${Math.round(v / tot * 100)}%)"></i>`).join('')}</div>
+      <div class="legend">${parts.map(([l, v, c]) => `<span><i style="background:${c}"></i>${l} <b>${N(v)}</b> <span class="sub">${Math.round(v / tot * 100)}%</span></span>`).join('')}</div></section>
+    <section class="card"><h2>สแกนรายชั่วโมง (วันนี้)</h2>${pace}</section>
+    <section class="card"><h2>ผู้ตรวจนับ</h2>${hbar(people, 'var(--orange)')}</section>
+    <section class="card"><h2>วิธีตรวจนับ</h2>${hbar(method, 'var(--blue)')}</section>
+    <section class="card"><h2>CC ที่ยังเหลือมากที่สุด</h2>${hbar(behind, 'var(--warn)')}</section></div>`;
+}
 function teamPanel() {
   const { cur, evs } = compute(), devs = new Map(), now = Date.now();
   const roleOf = (name, r) => r || S.team.find(u => u.name === name)?.role || (meta?.team || []).find(u => u.name === name)?.role || 'counter';
@@ -1020,10 +1073,26 @@ function flagChips(s, act) {
 }
 
 /* ---------- ④⑤ close + export ---------- */
+function webExport(c) {
+  const T = totals(), closed = meta.status === 'closed';
+  const card = (tag, color, title, sub, btns) => `<div class="card"><span style="font-size:12px;font-weight:600;color:${color}">${tag}</span><b style="font-size:17px">${title}</b><span class="sub">${sub}</span><div class="row" style="gap:6px">${btns}</div></div>`;
+  const rep = (k, title, sub) => card('PDF · Excel', 'var(--blue-ink)', title, sub, `<button class="btn sm pri" data-a="exprep" data-k="${k}" data-v="pdf">⬇ PDF</button><button class="btn sm" data-a="exprep" data-k="${k}" data-v="xlsx">⬇ Excel</button>`);
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)}${closed ? ' · ปิดรอบแล้ว' : ' · ก่อนปิดรอบ ไฟล์จะระบุว่า "ฉบับร่าง"'}</p><h1>5 · ส่งรายงาน</h1></div>
+    <h2>ไฟล์สำหรับ SAP</h2><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+    <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:#d6ddff">XLSX · ไฟล์หลัก</span><b style="font-size:17px">ผลตรวจนับตามแม่แบบไฟล์ที่นำเข้า</b><span style="font-size:13px;color:#e3e8ff">ASSET · สรุป · Transfer · write-off · สรุป write-off · คิวพิมพ์สติกเกอร์ · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main" style="align-self:flex-start">⬇ ดาวน์โหลด</button></div>
+    ${card('XLSX · Transfer (AS02)', 'var(--oth-ink)', 'รายการรอโอนย้าย', `${N(totals().other)} รายการต้องย้าย CC`, '<button class="btn sm" data-a="export" data-v="transfer">⬇ ดาวน์โหลด</button>')}
+    ${card('XLSX · Write-Off (ABAVN)', 'var(--bad-ink)', 'รายการที่ไม่พบ', `${N(T.left)} รายการที่ยังไม่พบ`, '<button class="btn sm" data-a="export" data-v="writeoff">⬇ ดาวน์โหลด</button>')}</div>
+    <h2>รายงานสรุป</h2><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+    ${rep('sum', 'สรุปผลตรวจนับ', 'ทีละ CC พร้อมแถวรวม')}${rep('nf', 'รายการที่ตรวจไม่พบ', 'ไม่พบ / สูญหาย')}${rep('qr', 'ต้องพิมพ์ QR ใหม่', 'พร้อมเหตุผล')}${rep('mv', 'รายการย้ายแผนก', 'รออนุมัติ / รอโอนย้าย')}${rep('bw', 'รายการยืมมา', 'ไม่ย้าย CC')}${rep('cr', 'สรุปตามที่เลือก', 'ตามที่ตั้งไว้ในเมนู 3')}${card('Pivot', 'var(--blue-ink)', 'ตาราง Pivot ที่สร้างเอง', 'สร้างและดาวน์โหลดที่เมนู 3 · แท็บ Pivot', '<button class="btn sm" data-a="gopivot">ไปหน้า Pivot →</button>')}</div>
+    <h2>สติกเกอร์</h2><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+    ${card('PDF · Excel แม่แบบ OGA', 'var(--blue-ink)', 'คิวพิมพ์สติกเกอร์', `${c.reprint.length + c.namebad.length} ดวงในคิว · เลือกรายการที่หน้า 6`, '<button class="btn sm" data-a="web" data-v="stickers">ไปหน้าพิมพ์สติกเกอร์ →</button>')}</div>
+    ${S.msg.exp ? `<div class="msg ${S.msg.exp[1]}">${esc(S.msg.exp[0])}</div>` : ''}</main>`;
+  return h;
+}
 function webClose(c) {
   const T = totals(), areas = meta.areas || [], unassigned = areas.filter(a => !a.shared && !a.assignee).length, open = c.move.length + c.unk.length + c.dmg.length, closed = meta.status === 'closed';
   const ck = (ok, title, sub) => `<div class="row" style="align-items:flex-start"><span class="dot" style="width:28px;height:28px;background:${ok ? 'var(--ok)' : 'var(--warn)'}">${ok ? '✓' : '!'}</span><span style="flex:1"><b>${title}</b><br><span class="sub">${sub}</span></span></div>`;
-  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>4 · ปิดรอบ</h1>`;
+  let h = `<main class="wrap"><div class="row"><section class="card side"><h1>4 · ปิดงาน</h1>`;
   if (closed) h += `<div class="msg ok">ปิดรอบแล้ว ${fmtT(meta.closedAt)} · ที่ยังไม่พบ: ${meta.leftChoice === 'writeoff' ? 'ลง Write-Off' : 'เปิดนับซ้ำ'} · แอปหยุดนับรอบนี้</div><button class="btn" data-a="reopen">เปิดรอบอีกครั้ง</button>`;
   else {
     h += ck(pendingCount() === 0, 'เครื่องนี้ส่งข้อมูลครบ', pendingCount() ? `รอส่ง ${pendingCount()}` : 'ครบ · เครื่องอื่นดูที่เมนู 2 นับ');
@@ -1032,12 +1101,7 @@ function webClose(c) {
     h += `<b>ที่ยังไม่พบ ${N(T.left)} รหัส</b><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="writeoff" ${S.closeChoice === 'writeoff' ? 'checked' : ''}> ลง Write-Off ทั้งหมด</label><label class="li" style="background:#f4f5fa"><input type="radio" name="left" data-a="leftchoice" value="recount" ${S.closeChoice === 'recount' ? 'checked' : ''}> เปิดนับซ้ำก่อน (ไม่ลง Write-Off)</label>`;
     h += `<button class="btn dark" data-a="closeround">${open ? `ปิดรอบ (ยังค้าง ${open} เรื่อง)` : 'ปิดรอบ'}</button>${open ? '<p class="sub">ปิดได้ แต่เรื่องที่ค้างจะติดไปในไฟล์ส่งออกตามสถานะล่าสุด</p>' : ''}`;
   }
-  h += `</section><section class="grow" style="display:flex;flex-direction:column;gap:12px"><h1>ส่งออก</h1>${closed ? '' : '<p class="sub">ก่อนปิดรอบ ไฟล์จะเขียนว่า "ฉบับร่าง"</p>'}<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
-    <div class="card" style="background:var(--blue);color:#fff"><span style="font-size:12px;font-weight:600;color:#d6ddff">XLSX · ไฟล์หลัก</span><b style="font-size:18px">ผลนับตามแม่แบบเดิม</b><span style="font-size:14px;color:#e3e8ff">สรุป · Data · Transfer · write-off · สรุป write-off · คิวป้าย · ไม่อยู่ในทะเบียน</span><button class="btn lime" data-a="export" data-v="main">ดาวน์โหลด</button></div>
-    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--oth-ink)">XLSX · SAP AS02</span><b style="font-size:18px">Transfer ย้ายแผนก</b><span class="sub">อนุมัติแล้ว ${c.transfer.length + c.cleared.filter(s => s.rv.move === 'approved' && !s.flags.pendingTransfer).length} รายการ</span><button class="btn" data-a="export" data-v="transfer">ดาวน์โหลด</button></div>
-    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--bad-ink)">XLSX · SAP ABAVN</span><b style="font-size:18px">Write-Off</b><span class="sub">${N(T.left)} รหัสที่ยังไม่พบ</span><button class="btn" data-a="export" data-v="writeoff">ดาวน์โหลด</button></div>
-    <div class="card"><span style="font-size:12px;font-weight:600;color:var(--blue-ink)">PDF</span><b style="font-size:18px">สติกเกอร์ QR</b><span class="sub">คิวพิมพ์ ${c.reprint.length + c.namebad.length} ดวง</span><button class="btn" data-a="web" data-v="stickers">ไปหน้าพิมพ์</button></div></div>
-    ${S.msg.exp ? `<div class="msg ${S.msg.exp[1]}">${esc(S.msg.exp[0])}</div>` : ''}</section></div></main>`;
+  h += `<p class="sub">ไฟล์ส่งออกทั้งหมดอยู่ที่เมนู <b>5 · ส่งรายงาน</b></p><button class="btn" data-a="web" data-v="export" style="align-self:flex-start">ไปหน้าส่งรายงาน →</button></section></div></main>`;
   return h;
 }
 
@@ -1055,7 +1119,7 @@ function stickerList(c) {
 function webStickers(c) {
   const list = stickerList(c), { cur } = compute();
   for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>5 · พิมพ์สติกเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>6 · พิมพ์สติกเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
     <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR (สแกนบาร์โค้ด / พิมพ์เอง / เว็บ)', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
     <div class="row"><section class="card grow">`;
   if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
@@ -1289,7 +1353,7 @@ function usbCard() {
 }
 function webUsb() {
   const info = LS.get('usbInfo-' + meta.id, {});
-  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องสแกนไม่มีอินเทอร์เน็ต</p><h1>6 · สาย USB</h1></div><div class="row">
+  let h = `<main class="wrap"><div><p class="sub">${esc(meta.name)} · ใช้เมื่อเครื่องสแกนไม่มีอินเทอร์เน็ต</p><h1>7 · สาย USB</h1></div><div class="row">
     <section class="card side"><span class="chip c-blue" style="align-self:flex-start">ขั้นที่ 1 · คอมพิวเตอร์ → เครื่องสแกน</span><h2>ส่งทะเบียนให้เครื่องสแกน</h2>
       <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>กดดาวน์โหลดแพ็กเกจ (ไฟล์ .json)</li><li>ต่อสาย USB · บนเครื่องสแกนเลือก <b>ถ่ายโอนไฟล์ (File transfer)</b></li><li>คอมพิวเตอร์: This PC → ชื่อเครื่องสแกน → Internal storage → <b>Download</b> → วางไฟล์</li><li>เครื่องสแกน: แท็บ บัญชี → เลือก <b>สาย USB</b> → นำเข้าแพ็กเกจจากเครื่อง</li></ol>
       <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของ Admin</p>
@@ -1417,7 +1481,7 @@ async function addMember() {
 }
 function webTeam() {
   const cfg = Store.auth.config(), lead = S.user?.role === 'lead';
-  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>7 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
+  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>8 · ทีม + ตั้งค่า</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2>
     <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th><th></th>' : ''}</tr></thead><tbody>`;
   for (const u of S.team) h += `<tr><td>${lead && S.editName === u.id ? `<div class="row" style="flex-wrap:nowrap"><input class="in" id="nm-${u.id}" value="${esc(u.name)}" style="width:150px"><button class="btn sm pri" data-a="memname" data-v="${u.id}">บันทึก</button><button class="btn sm" data-a="noname">ยกเลิก</button></div>` : `<b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}${lead ? ` <button class="btn sm" data-a="editname" data-v="${u.id}" aria-label="แก้ชื่อ ${esc(u.name)}" style="min-height:28px;padding:2px 8px">แก้ชื่อ</button>` : ''}`}</td><td class="mono">${esc(u.code)}</td>
     <td>${lead && u.id !== S.user?.id ? `<button class="btn sm" data-a="memrole" data-v="${u.id}">${u.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'} ⇄</button>` : (u.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ')}</td>
@@ -1527,6 +1591,8 @@ document.addEventListener('click', async e => {
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
+    case 'gopivot': S.web = 'report'; S.repTab = 'pv'; break;
+    case 'exprep': S.msg.exp = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.exp = await reportFile(t.dataset.k, v); } catch (e) { S.msg.exp = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
     case 'pvreset': LS.set('pv-' + meta.id, null); { const b = $('#pivotBox'); if (b) delete b.dataset.ready; } break;
     case 'crcol': { const C = crConf(); C.cols = C.cols.includes(v) ? C.cols.filter(x => x !== v) : [...C.cols, v]; LS.set('cr-' + meta.id, C); break; }
     case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.rep = await reportFile(S.repTab || 'sum', v); } catch (e) { S.msg.rep = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
