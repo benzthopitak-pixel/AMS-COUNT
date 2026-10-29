@@ -15,6 +15,7 @@
 <script>window.XLSXS = window.XLSX; window.XLSX = window.__XLSX;</script>
 <script src="lib/jspdf.umd.min.js"></script>
 <script src="lib/qrcode.js"></script>
+<script src="lib/jsbarcode.min.js"></script>
 <script src="store.js"></script>
 <style>
 @font-face { font-family: 'Prompt'; font-weight: 400; font-display: swap; src: url(fonts/prompt-thai-400-normal.woff2) format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
@@ -155,6 +156,14 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .cond button.w[aria-pressed="true"] { background: var(--warn); color: #1d0e00; }
 .sheetbg { position: fixed; inset: 0; z-index: 20; background: rgb(18 24 38 / .7); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 .sheet { width: 100%; max-width: 440px; background: var(--bg); border-radius: 26px 26px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
+.lbl-wrap { overflow: auto; padding: 18px; background: #eef0f6; border-radius: 12px; display: flex; justify-content: center; }
+.lbl-stage { position: relative; flex: none; background: #fff; box-shadow: 0 2px 10px rgb(18 24 38 / .15); }
+.lbl-stage canvas { position: absolute; inset: 0; display: block; }
+.lbl-el { position: absolute; outline: 1px dashed rgb(46 91 255 / .35); cursor: move; touch-action: none; }
+.lbl-el:hover { outline-color: var(--blue); }
+.lbl-el.on { outline: 2px solid var(--blue); background: rgb(46 91 255 / .06); }
+.lbl-rs { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: var(--blue); border: 2px solid #fff; border-radius: 3px; cursor: nwse-resize; display: none; }
+.lbl-el.on .lbl-rs { display: block; }
 .sticker { align-self: center; width: 300px; max-width: 100%; transform: none; }
 .sticker canvas { width: 100%; height: auto; display: block; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 .book { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -249,7 +258,7 @@ const S = {
   web: 'rounds', app: 'home', user: LS.get('user', null),
   area: LS.get('area', null), room: LS.get('room', ''), manual: false,
   areaTab: 'left', inboxTab: 'move', inboxSel: null, inboxChecked: new Set(),
-  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: LS.get('stSize', 'a4'), stPaste: '',
+  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: LS.get('stSize', 'roll'), stMode: 'print', lblId: LS.get('lblId', 'std'), xls: null, xlsSel: new Set(), stCopies: 1, stPaste: '',
   cards: [], item: null, imp: null, msg: {}, closeChoice: 'writeoff', confirmReset: false, verify: null, areaPick: false, liveArea: null,
   gate: 'boot', authed: false, team: LS.get('team', []), firstRun: false, gateMsg: null, busy: false
 };
@@ -258,7 +267,7 @@ let master = new Map(), altIx = new Map();
 let serverEv = {};               // docId -> items (all devices)
 let mine = [];                   // this device's events for the current round
 let dirty = new Set(), writing = false, online = false;
-let db = null, dl = null;
+let db = null, dl = null, RENDERING = false;   // RENDERING: a focused field being replaced fires a stale change event — ignore it
 const CHUNK = 350;
 
 let usbMode = LS.get('usbMode', false), usbEv = {};   // usbEv: events that arrived by cable (file), per device
@@ -557,7 +566,7 @@ function render() {
   const keepFocus = document.activeElement?.id, keepVal = keepFocus && 'value' in document.activeElement ? document.activeElement.value : null, scanVal = $('#scanIn')?.value || '';
   const c = meta && master.size ? cats() : null;
   const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
-  if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus({ preventScroll: true }); return; }
+  if (S.gate) { RENDERING = true; try { root.innerHTML = gateView(); } finally { RENDERING = false; } afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus({ preventScroll: true }); return; }
   let html = '';
   if (S.mode === 'web') {
     // computer: menu runs down the left side
@@ -584,7 +593,7 @@ function render() {
   // keep every scrolled box where it was (a tap inside the right panel must not jump it back to the top)
   const KS = ['.pair > *', '.tbl-wrap', '.sheet', '.side-nav', '.pbody'], kept = KS.map(q => [...root.querySelectorAll(q)].map(e => e.scrollTop)), winY = window.scrollY;
   const pvKeep = $('#pivotBox[data-ready]');
-  root.innerHTML = html;
+  RENDERING = true; try { root.innerHTML = html; } finally { RENDERING = false; }
   if (pvKeep) { const slot = $('#pivotBox'); if (slot) slot.replaceWith(pvKeep); }
   KS.forEach((q, i) => { const els = [...root.querySelectorAll(q)]; if (els.length !== kept[i].length) return; els.forEach((e, j) => { if (S.resetRight && q === '.pair > *' && e.tagName === 'ASIDE') return; if (kept[i][j]) e.scrollTop = kept[i][j]; }); });
   S.resetRight = false; if (Math.abs(window.scrollY - winY) > 1) window.scrollTo(0, winY);
@@ -1133,26 +1142,331 @@ function stickerList(c) {
   if (S.stTab === 'paste') { const out = []; for (const t of S.stPaste.split(/[\s,;]+/)) { const c2 = resolve(t); if (c2 && master.has(c2) && !out.includes(c2)) out.push(c2); } return out; }
   return [];
 }
+
+/* ---------- label templates: size, layout and data all editable (menu 5 → ออกแบบป้าย) ----------
+ * template = { id, name, w, h (mm), els: [{ id, t: text | qr | bar | box | line, x, y, w, h (mm), ... }] }
+ * text / data use {ชื่อคอลัมน์} placeholders: any column of the imported file, the count results, or the columns of an Excel file */
+const PT = 0.3528;   // 1 pt in mm
+if (typeof qrcode === 'function') qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(String(s)));   // Thai text in a QR
+const LBL_STD = { id: 'std', name: 'ป้ายมาตรฐาน (แบบเดิม)', w: 50, h: 25, builtin: true, els: [
+  { id: 'a1', t: 'text', x: 2.2, y: 2.2, w: 26.8, h: 3.4, text: 'No. : {Asset}', fs: 7.4, align: 'left' },
+  { id: 'a2', t: 'text', x: 2.2, y: 6.0, w: 26.8, h: 3.4, text: 'Date : {วันที่ซื้อ}', fs: 7.4, align: 'left' },
+  { id: 'a3', t: 'text', x: 2.2, y: 9.8, w: 26.8, h: 3.4, text: 'CC : {CC บนป้าย}', fs: 7.4, align: 'left' },
+  { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
+  { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
+  { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset}' }] };
+const LBL_TYPES = { text: 'ข้อความ', qr: 'QR Code', bar: 'บาร์โค้ด', box: 'กรอบ', line: 'เส้น / แถบทึบ' };
+const clone = o => JSON.parse(JSON.stringify(o));
+const lk = k => String(k ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+let lblTpls = LS.get('lblTpls', []);
+const lblAll = () => [LBL_STD, ...lblTpls];
+const lblActive = () => lblAll().find(t => t.id === S.lblId) || LBL_STD;
+const lblDpi = () => +LS.get('lblDpi', 300) || 300;
+async function lblLoad() { if (!db) return; try { const d = await db.doc('labels').get(); if (d.exists) { lblTpls = (d.data().list || []).filter(t => t && t.id && t.els); LS.set('lblTpls', lblTpls); render(); } } catch {} }
+async function lblSaveAll() { LS.set('lblTpls', lblTpls); if (db) await db.doc('labels').set({ list: lblTpls, at: Date.now() }); }
+const lblFill = (s, rec) => String(s ?? '').replace(/\{([^{}]+)\}/g, (_, k) => { const v = rec[lk(k)]; return v == null ? '' : String(v); });
+
+// one record per sticker: every column of the imported file + names for the label + count results
+function lblRecord(code) {
+  const a = master.get(code), s2 = compute().cur.get(code), cc = labelCC(code), r = {};
+  const put = (k, v) => { if (String(k).trim()) r[lk(k)] = v ?? ''; };
+  (meta?.headers || []).forEach((h, i) => { let v = a?.raws[0]?.[i]; if (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? ''))) v = dmy(v); put(h, v); });
+  put('Asset', code); put('ชื่อ', a?.name || s2?.uname || ''); put('CC บนป้าย', cc.code); put('ชื่อ CC บนป้าย', cc.name); put('วันที่ซื้อ', a ? capDate(a) : '');
+  if (a) for (const [k, l] of RES_F) put(l, crVal(k, a, s2));
+  put('วันที่พิมพ์', new Date().toLocaleDateString('th-TH'));
+  return r;
+}
+function lblFieldNames() {
+  const out = S.stTab === 'xls' && S.xls ? [...S.xls.headers]
+    : ['Asset', 'ชื่อ', 'CC บนป้าย', 'ชื่อ CC บนป้าย', 'วันที่ซื้อ', ...(meta?.headers || []).map(h => String(h).trim()), ...RES_F.map(x => x[1])];
+  out.push('วันที่พิมพ์');
+  const seen = new Set(); return out.filter(x => x && !seen.has(lk(x)) && seen.add(lk(x)));
+}
+const lblSample = () => S.stTab === 'xls' && S.xls ? (S.xls.recs[[...S.xlsSel][0] ?? 0] || {}) : lblRecord([...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
+
+const graph = s => { try { return [...new Intl.Segmenter('th', { granularity: 'grapheme' }).segment(s)].map(x => x.segment); } catch { return Array.from(s); } };
+function wrapText(ctx, txt, maxW, maxL) {
+  const out = []; let line = '';
+  for (const raw of String(txt).split('\n')) {
+    line = '';
+    for (const g of graph(raw)) {
+      if (ctx.measureText(line + g).width <= maxW || !line) { line += g; continue; }
+      const sp = line.lastIndexOf(' ');
+      if (sp > 0) { out.push(line.slice(0, sp)); line = line.slice(sp + 1) + g; } else { out.push(line); line = g; }
+    }
+    out.push(line);
+  }
+  if (out.length > maxL) { out.length = maxL; out[maxL - 1] += '…'; }
+  return out.map((l, i) => { if (i !== out.length - 1 || ctx.measureText(l).width <= maxW) return l; let s = l; while (s.length > 1 && ctx.measureText(s).width > maxW) s = s.slice(0, -2) + '…'; return s; });
+}
+// draw one sticker at k pixels per mm (the printer's dots: 203 dpi = 8, 300 dpi ≈ 11.8)
+function lblDraw(ctx, tpl, rec, k) {
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.textBaseline = 'top'; ctx.imageSmoothingEnabled = false;
+  for (const e of tpl.els) {
+    const x = e.x * k, y = e.y * k, w = e.w * k, h = e.h * k;
+    if (e.t === 'text') {
+      const px = (+e.fs || 8) * PT * k; ctx.font = `${e.bold ? 700 : 500} ${px}px Prompt, sans-serif`;
+      const lh = px * 1.28, lines = wrapText(ctx, lblFill(e.text, rec), w, e.wrap ? Math.max(1, Math.floor((h + px * .28) / lh)) : 1);
+      ctx.textAlign = e.align || 'left'; const ax = e.align === 'center' ? x + w / 2 : e.align === 'right' ? x + w : x;
+      lines.forEach((l, i) => ctx.fillText(l, ax, y + i * lh)); ctx.textAlign = 'left';
+    } else if (e.t === 'qr') {
+      const d = lblFill(e.data, rec); if (!d || typeof qrcode !== 'function') continue;
+      try { const q = qrcode(0, e.ecc || 'M'); q.addData(d); q.make(); const n = q.getModuleCount(), s = Math.min(w, h), m = Math.max(1, Math.floor(s / n)), x0 = Math.round(x + (s - n * m) / 2), y0 = Math.round(y + (s - n * m) / 2);
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(x0 + c * m, y0 + r * m, m, m); } catch { }
+    } else if (e.t === 'bar') {
+      const d = lblFill(e.data, rec); if (!d || !window.JsBarcode) continue;
+      try {
+        const showTxt = !!e.txt, th = showTxt ? Math.min(h * .3, 2.6 * k) : 0, bh = Math.max(1, Math.round(h - th));
+        const c1 = document.createElement('canvas'); JsBarcode(c1, d, { format: e.fmt || 'CODE128', width: 1, height: 4, displayValue: false, margin: 0, background: '#ffffff' });
+        const m = Math.max(1, Math.floor(w / c1.width)), c2 = document.createElement('canvas'); JsBarcode(c2, d, { format: e.fmt || 'CODE128', width: m, height: bh, displayValue: false, margin: 0, background: '#ffffff' });
+        const dw = Math.min(c2.width, w); ctx.drawImage(c2, Math.round(x + (w - dw) / 2), Math.round(y), dw, bh);
+        if (showTxt) { ctx.font = `500 ${th * .9}px Prompt, sans-serif`; ctx.textAlign = 'center'; ctx.fillText(d, x + w / 2, y + bh + th * .08); ctx.textAlign = 'left'; }
+      } catch { ctx.font = `500 ${2.4 * k}px Prompt, sans-serif`; ctx.fillStyle = '#c00'; ctx.fillText('บาร์โค้ดไม่รองรับข้อมูลนี้', x, y); ctx.fillStyle = '#000'; }
+    } else if (e.t === 'box') { const lw = Math.max(1, (+e.lw || .3) * k); ctx.lineWidth = lw; ctx.strokeRect(x + lw / 2, y + lw / 2, w - lw, h - lw); }
+    else if (e.t === 'line') ctx.fillRect(x, y, Math.max(1, w), Math.max(1, h));
+  }
+  ctx.restore();
+}
+// preview canvases elsewhere (CC page, item sheet) follow the active template
+function drawSticker(cv, code) {
+  if (!cv?.getContext) return; const tpl = lblActive(); cv.height = Math.round(cv.width * tpl.h / tpl.w);
+  lblDraw(cv.getContext('2d'), tpl, lblRecord(code), cv.width / tpl.w);
+}
+
+/* ---------- 5 · print page ---------- */
+const ST_TABS = c => { const { cur } = compute(); return [['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', ''], ['xls', '📄 จากไฟล์ Excel', S.xls ? S.xls.recs.length : '']]; };
+const tplPick = () => `<label class="f">แม่แบบป้าย<select class="in" id="lblPick">${lblAll().map(t => `<option value="${esc(t.id)}" ${t.id === lblActive().id ? 'selected' : ''}>${esc(t.name)} · ${t.w} × ${t.h} มม.</option>`).join('')}</select></label>`;
 function webStickers(c) {
-  const list = stickerList(c), { cur } = compute();
-  for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>5 · พิมพ์สติกเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
-    <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR (สแกนบาร์โค้ด / พิมพ์เอง / เว็บ)', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
-    <div class="row"><section class="card grow">`;
-  if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
-  h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
-  for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
-    h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
-  h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
-    <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option><option value="custom" ${S.stSize === 'custom' ? 'selected' : ''}>ม้วน กำหนดขนาดเอง${S.stSize === 'custom' ? ` (${stDim().w} × ${stDim().h} มม.)` : ''}</option></select></label>
-    ${S.stSize === 'custom' ? `<div class="row" style="gap:8px"><label class="f" style="flex:1">กว้าง (มม.)<input class="in" id="stW" type="number" min="20" max="150" step="0.5" value="${stDim().w}"></label><label class="f" style="flex:1">สูง (มม.)<input class="in" id="stH" type="number" min="10" max="100" step="0.5" value="${stDim().h}"></label></div>` : ''}
-    ${Store.isApp ? '' : `<button class="btn pri" data-a="stprint" data-v="all" ${S.stSel.size ? '' : 'disabled'}>🖨 พิมพ์ ${S.stSel.size} ดวง</button><div class="row"><button class="btn" data-a="stprint" data-v="test" ${S.stSel.size ? '' : 'disabled'}>🖨 ทดสอบ 1 ดวง</button><button class="btn" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>⬇ PDF</button></div>
-    <span class="sub">พิมพ์ตรงจากเว็บ ไม่ต้องใช้ BarTender · หน้าพิมพ์: เลือกเครื่องพิมพ์สติกเกอร์ · ขอบกระดาษ = ไม่มี · สเกล = 100%</span>`}
-    ${Store.isApp ? `<div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>` : ''}
-    <button class="btn" data-a="stxlsx" ${S.stSel.size ? '' : 'disabled'}>⬇ Excel ตามแม่แบบ OGA (${S.stSel.size})</button><span class="sub">ไฟล์สำหรับโปรแกรมพิมพ์สติกเกอร์ · 1 แถวต่อ 1 Sub-number</span>
-    <button class="btn lime" data-a="stdone" ${S.stSel.size ? '' : 'disabled'}>บันทึกว่าติดแล้ว</button>${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
+  if (!S.lblLoaded) { S.lblLoaded = true; lblLoad(); }
+  if (S.stMode === 'design') return webLabelDesign();
+  const xls = S.stTab === 'xls', list = xls ? [] : stickerList(c), { cur } = compute(), tpl = lblActive();
+  if (!xls) for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
+  const nSel = xls ? S.xlsSel.size : S.stSel.size, copies = Math.max(1, +S.stCopies || 1), dis = nSel ? '' : 'disabled';
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ออกแบบป้ายเองได้ · ข้อมูลจากไฟล์ทะเบียน ผลตรวจนับ หรือไฟล์ Excel</p><h1>5 · พิมพ์สติกเกอร์</h1></div>
+    <div class="row" style="align-items:center"><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${nSel}</b> รายการ</span><button class="btn" data-a="lblmode" data-v="design">✎ ออกแบบป้าย</button></div></div>
+    <div class="pills">${ST_TABS(c).map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
+    <div class="row"><section class="card grow" style="min-width:0">`;
+  if (xls) {
+    h += `<div class="row" style="align-items:center"><label class="btn">📄 เลือกไฟล์ Excel<input type="file" id="xlsFile" accept=".xlsx,.xls,.csv" hidden></label><span class="sub">${S.xls ? `${esc(S.xls.name)} · ${N(S.xls.recs.length)} แถว · ${S.xls.headers.length} คอลัมน์ · ใช้ชื่อคอลัมน์ในแม่แบบได้ เช่น {${esc(S.xls.headers[0] || 'Asset')}}` : 'แถวแรกของไฟล์ = ชื่อคอลัมน์ · 1 แถว = 1 ป้าย'}</span></div>`;
+    if (S.xls) { const H = S.xls.headers.slice(0, 5);
+      h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="xlsall" aria-label="เลือกทั้งหมด" ${S.xlsSel.size === S.xls.recs.length ? 'checked' : ''}></th>${H.map(x => `<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
+      S.xls.rows.slice(0, 300).forEach((r, i) => { h += `<tr><td><input type="checkbox" data-a="xlssel" data-v="${i}" ${S.xlsSel.has(i) ? 'checked' : ''} aria-label="เลือกแถว ${i + 1}"></td>${H.map((_, j) => `<td>${esc(r[j] ?? '')}</td>`).join('')}</tr>`; });
+      h += `</tbody></table></div>${S.xls.rows.length > 300 ? `<p class="sub">แสดง 300 แถวแรก · "เลือกทั้งหมด" รวมทุก ${N(S.xls.rows.length)} แถว</p>` : ''}`; }
+  } else {
+    if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
+    h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
+    for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
+      h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
+    h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}`;
+  }
+  const a4 = S.stSize === 'a4', per = Math.floor(210 / tpl.w) * Math.floor(297 / tpl.h);
+  h += `</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="280" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
+    ${tplPick()}
+    ${(() => { const have = new Set(lblFieldNames().map(lk)), miss = [...new Set(tpl.els.flatMap(e => [...String(e.text || '') .matchAll(/\{([^{}]+)\}/g), ...String(e.data || '').matchAll(/\{([^{}]+)\}/g)].map(m => m[1].trim())))].filter(f => !have.has(lk(f)));
+      return miss.length ? `<div class="msg warn">แม่แบบนี้ใช้ช่อง ${miss.map(f => '{' + esc(f) + '}').join(' ')} ที่ไม่มีใน${xls ? 'ไฟล์ Excel' : 'ข้อมูล'} · ช่องนี้จะว่าง · แก้ที่ "ออกแบบป้าย"</div>` : ''; })()}
+    <label class="f">กระดาษ<select class="in" id="stSize"><option value="roll" ${a4 ? '' : 'selected'}>ม้วน · 1 ดวงต่อแผ่น (${tpl.w} × ${tpl.h} มม.)</option><option value="a4" ${a4 ? 'selected' : ''} ${per ? '' : 'disabled'}>A4 · ${per} ดวงต่อแผ่น</option></select></label>
+    <div class="row" style="gap:8px"><label class="f" style="flex:1">ความละเอียด<select class="in" id="lblDpi">${[203, 300, 600].map(d => `<option value="${d}" ${lblDpi() === d ? 'selected' : ''}>${d} dpi</option>`).join('')}</select></label>
+      <label class="f" style="flex:1">จำนวนต่อรายการ<input class="in" id="stCopies" type="number" min="1" max="50" value="${copies}"></label></div>
+    ${Store.isApp ? `<div class="row"><button class="btn" data-a="stpdf" data-v="test" ${dis}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${dis}>PDF ${nSel * copies} ดวง</button></div>`
+      : `<button class="btn pri" data-a="stprint" data-v="all" ${dis}>🖨 พิมพ์ ${N(nSel * copies)} ดวง</button><div class="row"><button class="btn" data-a="stprint" data-v="test" ${dis}>🖨 ทดสอบ 1 ดวง</button><button class="btn" data-a="stpdf" data-v="all" ${dis}>⬇ PDF</button></div>
+    <span class="sub">พิมพ์ตรงจากเว็บ ไม่ต้องใช้ BarTender · หน้าพิมพ์: เลือกเครื่องพิมพ์สติกเกอร์ · ขอบกระดาษ = ไม่มี · สเกล = 100% · ความละเอียดให้ตรงกับเครื่องพิมพ์</span>`}
+    ${xls ? '' : `<button class="btn" data-a="stxlsx" ${dis}>⬇ Excel ตามแม่แบบ OGA (${S.stSel.size})</button><span class="sub">สำหรับ BarTender · 1 แถวต่อ 1 Sub-number</span>
+    <button class="btn lime" data-a="stdone" ${dis}>บันทึกว่าติดแล้ว</button>`}${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
   return h;
 }
+async function readLabelXls(f) {
+  const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: false }), ws = wb.Sheets[wb.SheetNames[0]];
+  const all = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: false }).filter(r => r.some(v => String(v).trim() !== ''));
+  if (!all.length) throw new Error('ไฟล์ว่าง');
+  const headers = all[0].map((x, i) => String(x).trim() || `คอลัมน์ ${i + 1}`), rows = all.slice(1);
+  const recs = rows.map(r => { const o = {}; headers.forEach((hd, i) => { o[lk(hd)] = r[i] ?? ''; }); o[lk('วันที่พิมพ์')] = new Date().toLocaleDateString('th-TH'); return o; });
+  S.xls = { name: f.name, headers, rows, recs }; S.xlsSel = new Set(recs.map((_, i) => i));
+}
+
+/* ---------- printing: same drawing for print, PDF and previews ---------- */
+function lblRecords(test) {
+  const recs = S.stTab === 'xls' ? (S.xls ? [...S.xlsSel].sort((a, b) => a - b).map(i => S.xls.recs[i]).filter(Boolean) : []) : [...S.stSel].map(lblRecord);
+  if (test) return recs.slice(0, 1);
+  const n = Math.max(1, Math.min(50, +S.stCopies || 1)), out = [];
+  for (const r of recs) for (let i = 0; i < n; i++) out.push(r);
+  return out.slice(0, 3000);
+}
+async function lblImages(recs) {
+  try { await document.fonts?.load('500 20px Prompt'); await document.fonts?.load('700 20px Prompt'); } catch {}
+  const tpl = lblActive(), k = lblDpi() / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(tpl.w * k); cv.height = Math.round(tpl.h * k);
+  const ctx = cv.getContext('2d');
+  return recs.map(r => { lblDraw(ctx, tpl, r, k); return cv.toDataURL('image/png'); });
+}
+async function stickerPrint(test) {
+  const recs = lblRecords(test); if (!recs.length) return ['ยังไม่ได้เลือกรายการ', 'warn'];
+  const tpl = lblActive(), { w, h } = tpl, cols = Math.floor(210 / w), rows = Math.floor(297 / h), a4 = S.stSize === 'a4' && cols * rows > 0, per = cols * rows, imgs = await lblImages(recs);
+  const css = a4 ? `@page{size:A4;margin:0}body{margin:0}.pg{width:210mm;height:297mm;display:grid;grid-template-columns:repeat(${cols},${w}mm);grid-auto-rows:${h}mm;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{width:${w}mm;height:${h}mm;display:block}`
+    : `@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{width:${w}mm;height:${h}mm;display:block;page-break-after:always;break-after:page}img:last-child{page-break-after:auto;break-after:auto}`;
+  let body = '';
+  if (a4) for (let i = 0; i < imgs.length; i += per) body += `<div class="pg">${imgs.slice(i, i + per).map(src => `<img src="${src}">`).join('')}</div>`;
+  else body = imgs.map(src => `<img src="${src}">`).join('');
+  document.getElementById('stFrame')?.remove();
+  const fr = document.createElement('iframe'); fr.id = 'stFrame'; fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(fr);
+  const d = fr.contentDocument; d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"><title>AssetSync สติกเกอร์</title><style>${css}</style></head><body>${body}</body></html>`); d.close();
+  await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+  fr.contentWindow.focus(); fr.contentWindow.print();
+  return [`ส่งพิมพ์ ${recs.length} ดวง · ${esc(tpl.name)} (${a4 ? 'A4' : `${w} × ${h} มม.`})${S.stTab === 'xls' ? '' : ' · พิมพ์ครบแล้วกด "บันทึกว่าติดแล้ว"'}`, 'ok'];
+}
+async function stickerPdf(test) {
+  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
+  const recs = lblRecords(test); if (!recs.length) return ['ยังไม่ได้เลือกรายการ', 'warn'];
+  const tpl = lblActive(), { w, h } = tpl, { jsPDF } = window.jspdf, cols = Math.floor(210 / w), rows = Math.floor(297 / h), a4 = S.stSize === 'a4' && cols * rows > 0, per = cols * rows;
+  const pdf = a4 ? new jsPDF({ unit: 'mm', format: 'a4' }) : new jsPDF({ unit: 'mm', format: [w, h], orientation: w >= h ? 'l' : 'p' });
+  (await lblImages(recs)).forEach((img, i) => {
+    if (!a4) { if (i) pdf.addPage([w, h], w >= h ? 'l' : 'p'); pdf.addImage(img, 'PNG', 0, 0, w, h, undefined, 'FAST'); }
+    else { const k = i % per; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % cols) * w, Math.floor(k / cols) * h, w, h, undefined, 'FAST'); }
+  });
+  return await save(`AssetSync-สติกเกอร์-${recs.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
+}
+
+/* ---------- 5 · label designer ---------- */
+const lblDraft = () => { if (!S.lblEdit || S.lblEdit.id !== lblActive().id && !S.lblDirty) S.lblEdit = clone(lblActive()); return S.lblEdit; };
+const lblZoom = t => Math.max(4, Math.min(16, 720 / t.w, 380 / t.h));
+const lblEl = () => S.lblEdit?.els.find(e => e.id === S.lblSelEl) || null;
+function webLabelDesign() {
+  const t = lblDraft(), z = lblZoom(t), e = lblEl(), F = lblFieldNames();
+  const num = (k, l, v, step = .5, extra = '') => `<label class="f" style="flex:1">${l}<input class="in" type="number" step="${step}" data-lp="${k}" value="${+(+v).toFixed(2)}" ${extra}></label>`;
+  const fieldSel = target => `<select class="in" data-lfield="${target}" aria-label="แทรกช่องข้อมูล"><option value="">＋ แทรกช่องข้อมูล…</option>${F.map(f => `<option value="${esc(f)}">{${esc(f)}}</option>`).join('')}</select>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ลากเพื่อย้าย · ลากมุมขวาล่างเพื่อปรับขนาด · ลูกศรเลื่อนทีละ 0.5 มม. (Shift = 2 มม.) · Delete ลบ</p><h1>5 · ออกแบบป้าย</h1></div>
+    <button class="btn" data-a="lblmode" data-v="print">← กลับหน้าพิมพ์</button></div>
+    <div class="row" style="align-items:flex-end;gap:8px;flex-wrap:wrap"><div style="min-width:260px">${tplPick()}</div>
+      <button class="btn" data-a="lblnew">＋ แม่แบบใหม่</button><button class="btn" data-a="lbldup">⧉ ทำสำเนา</button>
+      ${t.builtin ? '' : S.lblConfirmDel ? `<span class="confirm" style="padding:6px 10px"><b>ลบแม่แบบนี้?</b> <button class="btn sm red" data-a="lbldel">ลบ</button> <button class="btn sm" data-a="lblnodel">ไม่</button></span>` : '<button class="btn red" data-a="lblaskdel">ลบ</button>'}
+      <button class="btn" data-a="lblexp">⬇ ส่งออกแม่แบบ</button><label class="btn">⬆ นำเข้าแม่แบบ<input type="file" id="lblImp" accept=".json,application/json" hidden></label>
+      <span style="flex:1"></span>${S.lblDirty ? '<span class="chip c-warn">ยังไม่ได้บันทึก</span><button class="btn" data-a="lblrevert">ยกเลิกการแก้ไข</button>' : ''}<button class="btn pri" data-a="lblsave" ${S.lblDirty ? '' : 'disabled'}>${t.builtin ? 'บันทึกเป็นแม่แบบใหม่' : 'บันทึก'}</button></div>
+    ${t.builtin ? '<div class="msg">แม่แบบมาตรฐานแก้ทับไม่ได้ · แก้แล้วกด "บันทึกเป็นแม่แบบใหม่"</div>' : ''}
+    <div class="row" style="align-items:flex-start"><section class="card grow" style="min-width:0;gap:12px">
+      <div class="row" style="gap:6px;flex-wrap:wrap">${Object.entries(LBL_TYPES).map(([k, l]) => `<button class="btn sm" data-a="lbladd" data-v="${k}">＋ ${l}</button>`).join('')}</div>
+      <div class="lbl-wrap"><div class="lbl-stage" id="lblStage" style="width:${t.w * z}px;height:${t.h * z}px"><canvas id="lblCv" style="width:${t.w * z}px;height:${t.h * z}px"></canvas>
+        ${t.els.map(x => `<div class="lbl-el ${x.id === S.lblSelEl ? 'on' : ''}" data-el="${esc(x.id)}" title="${esc(LBL_TYPES[x.t])}" style="left:${x.x * z}px;top:${x.y * z}px;width:${x.w * z}px;height:${x.h * z}px"><i class="lbl-rs" data-rs="${esc(x.id)}"></i></div>`).join('')}</div></div>
+      <span class="sub">ตัวอย่างข้อมูล: ${S.stTab === 'xls' && S.xls ? 'แถวแรกที่เลือกในไฟล์ Excel' : 'รายการแรกที่เลือกในหน้าพิมพ์'} · ${t.w} × ${t.h} มม. · ${t.els.length} ชิ้น</span>
+    </section><aside class="card side" style="gap:10px"><b>ป้าย</b>
+      <label class="f">ชื่อแม่แบบ<input class="in" data-lt="name" value="${esc(t.name)}"></label>
+      <div class="row" style="gap:8px"><label class="f" style="flex:1">กว้าง (มม.)<input class="in" type="number" step="0.5" min="10" max="200" data-lt="w" value="${t.w}"></label><label class="f" style="flex:1">สูง (มม.)<input class="in" type="number" step="0.5" min="5" max="200" data-lt="h" value="${t.h}"></label></div>`;
+  if (!e) h += `<p class="sub">คลิกชิ้นบนป้ายเพื่อแก้ไข หรือกดปุ่ม ＋ ด้านซ้ายเพื่อเพิ่ม</p>`;
+  else {
+    h += `<hr style="border:0;border-top:1px solid var(--line);width:100%"><div class="row" style="justify-content:space-between;align-items:center"><b>${esc(LBL_TYPES[e.t])}</b><span class="row" style="gap:4px"><button class="btn sm" data-a="lblorder" data-v="up" title="ไว้ด้านหน้า">▲</button><button class="btn sm" data-a="lblorder" data-v="down" title="ไว้ด้านหลัง">▼</button><button class="btn sm" data-a="lblcopy" title="ทำสำเนาชิ้นนี้">⧉</button><button class="btn sm red" data-a="lblrm">ลบ</button></span></div>
+      <div class="row" style="gap:8px">${num('x', 'X (มม.)', e.x)}${num('y', 'Y (มม.)', e.y)}</div>
+      <div class="row" style="gap:8px">${e.t === 'qr' ? num('w', 'ขนาด QR (มม.)', e.w) : num('w', 'กว้าง (มม.)', e.w) + num('h', 'สูง (มม.)', e.h)}</div>`;
+    if (e.t === 'text') h += `<label class="f">ข้อความ<textarea class="in" rows="2" data-lp="text">${esc(e.text)}</textarea></label>${fieldSel('text')}
+      <div class="row" style="gap:8px">${num('fs', 'ขนาดตัวอักษร (pt)', e.fs || 8, .5, 'min="3" max="72"')}<label class="f" style="flex:1">จัดวาง<select class="in" data-lp="align">${[['left', 'ชิดซ้าย'], ['center', 'กึ่งกลาง'], ['right', 'ชิดขวา']].map(([k, l]) => `<option value="${k}" ${(e.align || 'left') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+      <div class="row" style="gap:14px"><label class="row" style="gap:6px;align-items:center"><input type="checkbox" data-lp="bold" ${e.bold ? 'checked' : ''}> ตัวหนา</label><label class="row" style="gap:6px;align-items:center"><input type="checkbox" data-lp="wrap" ${e.wrap ? 'checked' : ''}> ขึ้นบรรทัดใหม่ได้ (ตามความสูง)</label></div>`;
+    if (e.t === 'qr' || e.t === 'bar') h += `<label class="f">ข้อมูลใน${e.t === 'qr' ? ' QR' : 'บาร์โค้ด'}<input class="in" data-lp="data" value="${esc(e.data)}"></label>${fieldSel('data')}`;
+    if (e.t === 'qr') h += `<label class="f">ระดับกู้ข้อมูล<select class="in" data-lp="ecc">${[['L', 'L · 7% (QR เล็กสุด)'], ['M', 'M · 15% (แนะนำ)'], ['Q', 'Q · 25%'], ['H', 'H · 30% (ทนรอยขีดข่วน)']].map(([k, l]) => `<option value="${k}" ${(e.ecc || 'M') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    if (e.t === 'bar') h += `<div class="row" style="gap:8px"><label class="f" style="flex:1">ชนิด<select class="in" data-lp="fmt">${['CODE128', 'CODE39', 'EAN13', 'EAN8', 'UPC', 'ITF', 'codabar'].map(k => `<option ${(e.fmt || 'CODE128') === k ? 'selected' : ''}>${k}</option>`).join('')}</select></label><label class="row" style="gap:6px;align-items:center;flex:1"><input type="checkbox" data-lp="txt" ${e.txt ? 'checked' : ''}> แสดงตัวเลขใต้บาร์โค้ด</label></div>`;
+    if (e.t === 'box') h += `<div class="row" style="gap:8px">${num('lw', 'ความหนาเส้น (มม.)', e.lw || .3, .1, 'min="0.1"')}</div>`;
+  }
+  h += `${S.msg.lbl ? `<div class="msg ${S.msg.lbl[1]}">${esc(S.msg.lbl[0])}</div>` : ''}</aside></div></main>`;
+  return h;
+}
+function lblPaint() {
+  const cv = $('#lblCv'), t = S.lblEdit; if (!cv || !t) return;
+  const z = lblZoom(t), r = Math.min(3, window.devicePixelRatio || 1) * 1.5; cv.width = Math.round(t.w * z * r); cv.height = Math.round(t.h * z * r);
+  lblDraw(cv.getContext('2d'), t, lblSample(), z * r);
+}
+const lblTouch = () => { S.lblDirty = true; };
+const snap = v => Math.round(v * 2) / 2;
+function lblAdd(type) {
+  const t = lblDraft(), id = 'e' + Date.now().toString(36), F = lblFieldNames();
+  const base = { text: { t: 'text', w: Math.min(30, t.w - 4), h: 3.6, text: 'ข้อความ', fs: 8, align: 'left' }, qr: { t: 'qr', w: Math.min(15, t.h - 4), h: Math.min(15, t.h - 4), data: '{Asset}', ecc: 'M' },
+    bar: { t: 'bar', w: Math.min(36, t.w - 4), h: Math.min(8, t.h - 4), data: '{' + (F[0] || 'Asset') + '}', fmt: 'CODE128' }, box: { t: 'box', w: t.w - 2, h: t.h - 2, lw: .3 }, line: { t: 'line', w: Math.min(30, t.w - 4), h: .3 } }[type];
+  const e = { id, ...base, x: type === 'box' ? 1 : snap(Math.max(0, (t.w - base.w) / 2)), y: type === 'box' ? 1 : snap(Math.max(0, (t.h - base.h) / 2)) };
+  t.els.push(e); S.lblSelEl = id; lblTouch();
+}
+function lblSetProp(k, v, live) {
+  const e = lblEl(); if (!e) return;
+  if (['x', 'y', 'w', 'h', 'fs', 'lw'].includes(k)) { v = +v; if (!isFinite(v)) return; if (k !== 'x' && k !== 'y' && v <= 0) return; }
+  e[k] = v; if (e.t === 'qr' && k === 'w') e.h = v;
+  lblTouch(); if (live) { lblPaint(); const o = document.querySelector(`[data-el="${CSS.escape(e.id)}"]`), z = lblZoom(S.lblEdit); if (o) Object.assign(o.style, { left: e.x * z + 'px', top: e.y * z + 'px', width: e.w * z + 'px', height: e.h * z + 'px' }); }
+}
+let lblDrag = null;
+document.addEventListener('pointerdown', ev => {
+  if (S.web !== 'stickers' || S.stMode !== 'design') return;
+  const rs = ev.target.closest('[data-rs]'), el = ev.target.closest('[data-el]'), stage = ev.target.closest('#lblStage');
+  if (!stage) return;
+  if (!el) { if (S.lblSelEl) { S.lblSelEl = null; render(); } return; }
+  ev.preventDefault();
+  const e = S.lblEdit.els.find(x => x.id === el.dataset.el); if (!e) return;
+  const changed = S.lblSelEl !== e.id; S.lblSelEl = e.id;
+  document.querySelectorAll('.lbl-el.on').forEach(n => n.classList.remove('on')); el.classList.add('on');
+  lblDrag = { e, node: el, mode: rs ? 'size' : 'move', sx: ev.clientX, sy: ev.clientY, ox: e.x, oy: e.y, ow: e.w, oh: e.h, z: lblZoom(S.lblEdit), moved: false, changed };
+});
+document.addEventListener('pointermove', ev => {
+  const d = lblDrag; if (!d) return;
+  const t = S.lblEdit, dx = (ev.clientX - d.sx) / d.z, dy = (ev.clientY - d.sy) / d.z; if (Math.abs(dx) + Math.abs(dy) > .2) d.moved = true;
+  if (d.mode === 'move') { d.e.x = Math.max(0, Math.min(t.w - d.e.w, snap(d.ox + dx))); d.e.y = Math.max(0, Math.min(t.h - d.e.h, snap(d.oy + dy))); }
+  else { d.e.w = Math.max(.5, snap(d.ow + dx)); d.e.h = d.e.t === 'qr' ? d.e.w : Math.max(.3, snap(d.oh + dy)); }
+  Object.assign(d.node.style, { left: d.e.x * d.z + 'px', top: d.e.y * d.z + 'px', width: d.e.w * d.z + 'px', height: d.e.h * d.z + 'px' });
+  lblPaint();
+});
+document.addEventListener('pointerup', () => { const d = lblDrag; if (!d) return; lblDrag = null; if (d.moved) lblTouch(); if (d.moved || d.changed) render(); });
+document.addEventListener('keydown', ev => {
+  if (S.web !== 'stickers' || S.stMode !== 'design' || !S.lblSelEl || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+  const e = lblEl(); if (!e) return; const st = ev.shiftKey ? 2 : .5;
+  const mv = { ArrowLeft: ['x', -st], ArrowRight: ['x', st], ArrowUp: ['y', -st], ArrowDown: ['y', st] }[ev.key];
+  if (mv) { ev.preventDefault(); e[mv[0]] = Math.max(0, snap(e[mv[0]] + mv[1])); lblTouch(); render(); }
+  else if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); S.lblEdit.els = S.lblEdit.els.filter(x => x !== e); S.lblSelEl = null; lblTouch(); render(); }
+});
+document.addEventListener('input', ev => {
+  const t = ev.target; if (RENDERING) return;
+  if (t.dataset.lp && (t.tagName === 'TEXTAREA' || t.type === 'text' || t.type === 'number' || !t.type)) lblSetProp(t.dataset.lp, t.value, true);
+  if (t.dataset.lt === 'name' && S.lblEdit) { S.lblEdit.name = t.value; lblTouch(); }
+});
+document.addEventListener('change', async ev => {
+  const t = ev.target; if (RENDERING) return;
+  if (t.dataset.lp) { lblSetProp(t.dataset.lp, t.type === 'checkbox' ? t.checked : t.value, false); setTimeout(render); return; }
+  if (t.dataset.lt && S.lblEdit) { if (t.dataset.lt === 'name') S.lblEdit.name = t.value.trim() || 'แม่แบบ'; else { const v = +t.value; if (v >= 5 && v <= 200) S.lblEdit[t.dataset.lt] = v; } lblTouch(); setTimeout(render); return; }
+  if (t.dataset.lfield !== undefined && t.value) { const e = lblEl(); if (e) { e[t.dataset.lfield] = (e[t.dataset.lfield] || '') + `{${t.value}}`; lblTouch(); } setTimeout(render); return; }
+  if (t.id === 'lblPick') { if (S.lblDirty && S.stMode === 'design' && !confirm('ยังไม่ได้บันทึกแม่แบบที่แก้ไว้ · เปลี่ยนแม่แบบและทิ้งการแก้ไข?')) { t.value = S.lblEdit.id; return; } S.lblId = t.value; LS.set('lblId', t.value); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null; setTimeout(render); return; }
+  if (t.id === 'lblDpi') { LS.set('lblDpi', +t.value); return; }
+  if (t.id === 'stCopies') { S.stCopies = Math.max(1, Math.min(50, +t.value || 1)); setTimeout(render); return; }
+  if (t.id === 'xlsFile' && t.files?.[0]) { try { await readLabelXls(t.files[0]); S.msg.st = [`อ่านไฟล์แล้ว ${N(S.xls.recs.length)} แถว`, 'ok']; } catch (e) { S.msg.st = ['อ่านไฟล์ไม่ได้: ' + e.message, 'bad']; } render(); return; }
+  if (t.id === 'lblImp' && t.files?.[0]) {
+    try { const j = JSON.parse(await t.files[0].text()), list = Array.isArray(j) ? j : j.templates || [j]; let n = 0;
+      for (const x of list) { if (!x || !Array.isArray(x.els) || !(+x.w > 0) || !(+x.h > 0)) continue; const tp = { id: 't' + Date.now().toString(36) + n, name: String(x.name || 'แม่แบบนำเข้า'), w: +x.w, h: +x.h, els: x.els.filter(e => e && LBL_TYPES[e.t]).map((e, i) => ({ ...e, id: 'e' + i + Math.random().toString(36).slice(2, 6) })) }; lblTpls.push(tp); S.lblId = tp.id; n++; }
+      if (!n) throw new Error('ไม่ใช่ไฟล์แม่แบบของ AssetSync');
+      await lblSaveAll(); LS.set('lblId', S.lblId); S.lblEdit = null; S.lblDirty = false; S.msg.lbl = [`นำเข้าแม่แบบแล้ว ${n} แบบ`, 'ok'];
+    } catch (e) { S.msg.lbl = ['นำเข้าไม่ได้: ' + e.message, 'bad']; }
+    render();
+  }
+});
+async function lblAction(a, v) {
+  const t = lblDraft();
+  switch (a) {
+    case 'lblmode': S.stMode = v; S.msg.lbl = null; if (v === 'design') { S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null; } break;
+    case 'lbladd': lblAdd(v); break;
+    case 'lblrm': t.els = t.els.filter(x => x.id !== S.lblSelEl); S.lblSelEl = null; lblTouch(); break;
+    case 'lblcopy': { const e = lblEl(); if (e) { const n = { ...clone(e), id: 'e' + Date.now().toString(36), x: snap(Math.min(t.w - e.w, e.x + 1)), y: snap(Math.min(t.h - e.h, e.y + 1)) }; t.els.push(n); S.lblSelEl = n.id; lblTouch(); } break; }
+    case 'lblorder': { const i = t.els.findIndex(x => x.id === S.lblSelEl), j = v === 'up' ? i + 1 : i - 1; if (i >= 0 && j >= 0 && j < t.els.length) { [t.els[i], t.els[j]] = [t.els[j], t.els[i]]; lblTouch(); } break; }
+    case 'lblnew': S.lblEdit = { id: 't' + Date.now().toString(36), name: 'แม่แบบใหม่', w: t.w, h: t.h, els: [] }; S.lblSelEl = null; lblTouch(); break;
+    case 'lbldup': S.lblEdit = { ...clone(t), id: 't' + Date.now().toString(36), name: t.name + ' (สำเนา)', builtin: undefined }; S.lblSelEl = null; lblTouch(); break;
+    case 'lblrevert': S.lblEdit = clone(lblActive()); S.lblDirty = false; S.lblSelEl = null; break;
+    case 'lblaskdel': S.lblConfirmDel = true; break;
+    case 'lblnodel': S.lblConfirmDel = false; break;
+    case 'lbldel': lblTpls = lblTpls.filter(x => x.id !== t.id); S.lblConfirmDel = false; S.lblId = 'std'; LS.set('lblId', 'std'); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null;
+      try { await lblSaveAll(); S.msg.lbl = ['ลบแม่แบบแล้ว', 'ok']; } catch (e) { S.msg.lbl = ['ลบไม่สำเร็จ: ' + e.message, 'bad']; } break;
+    case 'lblsave': {
+      const x = clone(t); if (x.builtin) { x.id = 't' + Date.now().toString(36); x.name = x.name === LBL_STD.name ? 'ป้ายของฉัน' : x.name; } delete x.builtin;
+      const i = lblTpls.findIndex(y => y.id === x.id); if (i >= 0) lblTpls[i] = x; else lblTpls.push(x);
+      S.lblId = x.id; LS.set('lblId', x.id); S.lblEdit = clone(x); S.lblDirty = false;
+      try { await lblSaveAll(); S.msg.lbl = [`บันทึกแม่แบบ "${x.name}" แล้ว · ทุกคนในทีมใช้แม่แบบนี้ได้`, 'ok']; } catch (e) { S.msg.lbl = ['บันทึกขึ้นระบบไม่สำเร็จ (เก็บไว้ในเครื่องนี้แล้ว): ' + e.message, 'warn']; }
+      break; }
+    case 'lblexp': S.msg.lbl = await save(`AssetSync-แม่แบบป้าย-${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`, JSON.stringify({ app: 'AssetSync label', ver: 1, ...clone(t), builtin: undefined }, null, 2), 'application/json'); break;
+    case 'xlssel': { const i = +v; S.xlsSel.has(i) ? S.xlsSel.delete(i) : S.xlsSel.add(i); break; }
+    case 'xlsall': if (S.xls) S.xlsSel = S.xlsSel.size === S.xls.recs.length ? new Set() : new Set(S.xls.recs.map((_, i) => i)); break;
+    default: return false;
+  }
+  render(); return true;
+}
+
 function labelCC(code) {
   const a = master.get(code), s = compute().cur.get(code);
   if (s && s.rv.move === 'approved') return { code: s.area, name: s.areaName };
@@ -1160,20 +1474,6 @@ function labelCC(code) {
 }
 function dmy(s) { const iso = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`; const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return `${m[2].padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`; const m2 = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m2 ? `${m2[1]}/${m2[2]}/${m2[3]}` : String(s || ''); }
 function capDate(a) { const i = meta?.headers ? meta.headers.findIndex(h => norm(h).includes('CAPITALIZED')) : -1; return i >= 0 && a.raws[0] ? dmy(a.raws[0][i]) : ''; }
-function drawSticker(cv, code) {
-  const ctx = cv?.getContext?.('2d'); if (!ctx) return;
-  const a = master.get(code) || { name: '', cc: '', ccName: '', raws: [] }, cc = labelCC(code), W = cv.width, H = cv.height;
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#121826'; ctx.textBaseline = 'top';
-  const fs = Math.round(H * 0.105), pad = Math.round(H * 0.09), qs = Math.round(H * 0.66), tw = W - qs - pad * 3;
-  ctx.font = `500 ${fs}px Prompt, sans-serif`;
-  const lines = [`No. : ${code}`, `Date : ${capDate(a)}`, `CC : ${cc.code}`, `HO: ${cc.name}`, a.name];
-  lines.forEach((t, i) => { let s = String(t); while (s.length > 1 && ctx.measureText(s).width > tw) s = s.slice(0, -2) + '…'; ctx.fillText(s, pad, pad + i * fs * 1.45); });
-  if (typeof qrcode === 'function') {
-    const q = qrcode(0, 'M'); q.addData(String(code)); q.make();
-    const n = q.getModuleCount(), m = Math.floor(qs / n), x0 = W - pad - n * m, y0 = Math.round((H - n * m) / 2);
-    for (let r = 0; r < n; r++) for (let c2 = 0; c2 < n; c2++) if (q.isDark(r, c2)) ctx.fillRect(x0 + c2 * m, y0 + r * m, m, m);
-  }
-}
 
 /* ================= APP ================= */
 function appView(c) {
@@ -1594,6 +1894,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.a.startsWith('close') && e.target.closest('[data-stop]') && e.target.closest('[data-a]') !== t) return;
   if ((t.dataset.a === 'closeitem' || t.dataset.a === 'closepick' || t.dataset.a === 'closesearch') && t.classList.contains('sheetbg') && e.target !== t) return;
   const a = t.dataset.a, v = t.dataset.v;
+  if (/^(lbl|xls)/.test(a) && await lblAction(a, v)) return;
   switch (a) {
     case 'mode': S.mode = v; LS.set('mode', v); break;
     case 'web': S.web = v; S.msg = {}; break;
@@ -1772,7 +2073,6 @@ document.addEventListener('change', async e => {
   if (t.dataset.assign !== undefined) { const areas = [...meta.areas]; areas[+t.dataset.assign] = { ...areas[+t.dataset.assign], assignee: t.value || null }; await saveMeta({ ...meta, areas }); }
   if (t.id === 'roomIn') { S.room = t.value.trim(); LS.set('room', S.room); }
   if (t.id === 'stSize') { S.stSize = t.value; LS.set('stSize', t.value); setTimeout(render); }
-  if (t.id === 'stW' || t.id === 'stH') { const d = stDim(), v = +t.value; if (v >= 10 && v <= 150) { LS.set('stDim', { ...d, [t.id === 'stW' ? 'w' : 'h']: v }); setTimeout(render); } }
   if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
   if (t.id === 'jobSel') { pickJob(t.value); render(); }
@@ -2010,43 +2310,6 @@ async function stickerExcel(codes) {
   const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   return await save(`OGA_AMSCounting_Review-สติกเกอร์-${r - 1}แถว-${stamp}.xlsx`, new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
-const stDim = () => { const d = LS.get('stDim', null); return d && d.w && d.h ? d : { w: 50, h: 25 }; };
-const stSizeMM = () => S.stSize === 'a4' ? { w: 70, h: 37.125 } : S.stSize === 'roll' ? { w: 50, h: 25 } : stDim();
-// print straight from the browser to the label printer: one page per sticker for a roll (page size = sticker size), 3 × 8 on A4
-async function stickerPrint(test) {
-  try { await document.fonts?.load('500 20px Prompt'); } catch {}
-  const codes = [...S.stSel].slice(0, test ? 1 : 2000), a4 = S.stSize === 'a4', { w, h } = stSizeMM();
-  const cv = document.createElement('canvas'); cv.width = Math.round(w * 12); cv.height = Math.round(h * 12);
-  const imgs = codes.map(code => { drawSticker(cv, code); return cv.toDataURL('image/png'); });
-  const css = a4 ? `@page{size:A4;margin:0}body{margin:0}.pg{width:210mm;height:297mm;display:grid;grid-template-columns:repeat(3,${w}mm);grid-auto-rows:${h}mm;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{width:${w}mm;height:${h}mm;display:block}`
-    : `@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}img{width:${w}mm;height:${h}mm;display:block;page-break-after:always;break-after:page}img:last-child{page-break-after:auto;break-after:auto}`;
-  let body = '';
-  if (a4) for (let i = 0; i < imgs.length; i += 24) body += `<div class="pg">${imgs.slice(i, i + 24).map(src => `<img src="${src}">`).join('')}</div>`;
-  else body = imgs.map(src => `<img src="${src}">`).join('');
-  document.getElementById('stFrame')?.remove();
-  const fr = document.createElement('iframe'); fr.id = 'stFrame'; fr.setAttribute('aria-hidden', 'true');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  document.body.appendChild(fr);
-  const d = fr.contentDocument; d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"><title>AssetSync สติกเกอร์</title><style>${css}</style></head><body>${body}</body></html>`); d.close();
-  await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
-  fr.contentWindow.focus(); fr.contentWindow.print();
-  return [`ส่งพิมพ์ ${codes.length} ดวง (${a4 ? 'A4' : `${w} × ${h} มม.`}) · พิมพ์ครบแล้วกด "บันทึกว่าติดแล้ว"`, 'ok'];
-}
-async function stickerPdf(test) {
-  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
-  try { await document.fonts?.load('500 20px Prompt'); } catch {}
-  const codes = [...S.stSel].slice(0, test ? 1 : 2000), { jsPDF } = window.jspdf;
-  const roll = S.stSize !== 'a4', { w, h: hgt } = stSizeMM();
-  const pdf = roll ? new jsPDF({ unit: 'mm', format: [w, hgt], orientation: 'l' }) : new jsPDF({ unit: 'mm', format: 'a4' });
-  const cv = document.createElement('canvas'); cv.width = Math.round(w * 12); cv.height = Math.round(hgt * 12);
-  codes.forEach((code, i) => {
-    drawSticker(cv, code);
-    const img = cv.toDataURL('image/png');
-    if (roll) { if (i) pdf.addPage([w, hgt], 'l'); pdf.addImage(img, 'PNG', 0, 0, w, hgt, undefined, 'FAST'); }
-    else { const k = i % 24; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % 3) * w, Math.floor(k / 3) * hgt, w, hgt, undefined, 'FAST'); }
-  });
-  return await save(`AssetSync-สติกเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
-}
 
 // ---------- Pivot (PivotTable.js, loaded only when the tab opens) ----------
 const PV_LIBS = [['css', 'lib/pivot.min.css'], ['js', 'lib/jquery.min.js'], ['js', 'lib/jquery-ui.min.js'], ['js', 'lib/pivot.min.js']];
@@ -2093,7 +2356,8 @@ async function mountPivot() {
 function afterRender() {
   if (S.mode === 'web' && S.web === 'pivot') setTimeout(mountPivot, 0);
   const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
-  const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
+  const st = $('#stPrev'); if (st) { const tpl = lblActive(); st.height = Math.round(st.width * tpl.h / tpl.w); lblDraw(st.getContext('2d'), tpl, lblSample(), st.width / tpl.w); }
+  if ($('#lblCv')) lblPaint();
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
   const cs = $('#ccSticker'); if (cs) drawSticker(cs, S.ccPick || ccRows(S.ccSel || '*')[0]?.code || '');
   if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && !S.search && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus({ preventScroll: true });
