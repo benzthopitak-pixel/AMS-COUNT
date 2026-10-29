@@ -15,6 +15,7 @@
 <script>window.XLSXS = window.XLSX; window.XLSX = window.__XLSX;</script>
 <script src="lib/jspdf.umd.min.js"></script>
 <script src="lib/qrcode.js"></script>
+<script src="lib/jsbarcode.min.js"></script>
 <script src="store.js"></script>
 <style>
 @font-face { font-family: 'Prompt'; font-weight: 400; font-display: swap; src: url(fonts/prompt-thai-400-normal.woff2) format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
@@ -155,6 +156,14 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .cond button.w[aria-pressed="true"] { background: var(--warn); color: #1d0e00; }
 .sheetbg { position: fixed; inset: 0; z-index: 20; background: rgb(18 24 38 / .7); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 .sheet { width: 100%; max-width: 440px; background: var(--bg); border-radius: 26px 26px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
+.lbl-wrap { overflow: auto; padding: 18px; background: #eef0f6; border-radius: 12px; display: flex; justify-content: center; }
+.lbl-stage { position: relative; flex: none; background: #fff; box-shadow: 0 2px 10px rgb(18 24 38 / .15); }
+.lbl-stage canvas { position: absolute; inset: 0; display: block; }
+.lbl-el { position: absolute; outline: 1px dashed rgb(46 91 255 / .35); cursor: move; touch-action: none; }
+.lbl-el:hover { outline-color: var(--blue); }
+.lbl-el.on { outline: 2px solid var(--blue); background: rgb(46 91 255 / .06); }
+.lbl-rs { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: var(--blue); border: 2px solid #fff; border-radius: 3px; cursor: nwse-resize; display: none; }
+.lbl-el.on .lbl-rs { display: block; }
 .sticker { align-self: center; width: 300px; max-width: 100%; transform: none; }
 .sticker canvas { width: 100%; height: auto; display: block; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 .book { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -233,6 +242,12 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const norm = s => String(s ?? '').trim().toUpperCase();
 // Cost Center is matched by its code only (names are just labels): ' 001010410 ' = '1010410'
 const ccKey = v => String(v ?? '').trim().toUpperCase().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
+// Sub-number: '0001' → '1', '' stays '' (file has no Sub column)
+const subKey = v => String(v ?? '').trim().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
+// one register row per Asset + Sub: sub 0 keeps the plain Asset code (counts made before subs still match), others are "<Asset>-<Sub>"
+const keyOf = (asset, sub) => !sub || sub === '0' ? asset : asset + '-' + sub;
+// what goes in the QR of a new sticker: always Asset-Sub (sub 0 included) when the file has a Sub column
+const fullCode = a => a ? (a.sub !== '' ? a.asset + '-' + a.sub : a.asset) : '';
 const N = n => Number(n || 0).toLocaleString();
 const fmtT = t => t ? new Date(t).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 const hm = t => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
@@ -249,16 +264,16 @@ const S = {
   web: 'rounds', app: 'home', user: LS.get('user', null),
   area: LS.get('area', null), room: LS.get('room', ''), manual: false,
   areaTab: 'left', inboxTab: 'move', inboxSel: null, inboxChecked: new Set(),
-  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: 'a4', stPaste: '',
+  feedF: 'all', stTab: 'reprint', stSel: new Set(), stSize: LS.get('stSize', 'roll'), stMode: 'print', lblId: LS.get('lblId', 'std'), xls: null, xlsSel: new Set(), stCopies: 1, stPaste: '',
   cards: [], item: null, imp: null, msg: {}, closeChoice: 'writeoff', confirmReset: false, verify: null, areaPick: false, liveArea: null,
   gate: 'boot', authed: false, team: LS.get('team', []), firstRun: false, gateMsg: null, busy: false
 };
 let meta = null;                 // round document
-let master = new Map(), altIx = new Map();
+let master = new Map(), altIx = new Map(), subIx = new Map(), catIx = new Map();   // subIx: Asset → its Sub keys · catIx: Asset+Sub written together without '-' (old QR)
 let serverEv = {};               // docId -> items (all devices)
 let mine = [];                   // this device's events for the current round
 let dirty = new Set(), writing = false, online = false;
-let db = null, dl = null;
+let db = null, dl = null, RENDERING = false;   // RENDERING: a focused field being replaced fires a stale change event — ignore it
 const CHUNK = 350;
 
 let usbMode = LS.get('usbMode', false), usbEv = {};   // usbEv: events that arrived by cable (file), per device
@@ -266,12 +281,26 @@ function loadMine() { usbEv = meta ? LS.get('usb-' + meta.id, {}) : {}; mine = m
 function saveMine() { if (meta) { LS.set('mine-' + meta.id, mine); LS.set('dirty-' + meta.id, [...dirty]); } }
 
 function indexMaster(rows) {
-  master = new Map(); altIx = new Map();
+  master = new Map(); altIx = new Map(); subIx = new Map(); catIx = new Map();
   for (const r of rows) {
-    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: ccKey(r[6]), wo: !!r[7] });
+    // r[8] Asset, r[9] Sub · registers imported before Sub support: an "Asset-Sub" code is split, anything else is Asset only
+    const m = r[8] == null ? /^(\d+)-(\d{1,4})$/.exec(r[0]) : null;
+    const asset = r[8] ?? (m ? m[1] : r[0]), sub = r[9] ?? (m ? subKey(m[2]) : '');
+    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: ccKey(r[6]), wo: !!r[7], asset, sub });
     if (r[4]) altIx.set(r[4], r[0]);
+    const l = subIx.get(asset); if (l) l.push(r[0]); else subIx.set(asset, [r[0]]);
   }
+  const clash = new Set();
+  for (const a of master.values()) {
+    if (a.sub === '' || (subIx.get(a.asset) || []).length < 2) continue;
+    for (const c of new Set([a.asset + a.sub, a.asset + a.sub.padStart(2, '0'), a.asset + a.sub.padStart(3, '0'), a.asset + a.sub.padStart(4, '0')])) {
+      if (master.has(c) || subIx.has(c)) continue;
+      if (catIx.has(c) && catIx.get(c) !== a.code) clash.add(c); else catIx.set(c, a.code);
+    }
+  }
+  for (const c of clash) catIx.delete(c);   // two assets read the same way: never guess
 }
+const subsOf = code => { const a = master.get(code); return a ? subIx.get(a.asset) || [code] : [code]; };
 
 /* ================= events → current state ================= */
 function allEvents() {
@@ -298,7 +327,7 @@ function compute() {
     if (e.k === 'scan') {
       if (s) { H(c, `สแกนซ้ำที่ ${e.areaName || ''}`, e); if (e.dev !== s.dev) { const l = dups.get(c) || []; l.push({ id: e.id, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, t: e.t }); dups.set(c, l); } continue; }   // two scanners counted it while offline: the earlier scan counts, Admin sees both
       lost.delete(c);
-      cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, src: e.src || (e.ns ? 'manual' : 'barcode'), cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0 });
+      cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, src: e.src || (e.ns ? 'manual' : 'barcode'), cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0, qf: e.qf || '', qraw: e.qraw || '' });
       recount.delete(c); H(c, `${SRC[e.src || (e.ns ? 'manual' : 'barcode')][0]} · พบที่ ${e.areaName}${e.room ? ' · ' + e.room : ''}`, e);
     } else if (!s && e.k !== 'rv') { continue; }
     else if (e.k === 'edit') {
@@ -327,6 +356,7 @@ const SRC = { qr: ['สแกน QR', 'c-ok'], barcode: ['สแกนบาร�
 const srcChip = s => s ? `<span class="chip ${SRC[s.src][1]}">${SRC[s.src][0]}</span>` : '';
 const hasQR = s => !!s && (s.src === 'qr' || !!s.hasQR);   // scanned from a QR, or Admin confirmed the asset already has a QR sticker
 const needQR = s => !!s && master.has(s.code) && !hasQR(s) && !s.printedAt;   // QR present = sticker already done
+const oldQR = s => !!s && !!s.qf && master.has(s.code) && !s.printedAt;   // scanned from an old-format QR (Asset only / no '-'): needs a new Asset-Sub sticker
 const dupOf = code => { const s2 = compute().cur.get(code), l = compute().dups.get(code); return l && s2 && !s2.rv.dup ? l : null; };
 const myDups = () => { const { dups, cur } = compute(), out = []; for (const [code, l] of dups) for (const d of l) if (d.dev === dev) out.push({ ...d, code, first: cur.get(code) }); return out; };
 function dupSyncPop() {
@@ -334,6 +364,18 @@ function dupSyncPop() {
   return `<div class="dupbg" role="alertdialog" aria-labelledby="dsH"><div class="duppop" data-stop="1" style="max-width:380px;align-items:stretch;text-align:left"><span class="dupicon" aria-hidden="true" style="align-self:center">!</span><b id="dsH" style="text-align:center">อินเทอร์เน็ตกลับมาแล้ว · พบรายการซ้ำ ${l.length} รายการ</b><span class="sub" style="text-align:center">ระหว่างที่อินเทอร์เน็ตขาดการเชื่อมต่อ มีเครื่องอื่นตรวจนับรายการเหล่านี้ไปก่อนแล้ว ระบบนับเพียงครั้งเดียว</span>
     <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto">${l.map(d => `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(d.code)}</b><br><span class="sub">${esc(master.get(d.code)?.name || '')} · ${esc(d.first?.by || '')} นับก่อน ${d.first ? hm(d.first.t) : ''} ที่ ${esc(d.first?.areaName || '')}</span></span><button class="btn sm red" data-a="dupdrop" data-v="${esc(d.code)}" data-id="${esc(d.id)}">ลบ</button></div>`).join('')}</div>
     <button class="btn red" data-a="dupdropall">ลบรายการซ้ำทั้งหมด (${l.length})</button><button class="btn" data-a="duplater">ภายหลัง</button></div></div>`;
+}
+// QR with the Asset only and several Subs in the register: count one Sub, or every Sub found here
+function subPopup() {
+  const p = S.subPop; if (!p || S.mode !== 'app') return '';
+  const { cur } = compute(), left = p.keys.filter(k => !cur.has(k));
+  const rowOf = k => { const a = master.get(k), s = cur.get(k);
+    return `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(fullCode(a))}</b> <span class="chip ${s ? 'c-ok' : 'c-gray'}">${s ? 'ตรวจแล้ว' : 'รอตรวจ'}</span><br><span class="sub">${esc(a.name)}${s ? ` · ${esc(s.by)} ${hm(s.t)}` : ''}</span></span>${s ? '' : `<button class="btn sm pri" data-a="subone" data-v="${esc(k)}">นับรายการนี้</button>`}</div>`; };
+  return `<div class="dupbg" data-a="closesub" role="alertdialog" aria-labelledby="subH"><div class="duppop" data-stop="1" style="max-width:400px;align-items:stretch;text-align:left">
+    <b id="subH" style="text-align:center">Asset นี้มี ${p.keys.length} รายการย่อย (Sub)</b><span class="mono" style="font-size:20px;font-weight:700;text-align:center">${esc(p.base)}</span>
+    <span class="sub" style="text-align:center">สติกเกอร์นี้มีเฉพาะเลข Asset · โปรดเลือกรายการที่พบ ระบบจะนำรายการที่นับไปไว้ในรายการ "ป้าย QR รูปแบบเก่า" เพื่อพิมพ์ป้ายใหม่</span>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto">${p.keys.map(rowOf).join('')}</div>
+    ${left.length ? `<button class="btn pri" data-a="suball">พบทั้งหมด (${left.length} รายการ)</button>` : `<span class="sub" style="text-align:center">ทุกรายการตรวจนับแล้ว</span>`}<button class="btn" data-a="closesub">ยกเลิก</button></div></div>`;
 }
 const lostOf = code => compute().lost.get(code) || null;
 // choices for an item nobody has scanned: found (no sticker / with its condition) or lost
@@ -557,7 +599,7 @@ function render() {
   const keepFocus = document.activeElement?.id, keepVal = keepFocus && 'value' in document.activeElement ? document.activeElement.value : null, scanVal = $('#scanIn')?.value || '';
   const c = meta && master.size ? cats() : null;
   const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
-  if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus({ preventScroll: true }); return; }
+  if (S.gate) { RENDERING = true; try { root.innerHTML = gateView(); } finally { RENDERING = false; } afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus({ preventScroll: true }); return; }
   let html = '';
   if (S.mode === 'web') {
     // computer: menu runs down the left side
@@ -584,7 +626,7 @@ function render() {
   // keep every scrolled box where it was (a tap inside the right panel must not jump it back to the top)
   const KS = ['.pair > *', '.tbl-wrap', '.sheet', '.side-nav', '.pbody'], kept = KS.map(q => [...root.querySelectorAll(q)].map(e => e.scrollTop)), winY = window.scrollY;
   const pvKeep = $('#pivotBox[data-ready]');
-  root.innerHTML = html;
+  RENDERING = true; try { root.innerHTML = html; } finally { RENDERING = false; }
   if (pvKeep) { const slot = $('#pivotBox'); if (slot) slot.replaceWith(pvKeep); }
   KS.forEach((q, i) => { const els = [...root.querySelectorAll(q)]; if (els.length !== kept[i].length) return; els.forEach((e, j) => { if (S.resetRight && q === '.pair > *' && e.tagName === 'ASIDE') return; if (kept[i][j]) e.scrollTop = kept[i][j]; }); });
   S.resetRight = false; if (Math.abs(window.scrollY - winY) > 1) window.scrollTo(0, winY);
@@ -633,7 +675,7 @@ function reportData(kind) {
   const { cur } = compute(), ccF = S.repCC || '', inCC = a => !ccF || String(a.cc) === ccF;
   if (kind === 'sum') {
     const by = new Map();
-    for (const a of master.values()) { if (!counted(a) || !inCC(a)) continue; const s2 = cur.get(a.code), e = by.get(String(a.cc)) || { cc: String(a.cc), total: 0, found: 0, lost: 0, mv: 0, dmg: 0, qr: 0 }; e.total++; if (s2) { e.found++; if (isMoved(s2)) e.mv++; if (s2.cond !== 'ปกติ') e.dmg++; if (needQR(s2) || s2.flags.reprint) e.qr++; } else if (lostOf(a.code)) e.lost++; by.set(e.cc, e); }
+    for (const a of master.values()) { if (!counted(a) || !inCC(a)) continue; const s2 = cur.get(a.code), e = by.get(String(a.cc)) || { cc: String(a.cc), total: 0, found: 0, lost: 0, mv: 0, dmg: 0, qr: 0 }; e.total++; if (s2) { e.found++; if (isMoved(s2)) e.mv++; if (s2.cond !== 'ปกติ') e.dmg++; if (needQR(s2) || oldQR(s2) || s2.flags.reprint) e.qr++; } else if (lostOf(a.code)) e.lost++; by.set(e.cc, e); }
     const rows = [...by.values()].sort((x, y) => x.cc.localeCompare(y.cc)).map(e => [e.cc, ccNameOf(e.cc), e.total, e.found, e.total - e.found - e.lost, e.lost, e.mv, e.dmg, e.qr, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%', ccClosed(e.cc) ? 'ปิดแล้ว' : '']);
     const tot = rows.reduce((t, r) => { for (let i = 2; i <= 8; i++) t[i] += r[i]; return t; }, ['รวม', '', 0, 0, 0, 0, 0, 0, 0]);
     tot.push(tot[2] ? Math.round(tot[3] / tot[2] * 1000) / 10 + '%' : '0%', ''); rows.push(tot);
@@ -665,8 +707,8 @@ function reportData(kind) {
     return { title: 'รายการที่ตรวจไม่พบ', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC', 'ชื่อ CC', 'สถานะ', 'บันทึกโดย', 'Remark'], rows, w: [11, 30, 10, 16, 8, 16, 18] };
   }
   if (kind === 'qr') {
-    const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && inCC(a) && (needQR(s2) || s2.flags.reprint || s2.flags.namebad || s2.rv.move === 'approved'); }).sort((x, y) => x.code.localeCompare(y.code))
-      .map(s2 => { const a = master.get(s2.code), cc = labelCC(s2.code); return [s2.code, a.name, cc.code, cc.name, [needQR(s2) && 'ยังไม่มี QR', s2.flags.reprint && 'ขอพิมพ์ใหม่', s2.flags.namebad && 'ชื่อไม่ตรง', s2.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · '), SRC[s2.src][0], s2.printedAt ? fmtT(s2.printedAt) : '']; });
+    const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && inCC(a) && (needQR(s2) || oldQR(s2) || s2.flags.reprint || s2.flags.namebad || s2.rv.move === 'approved'); }).sort((x, y) => x.code.localeCompare(y.code))
+      .map(s2 => { const a = master.get(s2.code), cc = labelCC(s2.code); return [s2.code, a.name, cc.code, cc.name, [needQR(s2) && 'ยังไม่มี QR', oldQR(s2) && `QR รูปแบบเก่า (${s2.qraw || 'ไม่มีเลข Sub'})`, s2.flags.reprint && 'ขอพิมพ์ใหม่', s2.flags.namebad && 'ชื่อไม่ตรง', s2.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · '), SRC[s2.src][0], s2.printedAt ? fmtT(s2.printedAt) : '']; });
     return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
   }
   if (kind === 'bw') {
@@ -800,8 +842,8 @@ function importBlock() {
   if (I.err) return h + `<div class="msg bad">${esc(I.err)}</div><div class="row"><button class="btn" data-a="cancelimport">เลือกไฟล์ใหม่</button></div>`;
   const st = importStats(), fresh = true;
   if (fresh) h += `<label class="f">ชื่อรอบตรวจนับ<input class="in" id="impRound" value="${esc(I.roundName)}" maxlength="80"></label>`;
-  h += `<div class="grid">${[['code', 'เลข Asset (บนสติกเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k])}</select></label>`).join('')}</div>
-    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${st.multi ? `<span class="chip c-warn">เลข Asset ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
+  h += `<div class="grid">${[['code', 'เลข Asset (บนสติกเกอร์) *'], ['name', 'ชื่อทรัพย์สิน'], ['cc', 'รหัส Cost Center'], ['ccName', 'ชื่อแผนก (Cost Center)'], ['sub', 'Sub-number (เลขซับ)'], ['alt', 'รหัสสำรอง'], ['cls', 'ประเภท']].map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k] ?? -1)}</select></label>`).join('')}</div>
+    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${I.map.sub >= 0 ? `<span class="chip c-blue">แยกตาม Asset + Sub-number${st.withSubs ? ` · ${N(st.withSubs)} Asset มีหลายรายการย่อย` : ''}</span>` : `<span class="chip c-gray">ไม่ได้เลือกคอลัมน์ Sub-number · นับรวมตามเลข Asset</span>`}${st.multi ? `<span class="chip c-warn">${I.map.sub >= 0 ? 'Asset + Sub' : 'เลข Asset'} ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
   if (busyRound) h += `<div class="msg ok">ไฟล์นี้จะเป็นงานใหม่อีกงาน · งาน "${esc(meta.name)}" ที่นับอยู่ยังอยู่ครบ สลับไปมาได้</div>`;
   h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างงานใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;
   return h;
@@ -848,13 +890,17 @@ function prepareImport(name) {
   const h = p.headers, b = p.rows, ex = h.findIndex(x => norm(x) === 'ASSET');
   Object.assign(S.imp, { sheet: name, headers: h, rows: b, fmts: p.fmts, widths: p.widths, err: null, tpl: detectTpl(h), map: {
     code: ex >= 0 ? ex : Math.max(0, guess(h, ['ASSET', 'รหัส', 'CODE'])), alt: guess(h, ['INVENTORY'], b), name: guess(h, ['DESC', 'ชื่อ', 'รายการ', 'NAME']),
-    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER', 'COST CETER', 'COST CENTRE'].concat(h.some(x => norm(x) === 'CC') ? ['CC'] : []), b), cls: guess(h, ['ASSET CLASS', 'CLASS']) } });
+    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER', 'COST CETER', 'COST CENTRE'].concat(h.some(x => norm(x) === 'CC') ? ['CC'] : []), b), cls: guess(h, ['ASSET CLASS', 'CLASS']), sub: subCol(h) } });
 }
+// SAP: "Subnumber", "Sub-number", "SNo." · a column called just "Sub" too
+function subCol(h) { const n = x => norm(x).replace(/[\s._-]/g, ''); return h.findIndex(x => ['SUBNUMBER', 'SUBNO', 'SNO', 'SUB', 'ASSETSUBNUMBER'].includes(n(x))); }
+const impKey = (r, m) => { const c = norm(r[m.code]); return !c ? '' : m.sub >= 0 ? keyOf(c, subKey(r[m.sub]) || '0') : c; };
 function importStats() {
   const I = S.imp, m = I.map, codes = new Map(); let wo = 0;
-  for (const r of I.rows) { const c = norm(r[m.code]); if (!c) continue; codes.set(c, (codes.get(c) || 0) + 1); if (I.tpl.status >= 0 && r[I.tpl.status] === 'Write - Off') wo++; }
+  const assets = new Map();
+  for (const r of I.rows) { const c = impKey(r, m); if (!c) continue; codes.set(c, (codes.get(c) || 0) + 1); const as = norm(r[m.code]); assets.set(as, (assets.get(as) || new Set()).add(c)); if (I.tpl.status >= 0 && r[I.tpl.status] === 'Write - Off') wo++; }
   const rep = [...codes.values()].filter(v => v > 1);
-  return { codes: codes.size, rows: I.rows.length, multi: rep.length, multiRows: rep.reduce((a, b) => a + b, 0), wo };
+  return { codes: codes.size, rows: I.rows.length, multi: rep.length, multiRows: rep.reduce((a, b) => a + b, 0), wo, withSubs: m.sub >= 0 ? [...assets.values()].filter(x => x.size > 1).length : 0 };
 }
 /* ---------- ② live ---------- */
 function areaStats() {
@@ -1130,26 +1176,386 @@ function stickerList(c) {
   if (S.stTab === 'moved') return [...cur.values()].filter(s => s.rv.move === 'approved').map(s => s.code);
   if (S.stTab === 'ns') return [...cur.values()].filter(s => s.ns).map(s => s.code);
   if (S.stTab === 'noqr') return [...cur.values()].filter(needQR).map(s => s.code);
-  if (S.stTab === 'paste') { const out = []; for (const t of S.stPaste.split(/[\s,;]+/)) { const c2 = resolve(t); if (c2 && master.has(c2) && !out.includes(c2)) out.push(c2); } return out; }
+  if (S.stTab === 'oldqr') return [...cur.values()].filter(oldQR).map(s => s.code);
+  if (S.stTab === 'paste') { const out = []; for (const t of S.stPaste.split(/[\s,;]+/)) { const r = lookup(t); for (const c2 of r.multi || [r.code]) if (c2 && master.has(c2) && !out.includes(c2)) out.push(c2); } return out; }   // Asset only → every Sub
   return [];
 }
+
+/* ---------- label templates: size, layout and data all editable (menu 5 → ออกแบบป้าย) ----------
+ * template = { id, name, w, h (mm), els: [{ id, t: text | qr | bar | box | line, x, y, w, h (mm), ... }] }
+ * text / data use {ชื่อคอลัมน์} placeholders: any column of the imported file, the count results, or the columns of an Excel file */
+const PT = 0.3528;   // 1 pt in mm
+if (typeof qrcode === 'function') qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(String(s)));   // Thai text in a QR
+const LBL_STD = { id: 'std', name: 'ป้ายมาตรฐาน (แบบเดิม)', w: 50, h: 25, builtin: true, els: [
+  { id: 'a1', t: 'text', x: 2.2, y: 2.2, w: 26.8, h: 3.4, text: 'No. : {Asset-Sub}', fs: 7.4, align: 'left' },
+  { id: 'a2', t: 'text', x: 2.2, y: 6.0, w: 26.8, h: 3.4, text: 'Date : {วันที่ซื้อ}', fs: 7.4, align: 'left' },
+  { id: 'a3', t: 'text', x: 2.2, y: 9.8, w: 26.8, h: 3.4, text: 'CC : {CC บนป้าย}', fs: 7.4, align: 'left' },
+  { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
+  { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
+  { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset-Sub}' }] };
+// thermal roll 70 × 50 mm with a 10 mm pre-printed header band: everything sits in the 40 mm below it
+const LBL_7050 = { id: 'std7050', name: 'ป้าย 70 × 50 (หัวแถบสี 10 มม.)', w: 70, h: 50, builtin: true, pre: { top: 10, color: '#1e88e5' }, els: [
+  { id: 'b0', t: 'qr', x: 3, y: 14, w: 32, h: 32, data: '{Asset-Sub}', ecc: 'M' },
+  { id: 'b1', t: 'text', x: 37, y: 14, w: 31, h: 5, text: '{Asset-Sub}', fs: 12, bold: true, align: 'left' },
+  { id: 'b2', t: 'text', x: 37, y: 20.5, w: 31, h: 10, text: '{ชื่อ}', fs: 8, align: 'left', wrap: true },
+  { id: 'b3', t: 'text', x: 37, y: 31.5, w: 31, h: 3.6, text: 'CC : {CC บนป้าย}', fs: 7.5, align: 'left' },
+  { id: 'b4', t: 'text', x: 37, y: 35.5, w: 31, h: 3.6, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.5, align: 'left' },
+  { id: 'b5', t: 'text', x: 37, y: 39.5, w: 31, h: 3.6, text: 'Date : {วันที่ซื้อ}', fs: 7.5, align: 'left' }] };
+const LBL_SIZES = [[50, 25], [50, 30], [50, 40], [40, 30], [60, 40], [70, 40], [70, 50], [80, 50], [100, 50], [100, 75], [100, 100], [100, 150], [32, 25], [30, 20], [25, 15]];   // common thermal rolls in Thailand
+const LBL_TYPES = { text: 'ข้อความ', qr: 'QR Code', bar: 'บาร์โค้ด', box: 'กรอบ', line: 'เส้น / แถบทึบ' };
+const clone = o => JSON.parse(JSON.stringify(o));
+const lk = k => String(k ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+let lblTpls = LS.get('lblTpls', []);
+const lblAll = () => [LBL_STD, LBL_7050, ...lblTpls];
+const lblActive = () => lblAll().find(t => t.id === S.lblId) || LBL_STD;
+const lblDpi = () => +LS.get('lblDpi', 300) || 300;
+async function lblLoad() { if (!db) return; try { const d = await db.doc('labels').get(); if (d.exists) { lblTpls = (d.data().list || []).filter(t => t && t.id && t.els); LS.set('lblTpls', lblTpls); render(); } } catch {} }
+async function lblSaveAll() { LS.set('lblTpls', lblTpls); if (db) await db.doc('labels').set({ list: lblTpls, at: Date.now() }); }
+const lblFill = (s, rec) => String(s ?? '').replace(/\{([^{}]+)\}/g, (_, k) => { const v = rec[lk(k)]; return v == null ? '' : String(v); });
+
+// one record per sticker: every column of the imported file + names for the label + count results
+function lblRecord(code) {
+  const a = master.get(code), s2 = compute().cur.get(code), cc = labelCC(code), r = {};
+  const put = (k, v) => { if (String(k).trim()) r[lk(k)] = v ?? ''; };
+  (meta?.headers || []).forEach((h, i) => { let v = a?.raws[0]?.[i]; if (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? ''))) v = dmy(v); put(h, v); });
+  put('Asset', a?.asset || code); put('Sub', a?.sub ?? ''); put('Asset-Sub', a ? fullCode(a) : code); put('ชื่อ', a?.name || s2?.uname || ''); put('CC บนป้าย', cc.code); put('ชื่อ CC บนป้าย', cc.name); put('วันที่ซื้อ', a ? capDate(a) : '');
+  if (a) for (const [k, l] of RES_F) put(l, crVal(k, a, s2));
+  put('วันที่พิมพ์', new Date().toLocaleDateString('th-TH'));
+  return r;
+}
+function lblFieldNames() {
+  const out = S.stTab === 'xls' && S.xls ? [...S.xls.headers]
+    : ['Asset-Sub', 'Asset', 'Sub', 'ชื่อ', 'CC บนป้าย', 'ชื่อ CC บนป้าย', 'วันที่ซื้อ', ...(meta?.headers || []).map(h => String(h).trim()), ...RES_F.map(x => x[1])];
+  out.push('วันที่พิมพ์');
+  const seen = new Set(); return out.filter(x => x && !seen.has(lk(x)) && seen.add(lk(x)));
+}
+const lblSample = () => S.stTab === 'xls' && S.xls ? (S.xls.recs[[...S.xlsSel][0] ?? 0] || {}) : lblRecord([...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
+
+const graph = s => { try { return [...new Intl.Segmenter('th', { granularity: 'grapheme' }).segment(s)].map(x => x.segment); } catch { return Array.from(s); } };
+function wrapText(ctx, txt, maxW, maxL) {
+  const out = []; let line = '';
+  for (const raw of String(txt).split('\n')) {
+    line = '';
+    for (const g of graph(raw)) {
+      if (ctx.measureText(line + g).width <= maxW || !line) { line += g; continue; }
+      const sp = line.lastIndexOf(' ');
+      if (sp > 0) { out.push(line.slice(0, sp)); line = line.slice(sp + 1) + g; } else { out.push(line); line = g; }
+    }
+    out.push(line);
+  }
+  if (out.length > maxL) { out.length = maxL; out[maxL - 1] += '…'; }
+  return out.map((l, i) => { if (i !== out.length - 1 || ctx.measureText(l).width <= maxW) return l; let s = l; while (s.length > 1 && ctx.measureText(s).width > maxW) s = s.slice(0, -2) + '…'; return s; });
+}
+// draw one sticker at k pixels per mm (the printer's dots: 203 dpi = 8, 300 dpi ≈ 11.8)
+// guide = true on screen only: shows what is already printed on the paper (e.g. a blue header band) so the layout avoids it · never sent to the printer
+function lblDraw(ctx, tpl, rec, k, guide) {
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const P = tpl.pre; if (guide && P) { ctx.fillStyle = P.color || '#1e88e5'; const W = tpl.w * k, H = tpl.h * k;
+    if (P.top) ctx.fillRect(0, 0, W, P.top * k); if (P.bottom) ctx.fillRect(0, H - P.bottom * k, W, P.bottom * k); if (P.left) ctx.fillRect(0, 0, P.left * k, H); if (P.right) ctx.fillRect(W - P.right * k, 0, P.right * k, H); } ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.textBaseline = 'top'; ctx.imageSmoothingEnabled = false;
+  for (const e of tpl.els) {
+    const x = e.x * k, y = e.y * k, w = e.w * k, h = e.h * k;
+    if (e.t === 'text') {
+      const px = (+e.fs || 8) * PT * k; ctx.font = `${e.bold ? 700 : 500} ${px}px Prompt, sans-serif`;
+      const lh = px * 1.28, lines = wrapText(ctx, lblFill(e.text, rec), w, e.wrap ? Math.max(1, Math.floor((h + px * .28) / lh)) : 1);
+      ctx.textAlign = e.align || 'left'; const ax = e.align === 'center' ? x + w / 2 : e.align === 'right' ? x + w : x;
+      lines.forEach((l, i) => ctx.fillText(l, ax, y + i * lh)); ctx.textAlign = 'left';
+    } else if (e.t === 'qr') {
+      const d = lblFill(e.data, rec); if (!d || typeof qrcode !== 'function') continue;
+      try { const q = qrcode(0, e.ecc || 'M'); q.addData(d); q.make(); const n = q.getModuleCount(), s = Math.min(w, h), m = Math.max(1, Math.floor(s / n)), x0 = Math.round(x + (s - n * m) / 2), y0 = Math.round(y + (s - n * m) / 2);
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(x0 + c * m, y0 + r * m, m, m); } catch { }
+    } else if (e.t === 'bar') {
+      const d = lblFill(e.data, rec); if (!d || !window.JsBarcode) continue;
+      try {
+        const showTxt = !!e.txt, th = showTxt ? Math.min(h * .3, 2.6 * k) : 0, bh = Math.max(1, Math.round(h - th));
+        const c1 = document.createElement('canvas'); JsBarcode(c1, d, { format: e.fmt || 'CODE128', width: 1, height: 4, displayValue: false, margin: 0, background: '#ffffff' });
+        const m = Math.max(1, Math.floor(w / c1.width)), c2 = document.createElement('canvas'); JsBarcode(c2, d, { format: e.fmt || 'CODE128', width: m, height: bh, displayValue: false, margin: 0, background: '#ffffff' });
+        const dw = Math.min(c2.width, w); ctx.drawImage(c2, Math.round(x + (w - dw) / 2), Math.round(y), dw, bh);
+        if (showTxt) { ctx.font = `500 ${th * .9}px Prompt, sans-serif`; ctx.textAlign = 'center'; ctx.fillText(d, x + w / 2, y + bh + th * .08); ctx.textAlign = 'left'; }
+      } catch { ctx.font = `500 ${2.4 * k}px Prompt, sans-serif`; ctx.fillStyle = '#c00'; ctx.fillText('บาร์โค้ดไม่รองรับข้อมูลนี้', x, y); ctx.fillStyle = '#000'; }
+    } else if (e.t === 'box') { const lw = Math.max(1, (+e.lw || .3) * k); ctx.lineWidth = lw; ctx.strokeRect(x + lw / 2, y + lw / 2, w - lw, h - lw); }
+    else if (e.t === 'line') ctx.fillRect(x, y, Math.max(1, w), Math.max(1, h));
+  }
+  ctx.restore();
+}
+// preview canvases elsewhere (CC page, item sheet) follow the active template
+function drawSticker(cv, code) {
+  if (!cv?.getContext) return; const tpl = lblActive(); cv.height = Math.round(cv.width * tpl.h / tpl.w);
+  lblDraw(cv.getContext('2d'), tpl, lblRecord(code), cv.width / tpl.w, true);
+}
+
+/* ---------- 5 · print page ---------- */
+const ST_TABS = c => { const { cur } = compute(); return [['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR', [...cur.values()].filter(needQR).length], ['oldqr', 'ป้าย QR รูปแบบเก่า', [...cur.values()].filter(oldQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', ''], ['xls', '📄 จากไฟล์ Excel', S.xls ? S.xls.recs.length : '']]; };
+const tplPick = () => `<label class="f">แม่แบบป้าย<select class="in" id="lblPick">${lblAll().map(t => `<option value="${esc(t.id)}" ${t.id === lblActive().id ? 'selected' : ''}>${esc(t.name)} · ${t.w} × ${t.h} มม.</option>`).join('')}</select></label>`;
 function webStickers(c) {
-  const list = stickerList(c), { cur } = compute();
-  for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
-  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ป้าย QR หน้าตาเดียวกับป้ายเดิม · QR เก็บเลข Asset</p><h1>5 · พิมพ์สติกเกอร์</h1></div><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${S.stSel.size}</b> ดวง</span></div>
-    <div class="pills">${[['reprint', 'ต้องพิมพ์ใหม่', c.reprint.length], ['namebad', 'ชื่อไม่ตรงระบบ', c.namebad.length], ['moved', 'ย้ายแผนก (อนุมัติแล้ว)', [...cur.values()].filter(s => s.rv.move === 'approved').length], ['noqr', 'ยังไม่มี QR (สแกนบาร์โค้ด / พิมพ์เอง / เว็บ)', [...cur.values()].filter(needQR).length], ['ns', 'ยังไม่มีสติกเกอร์', [...cur.values()].filter(s => s.ns).length], ['paste', 'วางเลข Asset เอง', '']].map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
-    <div class="row"><section class="card grow">`;
-  if (S.stTab === 'paste') h += `<label class="f">เลข Asset บรรทัดละ 1 รหัส<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
-  h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
-  for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
-    h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
-  h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="296" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
-    <label class="f">ขนาด<select class="in" id="stSize"><option value="a4" ${S.stSize === 'a4' ? 'selected' : ''}>A4 24 ดวง (70 × 37 มม.)</option><option value="roll" ${S.stSize === 'roll' ? 'selected' : ''}>ม้วน 50 × 25 มม.</option></select></label>
-    <div class="row"><button class="btn" data-a="stpdf" data-v="test" ${S.stSel.size ? '' : 'disabled'}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${S.stSel.size ? '' : 'disabled'}>PDF ${S.stSel.size} ดวง</button></div>
-    <button class="btn" data-a="stxlsx" ${S.stSel.size ? '' : 'disabled'}>⬇ Excel ตามแม่แบบ OGA (${S.stSel.size})</button><span class="sub">ไฟล์สำหรับโปรแกรมพิมพ์สติกเกอร์ · 1 แถวต่อ 1 Sub-number</span>
-    <button class="btn lime" data-a="stdone" ${S.stSel.size ? '' : 'disabled'}>บันทึกว่าติดแล้ว</button>${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
+  if (!S.lblLoaded) { S.lblLoaded = true; lblLoad(); }
+  if (S.stMode === 'design') return webLabelDesign();
+  const xls = S.stTab === 'xls', list = xls ? [] : stickerList(c), { cur } = compute(), tpl = lblActive();
+  if (!xls) for (const x of [...S.stSel]) if (!list.includes(x)) S.stSel.delete(x);
+  const nSel = xls ? S.xlsSel.size : S.stSel.size, copies = Math.max(1, +S.stCopies || 1), dis = nSel ? '' : 'disabled';
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ออกแบบป้ายเองได้ · ข้อมูลจากไฟล์ทะเบียน ผลตรวจนับ หรือไฟล์ Excel</p><h1>5 · พิมพ์สติกเกอร์</h1></div>
+    <div class="row" style="align-items:center"><span class="sub">เลือกแล้ว <b style="color:var(--blue)">${nSel}</b> รายการ</span><button class="btn" data-a="lblmode" data-v="design">✎ ออกแบบป้าย</button></div></div>
+    <div class="pills">${ST_TABS(c).map(([k, l, n]) => `<button class="pill ${S.stTab === k ? 'on' : ''}" data-a="sttab" data-v="${k}">${l}${n !== '' ? ` [${n}]` : ''}</button>`).join('')}</div>
+    <div class="row"><section class="card grow" style="min-width:0">`;
+  if (xls) {
+    h += `<div class="row" style="align-items:center"><label class="btn">📄 เลือกไฟล์ Excel<input type="file" id="xlsFile" accept=".xlsx,.xls,.csv" hidden></label><span class="sub">${S.xls ? `${esc(S.xls.name)} · ${N(S.xls.recs.length)} แถว · ${S.xls.headers.length} คอลัมน์ · ใช้ชื่อคอลัมน์ในแม่แบบได้ เช่น {${esc(S.xls.headers[0] || 'Asset')}}` : 'แถวแรกของไฟล์ = ชื่อคอลัมน์ · 1 แถว = 1 ป้าย'}</span></div>`;
+    if (S.xls) { const H = S.xls.headers.slice(0, 5);
+      h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="xlsall" aria-label="เลือกทั้งหมด" ${S.xlsSel.size === S.xls.recs.length ? 'checked' : ''}></th>${H.map(x => `<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
+      S.xls.rows.slice(0, 300).forEach((r, i) => { h += `<tr><td><input type="checkbox" data-a="xlssel" data-v="${i}" ${S.xlsSel.has(i) ? 'checked' : ''} aria-label="เลือกแถว ${i + 1}"></td>${H.map((_, j) => `<td>${esc(r[j] ?? '')}</td>`).join('')}</tr>`; });
+      h += `</tbody></table></div>${S.xls.rows.length > 300 ? `<p class="sub">แสดง 300 แถวแรก · "เลือกทั้งหมด" รวมทุก ${N(S.xls.rows.length)} แถว</p>` : ''}`; }
+  } else {
+    if (S.stTab === 'paste') h += `<label class="f">เลข Asset หรือ Asset-Sub บรรทัดละ 1 รหัส (ใส่เฉพาะเลข Asset = ทุกรายการย่อย)<textarea class="in mono" id="stPaste" rows="4" placeholder="51000136">${esc(S.stPaste)}</textarea></label>`;
+    h += `<div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" data-a="stall" aria-label="เลือกทั้งหมด" ${list.length && list.every(x => S.stSel.has(x)) ? 'checked' : ''}></th><th>No.</th><th>ชื่อ</th><th>CC บนป้าย</th><th>พิมพ์ล่าสุด</th></tr></thead><tbody>`;
+    for (const code of list.slice(0, 300)) { const a = master.get(code), s = cur.get(code), cc = labelCC(code);
+      h += `<tr><td><input type="checkbox" data-a="stsel" data-v="${esc(code)}" ${S.stSel.has(code) ? 'checked' : ''} aria-label="เลือก ${esc(code)}"></td><td class="mono">${esc(code)}</td><td>${esc(a?.name || '')}</td><td>${esc(cc.code)} ${esc(cc.name)}</td><td class="sub">${s?.printedAt ? fmtT(s.printedAt) : '—'}</td></tr>`; }
+    h += `</tbody></table></div>${list.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}`;
+  }
+  const a4 = S.stSize === 'a4', per = Math.floor(210 / tpl.w) * Math.floor(297 / tpl.h);
+  h += `</section><aside class="card side"><b>ตัวอย่างป้าย</b><div class="sticker" style="transform:none"><canvas id="stPrev" width="560" height="280" aria-label="ตัวอย่างสติกเกอร์"></canvas></div>
+    ${tplPick()}
+    ${(() => { const have = new Set(lblFieldNames().map(lk)), miss = [...new Set(tpl.els.flatMap(e => [...String(e.text || '') .matchAll(/\{([^{}]+)\}/g), ...String(e.data || '').matchAll(/\{([^{}]+)\}/g)].map(m => m[1].trim())))].filter(f => !have.has(lk(f)));
+      return miss.length ? `<div class="msg warn">แม่แบบนี้ใช้ช่อง ${miss.map(f => '{' + esc(f) + '}').join(' ')} ที่ไม่มีใน${xls ? 'ไฟล์ Excel' : 'ข้อมูล'} · ช่องนี้จะว่าง · แก้ที่ "ออกแบบป้าย"</div>` : ''; })()}
+    <label class="f">เครื่องพิมพ์ / กระดาษ<select class="in" id="stSize"><option value="roll" ${a4 ? '' : 'selected'}>เครื่องพิมพ์สติกเกอร์ · ม้วน (${tpl.w} × ${tpl.h} มม.)</option><option value="a4" ${a4 ? 'selected' : ''} ${per ? '' : 'disabled'}>เครื่องพิมพ์ธรรมดา · A4 ${per} ดวงต่อแผ่น</option></select></label>
+    ${a4 ? '' : prnBox(tpl)}
+    <div class="row" style="gap:8px"><label class="f" style="flex:1">ความละเอียด<select class="in" id="lblDpi">${[203, 300, 600].map(d => `<option value="${d}" ${lblDpi() === d ? 'selected' : ''}>${d} dpi</option>`).join('')}</select></label>
+      <label class="f" style="flex:1">จำนวนต่อรายการ<input class="in" id="stCopies" type="number" min="1" max="50" value="${copies}"></label></div>
+    ${Store.isApp ? `<div class="row"><button class="btn" data-a="stpdf" data-v="test" ${dis}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${dis}>PDF ${nSel * copies} ดวง</button></div>`
+      : `<button class="btn pri" data-a="stprint" data-v="all" ${dis}>🖨 พิมพ์ ${N(nSel * copies)} ดวง</button><div class="row"><button class="btn" data-a="stprint" data-v="test" ${dis}>🖨 ทดสอบ 1 ดวง</button><button class="btn" data-a="stpdf" data-v="all" ${dis}>⬇ PDF</button></div>
+    <span class="sub">พิมพ์ตรงจากเว็บ ไม่ต้องใช้ BarTender · หน้าพิมพ์: เลือกเครื่องพิมพ์สติกเกอร์ · ขอบกระดาษ = ไม่มี · สเกล = 100% · ความละเอียดให้ตรงกับเครื่องพิมพ์</span>`}
+    ${xls ? '' : `<button class="btn" data-a="stxlsx" ${dis}>⬇ Excel ตามแม่แบบ OGA (${S.stSel.size})</button><span class="sub">สำหรับ BarTender · 1 แถวต่อ 1 Sub-number</span>
+    <button class="btn lime" data-a="stdone" ${dis}>บันทึกว่าติดแล้ว</button>`}${S.msg.st ? `<div class="msg ${S.msg.st[1]}">${esc(S.msg.st[0])}</div>` : ''}</aside></div></main>`;
   return h;
 }
+// label-printer setup (per computer: it belongs to the printer, not the template)
+const PRN0 = { across: 1, gap: 2, left: 0, dx: 0, dy: 0, rot: 0 };
+const prn = () => ({ ...PRN0, ...LS.get('prn', {}) });
+function prnBox(tpl) {
+  const p = prn(), o = S.prnOpen, n = (k, l, step, min, max) => `<label class="f" style="flex:1">${l}<input class="in" type="number" data-prn="${k}" step="${step}" min="${min}" max="${max}" value="${p[k]}"></label>`;
+  const pw = p.rot % 180 ? tpl.h : tpl.w, ph = p.rot % 180 ? tpl.w : tpl.h, W = +(p.left + p.across * pw + (p.across - 1) * p.gap).toFixed(2);
+  return `<div class="card" style="background:#f8f9fc;padding:10px 12px;gap:8px"><button class="row" data-a="prnopen" style="all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><b>⚙ ตั้งค่าเครื่องพิมพ์สติกเกอร์</b><span class="sub">${p.across} ดวง/แถว${p.rot ? ' · หมุน ' + p.rot + '°' : ''}${p.dx || p.dy ? ' · เลื่อน' : ''} ${o ? '▲' : '▼'}</span></button>
+    ${o ? `<div class="row" style="gap:8px">${n('across', 'ดวงต่อแถว (ม้วนกี่ดวงขวาง)', 1, 1, 6)}${n('gap', 'ช่องว่างระหว่างดวง (มม.)', .5, 0, 20)}</div>
+    <div class="row" style="gap:8px">${n('left', 'ขอบซ้ายกระดาษรอง (มม.)', .5, 0, 30)}<label class="f" style="flex:1">หมุนป้าย<select class="in" data-prn="rot">${[0, 90, 180, 270].map(r => `<option value="${r}" ${p.rot === r ? 'selected' : ''}>${r}°</option>`).join('')}</select></label></div>
+    <div class="row" style="gap:8px">${n('dx', 'เลื่อนซ้าย-ขวา (มม.)', .5, -20, 20)}${n('dy', 'เลื่อนขึ้น-ลง (มม.)', .5, -20, 20)}</div>
+    <span class="sub">ในไดรเวอร์เครื่องพิมพ์ตั้งขนาดกระดาษ = <b>${W} × ${+ph.toFixed(2)} มม.</b> · ชนิดกระดาษ = มีช่องว่าง (Gap) หรือรอยดำ (Black mark) ตามม้วนจริง · พิมพ์ทดสอบ 1 ดวง ถ้าตำแหน่งเหลื่อมให้ปรับ "เลื่อน" · ค่านี้จำไว้เฉพาะคอมเครื่องนี้</span>` : ''}</div>`;
+}
+document.addEventListener('change', ev => { const t = ev.target; if (RENDERING || !t.dataset.prn) return; const v = +t.value; if (!isFinite(v)) return; LS.set('prn', { ...prn(), [t.dataset.prn]: t.dataset.prn === 'across' ? Math.max(1, Math.min(6, Math.round(v))) : v }); setTimeout(render); });
+async function readLabelXls(f) {
+  const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: false }), ws = wb.Sheets[wb.SheetNames[0]];
+  const all = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: false }).filter(r => r.some(v => String(v).trim() !== ''));
+  if (!all.length) throw new Error('ไฟล์ว่าง');
+  const headers = all[0].map((x, i) => String(x).trim() || `คอลัมน์ ${i + 1}`), rows = all.slice(1);
+  const recs = rows.map(r => { const o = {}; headers.forEach((hd, i) => { o[lk(hd)] = r[i] ?? ''; }); o[lk('วันที่พิมพ์')] = new Date().toLocaleDateString('th-TH'); return o; });
+  S.xls = { name: f.name, headers, rows, recs }; S.xlsSel = new Set(recs.map((_, i) => i));
+}
+
+/* ---------- printing: same drawing for print, PDF and previews ---------- */
+function lblRecords(test) {
+  const recs = S.stTab === 'xls' ? (S.xls ? [...S.xlsSel].sort((a, b) => a - b).map(i => S.xls.recs[i]).filter(Boolean) : []) : [...S.stSel].map(lblRecord);
+  if (test) return recs.slice(0, 1);
+  const n = Math.max(1, Math.min(50, +S.stCopies || 1)), out = [];
+  for (const r of recs) for (let i = 0; i < n; i++) out.push(r);
+  return out.slice(0, 3000);
+}
+async function lblImages(recs) {
+  try { await document.fonts?.load('500 20px Prompt'); await document.fonts?.load('700 20px Prompt'); } catch {}
+  const tpl = lblActive(), k = lblDpi() / 25.4, cv = document.createElement('canvas'); cv.width = Math.round(tpl.w * k); cv.height = Math.round(tpl.h * k);
+  const ctx = cv.getContext('2d'), rot = S.stSize === 'a4' ? 0 : prn().rot;
+  const rc = document.createElement('canvas'); rc.width = rot % 180 ? cv.height : cv.width; rc.height = rot % 180 ? cv.width : cv.height; const rx = rc.getContext('2d');
+  return recs.map(r => { lblDraw(ctx, tpl, r, k); if (!rot) return cv.toDataURL('image/png');
+    rx.setTransform(1, 0, 0, 1, 0, 0); rx.fillStyle = '#fff'; rx.fillRect(0, 0, rc.width, rc.height); rx.translate(rc.width / 2, rc.height / 2); rx.rotate(rot * Math.PI / 180); rx.drawImage(cv, -cv.width / 2, -cv.height / 2); return rc.toDataURL('image/png'); });
+}
+async function stickerPrint(test) {
+  const recs = lblRecords(test); if (!recs.length) return ['ยังไม่ได้เลือกรายการ', 'warn'];
+  const tpl = lblActive(), { w, h } = tpl, cols = Math.floor(210 / w), rows = Math.floor(297 / h), a4 = S.stSize === 'a4' && cols * rows > 0, per = cols * rows, imgs = await lblImages(recs);
+  const P = prn(), lw = P.rot % 180 ? h : w, lh = P.rot % 180 ? w : h, across = Math.max(1, P.across), pageW = +(P.left + across * lw + (across - 1) * P.gap).toFixed(3);
+  const css = a4 ? `@page{size:A4;margin:0}body{margin:0}.pg{width:210mm;height:297mm;display:grid;grid-template-columns:repeat(${cols},${w}mm);grid-auto-rows:${h}mm;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{width:${w}mm;height:${h}mm;display:block}`
+    : `@page{size:${pageW}mm ${lh}mm;margin:0}html,body{margin:0;padding:0}.pg{position:relative;width:${pageW}mm;height:${lh}mm;overflow:hidden;page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{position:absolute;top:${P.dy}mm;width:${lw}mm;height:${lh}mm;display:block}`;
+  let body = '';
+  if (a4) for (let i = 0; i < imgs.length; i += per) body += `<div class="pg">${imgs.slice(i, i + per).map(src => `<img src="${src}">`).join('')}</div>`;
+  else for (let i = 0; i < imgs.length; i += across) body += `<div class="pg">${imgs.slice(i, i + across).map((src, j) => `<img src="${src}" style="left:${+(P.left + P.dx + j * (lw + P.gap)).toFixed(3)}mm">`).join('')}</div>`;
+  document.getElementById('stFrame')?.remove();
+  const fr = document.createElement('iframe'); fr.id = 'stFrame'; fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(fr);
+  const d = fr.contentDocument; d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"><title>AssetSync สติกเกอร์</title><style>${css}</style></head><body>${body}</body></html>`); d.close();
+  await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+  fr.contentWindow.focus(); fr.contentWindow.print();
+  return [`ส่งพิมพ์ ${recs.length} ดวง · ${esc(tpl.name)} (${a4 ? 'A4' : `${w} × ${h} มม.`})${S.stTab === 'xls' ? '' : ' · พิมพ์ครบแล้วกด "บันทึกว่าติดแล้ว"'}`, 'ok'];
+}
+async function stickerPdf(test) {
+  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
+  const recs = lblRecords(test); if (!recs.length) return ['ยังไม่ได้เลือกรายการ', 'warn'];
+  const tpl = lblActive(), { w, h } = tpl, { jsPDF } = window.jspdf, cols = Math.floor(210 / w), rows = Math.floor(297 / h), a4 = S.stSize === 'a4' && cols * rows > 0, per = cols * rows;
+  const P = prn(), lw = P.rot % 180 ? h : w, lh = P.rot % 180 ? w : h, across = Math.max(1, P.across), pw = P.left + across * lw + (across - 1) * P.gap, ori = pw >= lh ? 'l' : 'p';
+  const pdf = a4 ? new jsPDF({ unit: 'mm', format: 'a4' }) : new jsPDF({ unit: 'mm', format: [pw, lh], orientation: ori });
+  (await lblImages(recs)).forEach((img, i) => {
+    if (!a4) { const j = i % across; if (i && !j) pdf.addPage([pw, lh], ori); pdf.addImage(img, 'PNG', P.left + P.dx + j * (lw + P.gap), P.dy, lw, lh, undefined, 'FAST'); }
+    else { const k = i % per; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % cols) * w, Math.floor(k / cols) * h, w, h, undefined, 'FAST'); }
+  });
+  return await save(`AssetSync-สติกเกอร์-${recs.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
+}
+
+/* ---------- 5 · label designer ---------- */
+const lblDraft = () => { if (!S.lblEdit || S.lblEdit.id !== lblActive().id && !S.lblDirty) S.lblEdit = clone(lblActive()); return S.lblEdit; };
+const lblZoom = t => Math.max(4, Math.min(16, 720 / t.w, 380 / t.h));
+const lblEl = () => S.lblEdit?.els.find(e => e.id === S.lblSelEl) || null;
+function webLabelDesign() {
+  const t = lblDraft(), z = lblZoom(t), e = lblEl(), F = lblFieldNames();
+  const num = (k, l, v, step = .5, extra = '') => `<label class="f" style="flex:1">${l}<input class="in" type="number" step="${step}" data-lp="${k}" value="${+(+v).toFixed(2)}" ${extra}></label>`;
+  const fieldSel = target => `<select class="in" data-lfield="${target}" aria-label="แทรกช่องข้อมูล"><option value="">＋ แทรกช่องข้อมูล…</option>${F.map(f => `<option value="${esc(f)}">{${esc(f)}}</option>`).join('')}</select>`;
+  let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">ลากเพื่อย้าย · ลากมุมขวาล่างเพื่อปรับขนาด · ลูกศรเลื่อนทีละ 0.5 มม. (Shift = 2 มม.) · Delete ลบ</p><h1>5 · ออกแบบป้าย</h1></div>
+    <button class="btn" data-a="lblmode" data-v="print">← กลับหน้าพิมพ์</button></div>
+    <div class="row" style="align-items:flex-end;gap:8px;flex-wrap:wrap"><div style="min-width:260px">${tplPick()}</div>
+      <button class="btn" data-a="lblnew">＋ แม่แบบใหม่</button><button class="btn" data-a="lbldup">⧉ ทำสำเนา</button>
+      ${t.builtin ? '' : S.lblConfirmDel ? `<span class="confirm" style="padding:6px 10px"><b>ลบแม่แบบนี้?</b> <button class="btn sm red" data-a="lbldel">ลบ</button> <button class="btn sm" data-a="lblnodel">ไม่</button></span>` : '<button class="btn red" data-a="lblaskdel">ลบ</button>'}
+      <button class="btn" data-a="lblexp">⬇ ส่งออกแม่แบบ</button><label class="btn">⬆ นำเข้าแม่แบบ<input type="file" id="lblImp" accept=".json,application/json" hidden></label>
+      <span style="flex:1"></span>${S.lblDirty ? '<span class="chip c-warn">ยังไม่ได้บันทึก</span><button class="btn" data-a="lblrevert">ยกเลิกการแก้ไข</button>' : ''}<button class="btn pri" data-a="lblsave" ${S.lblDirty ? '' : 'disabled'}>${t.builtin ? 'บันทึกเป็นแม่แบบใหม่' : 'บันทึก'}</button></div>
+    ${t.builtin ? '<div class="msg">แม่แบบมาตรฐานแก้ทับไม่ได้ · แก้แล้วกด "บันทึกเป็นแม่แบบใหม่"</div>' : ''}
+    <div class="row" style="align-items:flex-start"><section class="card grow" style="min-width:0;gap:12px">
+      <div class="row" style="gap:6px;flex-wrap:wrap">${Object.entries(LBL_TYPES).map(([k, l]) => `<button class="btn sm" data-a="lbladd" data-v="${k}">＋ ${l}</button>`).join('')}</div>
+      <div class="lbl-wrap"><div class="lbl-stage" id="lblStage" style="width:${t.w * z}px;height:${t.h * z}px"><canvas id="lblCv" style="width:${t.w * z}px;height:${t.h * z}px"></canvas>
+        ${t.els.map(x => `<div class="lbl-el ${x.id === S.lblSelEl ? 'on' : ''}" data-el="${esc(x.id)}" title="${esc(LBL_TYPES[x.t])}" style="left:${x.x * z}px;top:${x.y * z}px;width:${x.w * z}px;height:${x.h * z}px"><i class="lbl-rs" data-rs="${esc(x.id)}"></i></div>`).join('')}</div></div>
+      <span class="sub">ตัวอย่างข้อมูล: ${S.stTab === 'xls' && S.xls ? 'แถวแรกที่เลือกในไฟล์ Excel' : 'รายการแรกที่เลือกในหน้าพิมพ์'} · ${t.w} × ${t.h} มม. · ${t.els.length} ชิ้น</span>
+    </section><aside class="card side" style="gap:10px"><b>ป้าย</b>
+      <label class="f">ชื่อแม่แบบ<input class="in" data-lt="name" value="${esc(t.name)}"></label>
+      <span class="sub">ขนาด 1 ดวง (กรอกเองได้ทุกขนาด)</span>
+      <div class="row" style="gap:8px;align-items:flex-end"><label class="f" style="flex:1">กว้าง (มม.)<input class="in" type="number" step="0.5" min="5" max="200" data-lt="w" value="${t.w}"></label><span style="padding-bottom:12px">×</span><label class="f" style="flex:1">สูง (มม.)<input class="in" type="number" step="0.5" min="5" max="200" data-lt="h" value="${t.h}"></label></div>
+      <label class="f">หรือเลือกขนาดที่ใช้บ่อย<select class="in" id="lblPreset"><option value="">— เลือก —</option>${LBL_SIZES.map(([w, h]) => `<option value="${w}x${h}" ${t.w === w && t.h === h ? 'selected' : ''}>${w} × ${h} มม.</option>`).join('')}</select></label>
+      <div class="row" style="gap:8px"><label class="f" style="flex:1">ดวงต่อแถว (ม้วน)<input class="in" type="number" data-prn="across" min="1" max="6" step="1" value="${prn().across}"></label><label class="f" style="flex:1">ช่องว่างระหว่างดวง (มม.)<input class="in" type="number" data-prn="gap" min="0" max="20" step="0.5" value="${prn().gap}"></label></div>
+      <details ${t.pre && (t.pre.top || t.pre.bottom || t.pre.left || t.pre.right) ? 'open' : ''}><summary style="cursor:pointer"><b>ส่วนที่พิมพ์มาแล้วบนกระดาษ</b> <span class="sub">เช่น แถบสีหัวสติกเกอร์</span></summary>
+        <div class="row" style="gap:8px;margin-top:6px">${['top', 'bottom', 'left', 'right'].map(k => `<label class="f" style="flex:1">${{ top: 'บน', bottom: 'ล่าง', left: 'ซ้าย', right: 'ขวา' }[k]} (มม.)<input class="in" type="number" min="0" max="100" step="0.5" data-lpre2="${k}" value="${t.pre?.[k] || 0}"></label>`).join('')}</div>
+        <label class="f">สีแถบ (แสดงบนจอเท่านั้น ไม่พิมพ์)<input class="in" type="color" data-lpre2="color" value="${esc(t.pre?.color || '#1e88e5')}" style="height:40px;padding:4px"></label></details>
+      <span class="sub">${prn().across > 1 ? `กระดาษ 1 แถว = ${+(prn().left + prn().across * t.w + (prn().across - 1) * prn().gap).toFixed(2)} × ${t.h} มม. · ` : ''}ดวงต่อแถว/ช่องว่าง ใช้กับเครื่องพิมพ์ในคอมเครื่องนี้</span>`;
+  if (!e) h += `<p class="sub">คลิกชิ้นบนป้ายเพื่อแก้ไข หรือกดปุ่ม ＋ ด้านซ้ายเพื่อเพิ่ม</p>`;
+  else {
+    h += `<hr style="border:0;border-top:1px solid var(--line);width:100%"><div class="row" style="justify-content:space-between;align-items:center"><b>${esc(LBL_TYPES[e.t])}</b><span class="row" style="gap:4px"><button class="btn sm" data-a="lblorder" data-v="up" title="ไว้ด้านหน้า">▲</button><button class="btn sm" data-a="lblorder" data-v="down" title="ไว้ด้านหลัง">▼</button><button class="btn sm" data-a="lblcopy" title="ทำสำเนาชิ้นนี้">⧉</button><button class="btn sm red" data-a="lblrm">ลบ</button></span></div>
+      <div class="row" style="gap:8px">${num('x', 'X (มม.)', e.x)}${num('y', 'Y (มม.)', e.y)}</div>
+      <div class="row" style="gap:8px">${e.t === 'qr' ? num('w', 'ขนาด QR (มม.)', e.w) : num('w', 'กว้าง (มม.)', e.w) + num('h', 'สูง (มม.)', e.h)}</div>`;
+    const pc = lblSplit(e.t === 'text' ? e.text : e.data), colSel = (target, none) => `<select class="in" data-lcol="${target}">${pc.adv ? '<option value="" selected>(กำหนดเองหลายช่อง · ดูด้านล่าง)</option>' : ''}<option value="" ${!pc.adv && !pc.col ? 'selected' : ''}>${none}</option>${F.map(f => `<option value="${esc(f)}" ${!pc.adv && lk(pc.col) === lk(f) ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>`;
+    if (e.t === 'text') h += `<label class="f">ข้อมูลจากคอลัมน์${colSel('text', '— ไม่ใช้ · ข้อความคงที่ —')}</label>
+      ${pc.adv ? '' : `<label class="f">${pc.col ? 'ข้อความนำหน้า (ไม่ใส่ก็ได้ เช่น "No. : ")' : 'ข้อความ'}<input class="in" data-lpre="text" value="${esc(pc.pre)}"></label>`}
+      <details ${pc.adv ? 'open' : ''}><summary class="sub" style="cursor:pointer">แบบขั้นสูง: หลายคอลัมน์ในข้อความเดียว</summary><label class="f">ข้อความ ใช้ {ชื่อคอลัมน์}<textarea class="in" rows="2" data-lp="text">${esc(e.text)}</textarea></label>${fieldSel('text')}</details>
+      <div class="row" style="gap:8px">${num('fs', 'ขนาดตัวอักษร (pt)', e.fs || 8, .5, 'min="3" max="72"')}<label class="f" style="flex:1">จัดวาง<select class="in" data-lp="align">${[['left', 'ชิดซ้าย'], ['center', 'กึ่งกลาง'], ['right', 'ชิดขวา']].map(([k, l]) => `<option value="${k}" ${(e.align || 'left') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+      <div class="row" style="gap:14px"><label class="row" style="gap:6px;align-items:center"><input type="checkbox" data-lp="bold" ${e.bold ? 'checked' : ''}> ตัวหนา</label><label class="row" style="gap:6px;align-items:center"><input type="checkbox" data-lp="wrap" ${e.wrap ? 'checked' : ''}> ขึ้นบรรทัดใหม่ได้ (ตามความสูง)</label></div>`;
+    if (e.t === 'qr' || e.t === 'bar') h += `<label class="f">สร้าง${e.t === 'qr' ? ' QR Code' : 'บาร์โค้ด'}จากคอลัมน์${colSel('data', '— ไม่ใช้ · ข้อความคงที่ —')}</label>
+      <details ${pc.adv || (!pc.col && pc.pre) ? 'open' : ''}><summary class="sub" style="cursor:pointer">แบบขั้นสูง: ข้อมูลกำหนดเอง / หลายคอลัมน์</summary><label class="f">ข้อมูล ใช้ {ชื่อคอลัมน์}<input class="in" data-lp="data" value="${esc(e.data)}"></label>${fieldSel('data')}</details>`;
+    if (e.t === 'qr') h += `<label class="f">ระดับกู้ข้อมูล<select class="in" data-lp="ecc">${[['L', 'L · 7% (QR เล็กสุด)'], ['M', 'M · 15% (แนะนำ)'], ['Q', 'Q · 25%'], ['H', 'H · 30% (ทนรอยขีดข่วน)']].map(([k, l]) => `<option value="${k}" ${(e.ecc || 'M') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    if (e.t === 'bar') h += `<div class="row" style="gap:8px"><label class="f" style="flex:1">ชนิด<select class="in" data-lp="fmt">${['CODE128', 'CODE39', 'EAN13', 'EAN8', 'UPC', 'ITF', 'codabar'].map(k => `<option ${(e.fmt || 'CODE128') === k ? 'selected' : ''}>${k}</option>`).join('')}</select></label><label class="row" style="gap:6px;align-items:center;flex:1"><input type="checkbox" data-lp="txt" ${e.txt ? 'checked' : ''}> แสดงตัวเลขใต้บาร์โค้ด</label></div>`;
+    if (e.t === 'box') h += `<div class="row" style="gap:8px">${num('lw', 'ความหนาเส้น (มม.)', e.lw || .3, .1, 'min="0.1"')}</div>`;
+  }
+  h += `${S.msg.lbl ? `<div class="msg ${S.msg.lbl[1]}">${esc(S.msg.lbl[0])}</div>` : ''}</aside></div></main>`;
+  return h;
+}
+function lblPaint() {
+  const cv = $('#lblCv'), t = S.lblEdit; if (!cv || !t) return;
+  const z = lblZoom(t), r = Math.min(3, window.devicePixelRatio || 1) * 1.5; cv.width = Math.round(t.w * z * r); cv.height = Math.round(t.h * z * r);
+  lblDraw(cv.getContext('2d'), t, lblSample(), z * r, true);
+}
+const lblTouch = () => { S.lblDirty = true; };
+// "No. : {Asset}" → { pre: 'No. : ', col: 'Asset' } · anything with 2+ columns or text after the column = advanced
+const lblSplit = s => { s = String(s ?? ''); const n = (s.match(/\{[^{}]+\}/g) || []).length; if (!n) return { pre: s, col: '' }; const m = s.match(/^([^{}]*)\{([^{}]+)\}$/); return m && n === 1 ? { pre: m[1], col: m[2].trim() } : { adv: true, pre: '', col: '' }; };
+const snap = v => Math.round(v * 2) / 2;
+function lblAdd(type) {
+  const t = lblDraft(), id = 'e' + Date.now().toString(36), F = lblFieldNames();
+  const base = { text: { t: 'text', w: Math.min(30, t.w - 4), h: 3.6, text: 'ข้อความ', fs: 8, align: 'left' }, qr: { t: 'qr', w: Math.min(15, t.h - 4), h: Math.min(15, t.h - 4), data: '{Asset}', ecc: 'M' },
+    bar: { t: 'bar', w: Math.min(36, t.w - 4), h: Math.min(8, t.h - 4), data: '{' + (F[0] || 'Asset') + '}', fmt: 'CODE128' }, box: { t: 'box', w: t.w - 2, h: t.h - 2, lw: .3 }, line: { t: 'line', w: Math.min(30, t.w - 4), h: .3 } }[type];
+  const e = { id, ...base, x: type === 'box' ? 1 : snap(Math.max(0, (t.w - base.w) / 2)), y: type === 'box' ? 1 : snap(Math.max(0, (t.h - base.h) / 2)) };
+  t.els.push(e); S.lblSelEl = id; lblTouch();
+}
+function lblSetProp(k, v, live) {
+  const e = lblEl(); if (!e) return;
+  if (['x', 'y', 'w', 'h', 'fs', 'lw'].includes(k)) { v = +v; if (!isFinite(v)) return; if (k !== 'x' && k !== 'y' && v <= 0) return; }
+  e[k] = v; if (e.t === 'qr' && k === 'w') e.h = v;
+  lblTouch(); if (live) { lblPaint(); const o = document.querySelector(`[data-el="${CSS.escape(e.id)}"]`), z = lblZoom(S.lblEdit); if (o) Object.assign(o.style, { left: e.x * z + 'px', top: e.y * z + 'px', width: e.w * z + 'px', height: e.h * z + 'px' }); }
+}
+let lblDrag = null;
+document.addEventListener('pointerdown', ev => {
+  if (S.web !== 'stickers' || S.stMode !== 'design') return;
+  const rs = ev.target.closest('[data-rs]'), el = ev.target.closest('[data-el]'), stage = ev.target.closest('#lblStage');
+  if (!stage) return;
+  if (!el) { if (S.lblSelEl) { S.lblSelEl = null; render(); } return; }
+  ev.preventDefault();
+  const e = S.lblEdit.els.find(x => x.id === el.dataset.el); if (!e) return;
+  const changed = S.lblSelEl !== e.id; S.lblSelEl = e.id;
+  document.querySelectorAll('.lbl-el.on').forEach(n => n.classList.remove('on')); el.classList.add('on');
+  lblDrag = { e, node: el, mode: rs ? 'size' : 'move', sx: ev.clientX, sy: ev.clientY, ox: e.x, oy: e.y, ow: e.w, oh: e.h, z: lblZoom(S.lblEdit), moved: false, changed };
+});
+document.addEventListener('pointermove', ev => {
+  const d = lblDrag; if (!d) return;
+  const t = S.lblEdit, dx = (ev.clientX - d.sx) / d.z, dy = (ev.clientY - d.sy) / d.z; if (Math.abs(dx) + Math.abs(dy) > .2) d.moved = true;
+  if (d.mode === 'move') { d.e.x = Math.max(0, Math.min(t.w - d.e.w, snap(d.ox + dx))); d.e.y = Math.max(0, Math.min(t.h - d.e.h, snap(d.oy + dy))); }
+  else { d.e.w = Math.max(.5, snap(d.ow + dx)); d.e.h = d.e.t === 'qr' ? d.e.w : Math.max(.3, snap(d.oh + dy)); }
+  Object.assign(d.node.style, { left: d.e.x * d.z + 'px', top: d.e.y * d.z + 'px', width: d.e.w * d.z + 'px', height: d.e.h * d.z + 'px' });
+  lblPaint();
+});
+document.addEventListener('pointerup', () => { const d = lblDrag; if (!d) return; lblDrag = null; if (d.moved) lblTouch(); if (d.moved || d.changed) render(); });
+document.addEventListener('keydown', ev => {
+  if (S.web !== 'stickers' || S.stMode !== 'design' || !S.lblSelEl || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+  const e = lblEl(); if (!e) return; const st = ev.shiftKey ? 2 : .5;
+  const mv = { ArrowLeft: ['x', -st], ArrowRight: ['x', st], ArrowUp: ['y', -st], ArrowDown: ['y', st] }[ev.key];
+  if (mv) { ev.preventDefault(); e[mv[0]] = Math.max(0, snap(e[mv[0]] + mv[1])); lblTouch(); render(); }
+  else if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); S.lblEdit.els = S.lblEdit.els.filter(x => x !== e); S.lblSelEl = null; lblTouch(); render(); }
+});
+document.addEventListener('input', ev => {
+  const t = ev.target; if (RENDERING) return;
+  if (t.dataset.lp && (t.tagName === 'TEXTAREA' || t.type === 'text' || t.type === 'number' || !t.type)) lblSetProp(t.dataset.lp, t.value, true);
+  if (t.dataset.lt === 'name' && S.lblEdit) { S.lblEdit.name = t.value; lblTouch(); }
+  if (t.dataset.lpre) { const e = lblEl(); if (e) { const k = t.dataset.lpre, c = lblSplit(e[k]).col; lblSetProp(k, t.value + (c ? `{${c}}` : ''), true); } }
+});
+document.addEventListener('change', async ev => {
+  const t = ev.target; if (RENDERING) return;
+  if (t.dataset.lp) { lblSetProp(t.dataset.lp, t.type === 'checkbox' ? t.checked : t.value, false); setTimeout(render); return; }
+  if (t.dataset.lt && S.lblEdit) { if (t.dataset.lt === 'name') S.lblEdit.name = t.value.trim() || 'แม่แบบ'; else { const v = +t.value; if (v >= 5 && v <= 200) S.lblEdit[t.dataset.lt] = v; } lblTouch(); setTimeout(render); return; }
+  if (t.dataset.lpre) { setTimeout(render); return; }
+  if (t.dataset.lpre2 && S.lblEdit) { const k = t.dataset.lpre2, P = { ...(S.lblEdit.pre || {}) }; P[k] = k === 'color' ? t.value : Math.max(0, +t.value || 0); S.lblEdit.pre = P; lblTouch(); setTimeout(render); return; }
+  if (t.dataset.lcol !== undefined) { const e = lblEl(); if (e) { const k = t.dataset.lcol, c0 = lblSplit(e[k]), pre = c0.adv || c0.pre === 'ข้อความ' ? '' : c0.pre; e[k] = t.value ? (k === 'data' ? '' : pre) + `{${t.value}}` : (c0.adv ? '' : pre); lblTouch(); } setTimeout(render); return; }
+  if (t.dataset.lfield !== undefined && t.value) { const e = lblEl(); if (e) { e[t.dataset.lfield] = (e[t.dataset.lfield] || '') + `{${t.value}}`; lblTouch(); } setTimeout(render); return; }
+  if (t.id === 'lblPick') { if (S.lblDirty && S.stMode === 'design' && !confirm('ยังไม่ได้บันทึกแม่แบบที่แก้ไว้ · เปลี่ยนแม่แบบและทิ้งการแก้ไข?')) { t.value = S.lblEdit.id; return; } S.lblId = t.value; LS.set('lblId', t.value); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null; setTimeout(render); return; }
+  if (t.id === 'lblPreset' && t.value && S.lblEdit) { const [w, h] = t.value.split('x').map(Number), d = S.lblEdit, fx = w / d.w, fy = h / d.h;
+    if (d.els.length) for (const e of d.els) { e.x = snap(e.x * fx); e.y = snap(e.y * fy); if (e.t === 'qr') { e.w = e.h = snap(Math.min(e.w * fx, e.h * fy)); } else { e.w = snap(e.w * fx); e.h = Math.max(.3, snap(e.h * fy)); } }
+    d.w = w; d.h = h; lblTouch(); setTimeout(render); return; }
+  if (t.id === 'lblDpi') { LS.set('lblDpi', +t.value); return; }
+  if (t.id === 'stCopies') { S.stCopies = Math.max(1, Math.min(50, +t.value || 1)); setTimeout(render); return; }
+  if (t.id === 'xlsFile' && t.files?.[0]) { try { await readLabelXls(t.files[0]); S.msg.st = [`อ่านไฟล์แล้ว ${N(S.xls.recs.length)} แถว`, 'ok']; } catch (e) { S.msg.st = ['อ่านไฟล์ไม่ได้: ' + e.message, 'bad']; } render(); return; }
+  if (t.id === 'lblImp' && t.files?.[0]) {
+    try { const j = JSON.parse(await t.files[0].text()), list = Array.isArray(j) ? j : j.templates || [j]; let n = 0;
+      for (const x of list) { if (!x || !Array.isArray(x.els) || !(+x.w > 0) || !(+x.h > 0)) continue; const tp = { id: 't' + Date.now().toString(36) + n, name: String(x.name || 'แม่แบบนำเข้า'), w: +x.w, h: +x.h, pre: x.pre && typeof x.pre === 'object' ? x.pre : undefined, els: x.els.filter(e => e && LBL_TYPES[e.t]).map((e, i) => ({ ...e, id: 'e' + i + Math.random().toString(36).slice(2, 6) })) }; lblTpls.push(tp); S.lblId = tp.id; n++; }
+      if (!n) throw new Error('ไม่ใช่ไฟล์แม่แบบของ AssetSync');
+      await lblSaveAll(); LS.set('lblId', S.lblId); S.lblEdit = null; S.lblDirty = false; S.msg.lbl = [`นำเข้าแม่แบบแล้ว ${n} แบบ`, 'ok'];
+    } catch (e) { S.msg.lbl = ['นำเข้าไม่ได้: ' + e.message, 'bad']; }
+    render();
+  }
+});
+async function lblAction(a, v) {
+  const t = lblDraft();
+  switch (a) {
+    case 'lblmode': S.stMode = v; S.msg.lbl = null; if (v === 'design') { S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null; } break;
+    case 'lbladd': lblAdd(v); break;
+    case 'lblrm': t.els = t.els.filter(x => x.id !== S.lblSelEl); S.lblSelEl = null; lblTouch(); break;
+    case 'lblcopy': { const e = lblEl(); if (e) { const n = { ...clone(e), id: 'e' + Date.now().toString(36), x: snap(Math.min(t.w - e.w, e.x + 1)), y: snap(Math.min(t.h - e.h, e.y + 1)) }; t.els.push(n); S.lblSelEl = n.id; lblTouch(); } break; }
+    case 'lblorder': { const i = t.els.findIndex(x => x.id === S.lblSelEl), j = v === 'up' ? i + 1 : i - 1; if (i >= 0 && j >= 0 && j < t.els.length) { [t.els[i], t.els[j]] = [t.els[j], t.els[i]]; lblTouch(); } break; }
+    case 'lblnew': S.lblEdit = { id: 't' + Date.now().toString(36), name: 'แม่แบบใหม่', w: t.w, h: t.h, els: [] }; S.lblSelEl = null; lblTouch(); break;
+    case 'lbldup': S.lblEdit = { ...clone(t), id: 't' + Date.now().toString(36), name: t.name + ' (สำเนา)', builtin: undefined }; S.lblSelEl = null; lblTouch(); break;
+    case 'lblrevert': S.lblEdit = clone(lblActive()); S.lblDirty = false; S.lblSelEl = null; break;
+    case 'lblaskdel': S.lblConfirmDel = true; break;
+    case 'lblnodel': S.lblConfirmDel = false; break;
+    case 'lbldel': lblTpls = lblTpls.filter(x => x.id !== t.id); S.lblConfirmDel = false; S.lblId = 'std'; LS.set('lblId', 'std'); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null;
+      try { await lblSaveAll(); S.msg.lbl = ['ลบแม่แบบแล้ว', 'ok']; } catch (e) { S.msg.lbl = ['ลบไม่สำเร็จ: ' + e.message, 'bad']; } break;
+    case 'lblsave': {
+      const x = clone(t); if (x.builtin) { x.id = 't' + Date.now().toString(36); x.name = x.name === LBL_STD.name || x.name === LBL_7050.name ? x.name + ' (แก้ไข)' : x.name; } delete x.builtin;
+      const i = lblTpls.findIndex(y => y.id === x.id); if (i >= 0) lblTpls[i] = x; else lblTpls.push(x);
+      S.lblId = x.id; LS.set('lblId', x.id); S.lblEdit = clone(x); S.lblDirty = false;
+      try { await lblSaveAll(); S.msg.lbl = [`บันทึกแม่แบบ "${x.name}" แล้ว · ทุกคนในทีมใช้แม่แบบนี้ได้`, 'ok']; } catch (e) { S.msg.lbl = ['บันทึกขึ้นระบบไม่สำเร็จ (เก็บไว้ในเครื่องนี้แล้ว): ' + e.message, 'warn']; }
+      break; }
+    case 'lblexp': S.msg.lbl = await save(`AssetSync-แม่แบบป้าย-${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`, JSON.stringify({ app: 'AssetSync label', ver: 1, ...clone(t), builtin: undefined }, null, 2), 'application/json'); break;
+    case 'prnopen': S.prnOpen = !S.prnOpen; break;
+    case 'xlssel': { const i = +v; S.xlsSel.has(i) ? S.xlsSel.delete(i) : S.xlsSel.add(i); break; }
+    case 'xlsall': if (S.xls) S.xlsSel = S.xlsSel.size === S.xls.recs.length ? new Set() : new Set(S.xls.recs.map((_, i) => i)); break;
+    default: return false;
+  }
+  render(); return true;
+}
+
 function labelCC(code) {
   const a = master.get(code), s = compute().cur.get(code);
   if (s && s.rv.move === 'approved') return { code: s.area, name: s.areaName };
@@ -1157,20 +1563,6 @@ function labelCC(code) {
 }
 function dmy(s) { const iso = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`; const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return `${m[2].padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`; const m2 = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m2 ? `${m2[1]}/${m2[2]}/${m2[3]}` : String(s || ''); }
 function capDate(a) { const i = meta?.headers ? meta.headers.findIndex(h => norm(h).includes('CAPITALIZED')) : -1; return i >= 0 && a.raws[0] ? dmy(a.raws[0][i]) : ''; }
-function drawSticker(cv, code) {
-  const ctx = cv?.getContext?.('2d'); if (!ctx) return;
-  const a = master.get(code) || { name: '', cc: '', ccName: '', raws: [] }, cc = labelCC(code), W = cv.width, H = cv.height;
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#121826'; ctx.textBaseline = 'top';
-  const fs = Math.round(H * 0.105), pad = Math.round(H * 0.09), qs = Math.round(H * 0.66), tw = W - qs - pad * 3;
-  ctx.font = `500 ${fs}px Prompt, sans-serif`;
-  const lines = [`No. : ${code}`, `Date : ${capDate(a)}`, `CC : ${cc.code}`, `HO: ${cc.name}`, a.name];
-  lines.forEach((t, i) => { let s = String(t); while (s.length > 1 && ctx.measureText(s).width > tw) s = s.slice(0, -2) + '…'; ctx.fillText(s, pad, pad + i * fs * 1.45); });
-  if (typeof qrcode === 'function') {
-    const q = qrcode(0, 'M'); q.addData(String(code)); q.make();
-    const n = q.getModuleCount(), m = Math.floor(qs / n), x0 = W - pad - n * m, y0 = Math.round((H - n * m) / 2);
-    for (let r = 0; r < n; r++) for (let c2 = 0; c2 < n; c2++) if (q.isDark(r, c2)) ctx.fillRect(x0 + c2 * m, y0 + r * m, m, m);
-  }
-}
 
 /* ================= APP ================= */
 function appView(c) {
@@ -1194,12 +1586,13 @@ function appView(c) {
   h += dupSyncPop();
   if (S.othPop && S.mode === 'app' && !S.dupPop) { const a = master.get(S.othPop.code), s = compute().cur.get(S.othPop.code);
     if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
-      h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
+      h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>${S.othPop.also?.length > 1 ? `<span class="sub">คำตอบนี้ใช้กับทั้ง ${S.othPop.also.length} รายการย่อย (Sub) ที่เพิ่งนับ</span>` : ''}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:#f4f5fa"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
         <span class="sub">บันทึกว่าพบแล้ว · โปรดระบุเหตุผล</span><div class="chips" style="justify-content:center">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมมา')}${D('unsure', 'รอตรวจสอบ')}</div>
         <button class="btn dark" data-a="closeoth" style="align-self:stretch">ตกลง</button></div></div>`; } }
   if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
     h += `<div class="dupbg" data-a="closedup" role="alertdialog" aria-labelledby="dupH"><div class="duppop"><span class="dupicon" aria-hidden="true">!</span><b id="dupH">ตรวจนับซ้ำ</b><span class="mono" style="font-size:20px;font-weight:700">${esc(d.code)}</span>${a ? `<span>${esc(a.name)}</span>` : ''}<span class="sub">นับไปแล้วโดย ${esc(d.by)} · ${hm(d.t)}${d.where ? ' · ' + esc(d.where) : ''}</span><button class="btn dark" data-a="closedup" style="align-self:stretch">ตกลง</button></div></div>`; }
+  h += subPopup();
   return h;
 }
 function appLogin() {
@@ -1382,7 +1775,7 @@ function webUsb() {
       <div class="tbl-wrap"><table><thead><tr><th>ผู้ตรวจนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
   return h;
 }
-const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo]);
+const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo, a.asset, a.sub]);
 async function exportPackage() {
   const pkg = { kind: 'ams-package', v: 1, at: Date.now(), meta: { ...meta, status: meta.status === 'closed' ? 'closed' : 'counting' }, rows: rowsOfMaster(), events: allEvents() };
   return save(`AssetSync-แพ็กเกจ-${meta.id}.json`, new TextEncoder().encode(JSON.stringify(pkg)), 'application/json');
@@ -1549,12 +1942,27 @@ function beep(kind) {
   } catch {}
   try { navigator.vibrate?.(kind === 'ok' ? 40 : [80, 60, 80]); } catch {}
 }
-function resolve(raw) {
-  const t = norm(stripType(raw)); if (!t) return '';
-  const first = t.split(/[|;,\s]+/)[0], base = first.split('-')[0];
-  for (const c of [t, first, base]) { if (master.has(c)) return c; if (altIx.has(c)) return altIx.get(c); }
-  return first;
+/* QR / barcode → register key. Accepts every label printed so far:
+ *   "51000001-1" / "51000001-0001"  Asset-Sub (standard from now on)
+ *   "510000011"                     Asset+Sub with no '-' (old)        → qf 'concat'
+ *   "51000001"                      Asset only; with several Subs the counter picks → qf 'asset' (old, ambiguous) */
+function lookup(raw) {
+  const t = norm(stripType(raw)); if (!t) return { code: '' };
+  const first = t.split(/[|;,\s]+/)[0];
+  const byAsset = (asset, qf) => { const l = subIx.get(asset) || []; return l.length > 1 ? { multi: l, base: asset, qf: 'asset' } : { code: l[0], qf }; };
+  for (const c of t === first ? [t] : [t, first]) {
+    const m = /^(.+)-(\d{1,4})$/.exec(c);
+    if (m && subIx.has(m[1])) { const k = keyOf(m[1], subKey(m[2])); if (master.has(k)) return { code: k, qf: '' }; }
+    if (subIx.has(c)) return byAsset(c, '');
+    if (master.has(c)) return { code: c, qf: '' };
+    if (catIx.has(c)) return { code: catIx.get(c), qf: 'concat' };
+    if (altIx.has(c)) return { code: altIx.get(c), qf: '' };
+  }
+  const base = first.split('-')[0];
+  if (subIx.has(base)) return byAsset(base, '');
+  return { code: first, qf: '' };
 }
+const resolve = raw => { const r = lookup(raw); return r.code || r.base || ''; };
 const AIM = /^\][A-Za-z][0-9A-Za-z]/;
 // CipherLab ReaderConfig → Data Output → "Display Code Type" puts the symbology name in front of the data, e.g. "QR Code51000001", "EAN138857129171164"
 const CODE_TYPES = ['QR Code', 'Micro QR', 'MicroQR', 'Data Matrix', 'DataMatrix', 'PDF417', 'MicroPDF417', 'Aztec', 'MaxiCode', 'Han Xin', 'DotCode', 'GS1 DataBar Expanded', 'GS1 DataBar Limited', 'GS1 DataBar', 'GS1-128', 'GS1 128', 'EAN-128', 'EAN128', 'UCC/EAN-128',
@@ -1568,13 +1976,21 @@ const srcOf = raw => { const t = String(raw ?? '').trim(); if (S.manual) return 
 function doScan(raw) {
   if (S.area && !S.area.shared && ccClosed(S.area.code)) { beep('dup'); flash('CC นี้ปิดงานแล้ว · เปิดนับต่อก่อน'); S.app = 'area'; render(); return; }
   const src = srcOf(raw); raw = stripType(raw);
-  const code = resolve(raw); if (!code || !S.area) return;
+  const r = lookup(raw); S.subPop = null;
+  if ((!r.code && !r.multi) || !S.area) return;
   if (meta.status === 'closed') { flash('รอบนี้ปิดแล้ว'); return; }
+  // QR with the Asset only, and the Asset has several Subs: the counter says which ones are here
+  if (r.multi) { beep('oth'); S.dupPop = null; S.othPop = null; S.subPop = { base: r.base, keys: r.multi.slice().sort((x, y) => (+master.get(x).sub || 0) - (+master.get(y).sub || 0)), src, raw: String(raw).trim() }; render(); return; }
+  countCode(r.code, src, r.qf ? { qf: r.qf, qraw: String(raw).trim() } : {});
+}
+// one count; extra = { qf, qraw } when the sticker is an old format (Asset only / no '-'): it goes on the reprint list
+function countCode(code, src, extra = {}, quiet = false) {
   const prev = compute().cur.get(code);
-  if (prev) { beep('dup'); S.othPop = null; S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return; }
+  if (prev) { if (quiet) return false; beep('dup'); S.othPop = null; S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return false; }
   S.dupPop = null; S.othPop = null;
-  pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual, src });
+  pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual, src, ...extra });
   const s = compute().cur.get(code);
+  if (quiet) { S.cards.unshift({ code }); return true; }
   beep(!master.has(code) ? 'unk' : isOther(s) ? 'oth' : 'ok');
   if (master.has(code) && isOther(s)) S.othPop = { code };
   S.cards.unshift({ code }); render();
@@ -1591,6 +2007,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.a.startsWith('close') && e.target.closest('[data-stop]') && e.target.closest('[data-a]') !== t) return;
   if ((t.dataset.a === 'closeitem' || t.dataset.a === 'closepick' || t.dataset.a === 'closesearch') && t.classList.contains('sheetbg') && e.target !== t) return;
   const a = t.dataset.a, v = t.dataset.v;
+  if (/^(lbl|xls|prn)/.test(a) && await lblAction(a, v)) return;
   switch (a) {
     case 'mode': S.mode = v; LS.set('mode', v); break;
     case 'web': S.web = v; S.msg = {}; break;
@@ -1613,6 +2030,17 @@ document.addEventListener('click', async e => {
       flash(`บันทึกว่าพบแล้ว${c2 !== 'ปกติ' ? ' · ' + c2 : ''} · ติด "ต้องพิมพ์สติกเกอร์ใหม่" ให้`);
       if (!web) { S.cards.unshift({ code: v }); S.item = null; S.search = null; }
       break;
+    }
+    case 'closesub': S.subPop = null; break;
+    case 'subone': case 'suball': {
+      const p = S.subPop; if (!p || !S.area || !meta) { S.subPop = null; break; }
+      if (S.area && !S.area.shared && ccClosed(S.area.code)) { S.subPop = null; flash('CC นี้ปิดงานแล้ว · เปิดนับต่อก่อน'); break; }
+      const extra = { qf: 'asset', qraw: p.raw }; S.subPop = null;
+      if (a === 'subone') { countCode(v, p.src, extra); return; }
+      const { cur } = compute(), todo = p.keys.filter(k => !cur.has(k)); let firstOther = null;
+      for (const k of todo) if (countCode(k, p.src, extra, true) && !firstOther && isOther(compute().cur.get(k))) firstOther = k;
+      beep(firstOther ? 'oth' : 'ok'); if (firstOther) S.othPop = { code: firstOther, also: todo.filter(k => isOther(compute().cur.get(k))) };
+      flash(`นับแล้ว ${todo.length} รายการ (Asset ${p.base})`); break;
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
@@ -1680,6 +2108,7 @@ document.addEventListener('click', async e => {
     case 'stsel': t.checked ? S.stSel.add(v) : S.stSel.delete(v); render(); return;
     case 'stall': { const list = stickerList(cats()); if (t.checked) list.forEach(x => S.stSel.add(x)); else S.stSel.clear(); render(); return; }
     case 'stpdf': S.msg.st = await stickerPdf(v === 'test'); break;
+    case 'stprint': S.msg.st = await stickerPrint(v === 'test'); break;
     case 'stxlsx': S.msg.st = await stickerExcel([...S.stSel]); break;
     case 'stdone': for (const code of S.stSel) { if (compute().cur.has(code)) pushEvent({ k: 'edit', code, round: meta.id, printed: true }); } S.msg.st = [`บันทึกว่าติดแล้ว ${S.stSel.size} ดวง`, 'ok']; S.stSel.clear(); break;
     case 'login': S.user = meta.team[+v]; LS.set('user', S.user); break;
@@ -1725,7 +2154,7 @@ document.addEventListener('click', async e => {
     case 'appinfo': window.AndroidBridge.openAppInfo(v); return;
     case 'chkupd': flash('กำลังตรวจหาอัปเดต…'); window.AndroidBridge.checkUpdate(); return;
     case 'applyupd': flush().finally(() => window.AndroidBridge?.reload ? window.AndroidBridge.reload() : location.reload()); return;
-    case 'popdec': edit(v, { dec: t.dataset.d }); S.othPop = null; render(); return;
+    case 'popdec': for (const c2 of S.othPop?.also || [v]) edit(c2, { dec: t.dataset.d }); S.othPop = null; render(); return;   // "พบทั้งหมด": one answer for every Sub counted here
     case 'manual': S.manual = !S.manual; break;
     case 'feedf': S.feedF = v; break;
     case 'verify': await verify(); break;
@@ -1767,7 +2196,7 @@ document.addEventListener('change', async e => {
   if (t.dataset.map) { S.imp.map[t.dataset.map] = +t.value; render(); }
   if (t.dataset.assign !== undefined) { const areas = [...meta.areas]; areas[+t.dataset.assign] = { ...areas[+t.dataset.assign], assignee: t.value || null }; await saveMeta({ ...meta, areas }); }
   if (t.id === 'roomIn') { S.room = t.value.trim(); LS.set('room', S.room); }
-  if (t.id === 'stSize') { S.stSize = t.value; }
+  if (t.id === 'stSize') { S.stSize = t.value; LS.set('stSize', t.value); setTimeout(render); }
   if (t.id === 'impRound' && S.imp) S.imp.roundName = t.value;
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
   if (t.id === 'jobSel') { pickJob(t.value); render(); }
@@ -1824,7 +2253,7 @@ document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 
 
 // Android back button: close sheet → go to home tab → leave app
 window.AMSBack = () => {
-  if (S.dupPop || S.othPop) { S.dupPop = null; S.othPop = null; render(); return true; }
+  if (S.dupPop || S.othPop || S.subPop) { S.dupPop = null; S.othPop = null; S.subPop = null; render(); return true; }
   if (S.item || S.areaPick || S.search) { if (S.item) S.item = null; else { S.areaPick = false; S.search = null; } render(); return true; }
   if (S.mode === 'app' && S.user && S.app !== 'home') { S.app = 'home'; render(); return true; }
   if (S.mode === 'web' && S.web !== 'rounds' && S.web !== 'live') { S.web = isLead() ? 'rounds' : 'live'; render(); return true; }
@@ -1836,13 +2265,14 @@ async function doImport() {
   const I = S.imp, m = I.map, g = (r, i) => i >= 0 ? String(r[i] ?? '').trim() : '';
   const out = new Map(), cc = {}, nmSeen = {}, statusIx = I.tpl.status;
   for (const r of I.rows) {
-    const code = norm(r[m.code]); if (!code) continue;
+    const code = impKey(r, m); if (!code) continue;
+    const asset = norm(r[m.code]), sub = m.sub >= 0 ? subKey(r[m.sub]) || '0' : '';
     const wo = statusIx >= 0 && r[statusIx] === 'Write - Off';
     const ccCode = ccKey(g(r, m.cc)), ccNm = g(r, m.ccName) || ccCode;   // no department-name column: the Cost Center code is the department
     if (ccCode && !cc[ccCode]) cc[ccCode] = ccNm;
     if (ccCode) (nmSeen[ccCode] = nmSeen[ccCode] || new Set()).add(ccNm);
     const ex = out.get(code); if (ex) { ex[5].push(r); continue; }
-    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], ccCode, wo]);
+    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], ccCode, wo, asset, sub]);
   }
   const rows = [...out.values()], counts = {};
   for (const r of rows) if (!r[7]) counts[r[6]] = (counts[r[6]] || 0) + 1;
@@ -1948,17 +2378,17 @@ function exportBook(kind) {
     addData(dataSheetName, data, h.length);
   }
   if (kind === 'main' || kind === 'transfer') {
-    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, s.code, '(blank)', a.name, s.area, s.areaName, s.rv.move === 'approved' ? ('รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
+    add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, a.asset, a.sub === '' ? '(blank)' : a.sub, a.name, s.area, s.areaName, s.rv.move === 'approved' ? ('รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
   }
   if ((kind === 'main' || kind === 'writeoff')) {
-    const rows = left.sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code)).map(a => [a.cc, a.ccName, a.code, '(blank)', a.name, a.raws[0] && ci.cap >= 0 ? a.raws[0][ci.cap] : '', sumIdx(a, ci.acq), sumIdx(a, ci.dep), sumIdx(a, ci.book)]);
+    const rows = left.sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code)).map(a => [a.cc, a.ccName, a.asset, a.sub === '' ? '(blank)' : a.sub, a.name, a.raws[0] && ci.cap >= 0 ? a.raws[0][ci.cap] : '', sumIdx(a, ci.acq), sumIdx(a, ci.dep), sumIdx(a, ci.book)]);
     add('write-off', [['Status', wo ? 'Write - Off' : 'ไม่พบ (รอนับซ้ำ)', '', '', 'T-Code : ABAVN'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'Capitalized on', 'Acquis.val.', 'Accum.dep.', 'Book val.']].concat(rows), [4]);
     const g = new Map(); for (const r of rows) { const e = g.get(r[0]) || [r[0], r[1], 0, 0, 0, 0]; e[2]++; e[3] += +r[6] || 0; e[4] += +r[7] || 0; e[5] += +r[8] || 0; g.set(r[0], e); }
     for (const e of g.values()) for (const i of [3, 4, 5]) e[i] = Math.round(e[i] * 100) / 100;
     add('สรุป write-off', [[], ['สรุป ขออนุมัติ Write - Off'], ['Cost Center', 'Department', 'List', 'Asset Cost', 'Accum.dep._Net', ' Book value_Net', 'Status', 'Remark']].concat([...g.values()].map(e => [...e, 'Loss', 'ขออนุมัติ write - off'])), [1]);
   }
   if (kind === 'main') {
-    add('คิวพิมพ์สติกเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติกเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
+    add('คิวพิมพ์สติกเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || oldQR(s) || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติกเกอร์', oldQR(s) && 'QR รูปแบบเก่า', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
     add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (ผู้ตรวจนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจ Admin', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ทรัพย์สินของบริษัท' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
   }
   if (wb.SheetNames.includes(dataSheetName)) wb.SheetNames = [dataSheetName, ...wb.SheetNames.filter(n => n !== dataSheetName)];
@@ -1988,7 +2418,7 @@ async function stickerExcel(codes) {
     const cc = labelCC(code);
     for (const raw of a.raws.length ? a.raws : [[]]) {
       const sub = String(v(raw, ix.sub) || 0).replace(/\.0+$/, ''), cap = String(v(raw, ix.cap) || '');
-      const vals = [`${code}-${sub}`, v(raw, ix.inv), sub, v(raw, ix.cls), v(raw, ix.life), v(raw, m0.name ?? -1) || a.name, v(raw, ix.plant), v(raw, ix.plantName), cc.code, cc.name, cap, v(raw, ix.loc), v(raw, ix.vendor), v(raw, ix.owner), v(raw, ix.acq), v(raw, ix.dep), v(raw, ix.book), v(raw, ix.crcy)];
+      const vals = [`${a.asset}-${a.sub !== '' ? a.sub : subKey(sub) || '0'}`, v(raw, ix.inv), sub, v(raw, ix.cls), v(raw, ix.life), v(raw, m0.name ?? -1) || a.name, v(raw, ix.plant), v(raw, ix.plantName), cc.code, cc.name, cap, v(raw, ix.loc), v(raw, ix.vendor), v(raw, ix.owner), v(raw, ix.acq), v(raw, ix.dep), v(raw, ix.book), v(raw, ix.crcy)];
       vals.forEach((x, c) => {
         const base = { font: { name: 'Tahoma', sz: 9 }, border, alignment: { horizontal: [2, 4, 6, 10].includes(c) ? 'center' : undefined, vertical: 'center' } };
         if (c === 10 && /^\d{4}-\d{2}-\d{2}$/.test(cap)) { const [y, mo, d] = cap.split('-').map(Number); put(r, c, { t: 'n', v: (Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30)) / 864e5, z: 'mm-dd-yy', s: base }); return; }
@@ -2004,21 +2434,6 @@ async function stickerExcel(codes) {
   const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Sheet1');
   const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   return await save(`OGA_AMSCounting_Review-สติกเกอร์-${r - 1}แถว-${stamp}.xlsx`, new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-}
-async function stickerPdf(test) {
-  if (!window.jspdf) return ['โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ', 'bad'];
-  try { await document.fonts?.load('500 20px Prompt'); } catch {}
-  const codes = [...S.stSel].slice(0, test ? 1 : 2000), { jsPDF } = window.jspdf;
-  const roll = S.stSize === 'roll', w = roll ? 50 : 70, hgt = roll ? 25 : 37.125;
-  const pdf = roll ? new jsPDF({ unit: 'mm', format: [w, hgt], orientation: 'l' }) : new jsPDF({ unit: 'mm', format: 'a4' });
-  const cv = document.createElement('canvas'); cv.width = Math.round(w * 12); cv.height = Math.round(hgt * 12);
-  codes.forEach((code, i) => {
-    drawSticker(cv, code);
-    const img = cv.toDataURL('image/png');
-    if (roll) { if (i) pdf.addPage([w, hgt], 'l'); pdf.addImage(img, 'PNG', 0, 0, w, hgt, undefined, 'FAST'); }
-    else { const k = i % 24; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % 3) * w, Math.floor(k / 3) * hgt, w, hgt, undefined, 'FAST'); }
-  });
-  return await save(`AssetSync-สติกเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
 }
 
 // ---------- Pivot (PivotTable.js, loaded only when the tab opens) ----------
@@ -2066,7 +2481,8 @@ async function mountPivot() {
 function afterRender() {
   if (S.mode === 'web' && S.web === 'pivot') setTimeout(mountPivot, 0);
   const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
-  const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
+  const st = $('#stPrev'); if (st) { const tpl = lblActive(); st.height = Math.round(st.width * tpl.h / tpl.w); lblDraw(st.getContext('2d'), tpl, lblSample(), st.width / tpl.w, true); }
+  if ($('#lblCv')) lblPaint();
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
   const cs = $('#ccSticker'); if (cs) drawSticker(cs, S.ccPick || ccRows(S.ccSel || '*')[0]?.code || '');
   if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && !S.search && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus({ preventScroll: true });
