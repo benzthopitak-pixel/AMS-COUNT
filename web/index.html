@@ -274,10 +274,10 @@ function compute() {
       recount.delete(c); H(c, `${SRC[e.src || (e.ns ? 'manual' : 'barcode')][0]} · พบที่ ${e.areaName}${e.room ? ' · ' + e.room : ''}`, e);
     } else if (!s && e.k !== 'rv') { continue; }
     else if (e.k === 'edit') {
-      for (const f of ['cond', 'remark', 'room', 'dec', 'uname']) if (e[f] !== undefined) s[f] = e[f];
+      for (const f of ['cond', 'remark', 'room', 'dec', 'uname', 'area', 'areaName']) if (e[f] !== undefined) s[f] = e[f];
       if (e.flags) Object.assign(s.flags, e.flags);
       if (e.printed) { s.flags.reprint = false; s.flags.namebad = false; s.printedAt = e.t; }
-      H(c, e.printed ? 'พิมพ์ป้ายใหม่แล้ว' : 'แก้ไข: ' + Object.keys(e).filter(k => !['id', 'k', 'code', 't', 'by', 'dev', 'round'].includes(k)).map(k => k === 'flags' ? 'ป้าย/โอนย้าย' : ({ cond: 'สภาพ', remark: 'Remark', room: 'ห้อง', dec: 'การตัดสินใจ', uname: 'ชื่อ' }[k] || k)).join(', '), e);
+      H(c, e.printed ? 'พิมพ์ป้ายใหม่แล้ว' : 'แก้ไข: ' + Object.keys(e).filter(k => !['id', 'k', 'code', 't', 'by', 'dev', 'round'].includes(k)).map(k => k === 'flags' ? 'ป้าย/โอนย้าย' : ({ cond: 'สภาพ', remark: 'Remark', room: 'ห้อง', dec: 'การตัดสินใจ', uname: 'ชื่อ', area: 'CC ที่พบ', areaName: '' }[k] ?? k)).join(', '), e);
     } else if (e.k === 'del') { cur.delete(c); H(c, 'ยกเลิกผลนับ', e); }
     else if (e.k === 'rv') {
       if (e.act === 'recount') { cur.delete(c); recount.add(c); H(c, 'Admin สั่งนับซ้ำ', e); continue; }
@@ -507,7 +507,7 @@ function render() {
   const keepFocus = document.activeElement?.id, keepVal = keepFocus && 'value' in document.activeElement ? document.activeElement.value : null, scanVal = $('#scanIn')?.value || '';
   const c = meta && master.size ? cats() : null;
   const inboxN = c ? c.move.length + c.unk.length + c.dmg.length : 0;
-  if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus(); return; }
+  if (S.gate) { root.innerHTML = gateView(); afterRender(); if (keepFocus && $('#' + keepFocus)) $('#' + keepFocus).focus({ preventScroll: true }); return; }
   let html = '';
   if (S.mode === 'web') {
     // computer: menu runs down the left side
@@ -524,6 +524,7 @@ function render() {
     html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div></header>`;
   }
   html += S.mode === 'web' ? webView(c) + '</div></div>' : appView(c);
+  if (S.editPop && S.mode === 'web') html += editDialog(S.editPop);
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
   // keep every scrolled box where it was (a tap inside the right panel must not jump it back to the top)
   const KS = ['.pair > *', '.tbl-wrap', '.sheet', '.side-nav', '.pbody'], kept = KS.map(q => [...root.querySelectorAll(q)].map(e => e.scrollTop)), winY = window.scrollY;
@@ -531,8 +532,9 @@ function render() {
   KS.forEach((q, i) => { const els = [...root.querySelectorAll(q)]; if (els.length !== kept[i].length) return; els.forEach((e, j) => { if (S.resetRight && q === '.pair > *' && e.tagName === 'ASIDE') return; if (kept[i][j]) e.scrollTop = kept[i][j]; }); });
   S.resetRight = false; if (Math.abs(window.scrollY - winY) > 1) window.scrollTo(0, winY);
   afterRender();
+  requestAnimationFrame(() => { if (Math.abs(window.scrollY - winY) > 1 && !S.scrollTop) window.scrollTo(0, winY); S.scrollTop = false; });
   if (scanVal && $('#scanIn')) $('#scanIn').value = scanVal;
-  if (keepFocus && $('#' + keepFocus)) { const el = $('#' + keepFocus); if (keepVal != null && el.value !== undefined && el.type !== 'file' && el.tagName !== 'SELECT' && el.type !== 'checkbox' && el.type !== 'radio') el.value = keepVal; el.focus(); if (el.setSelectionRange && el.value != null) try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
+  if (keepFocus && $('#' + keepFocus)) { const el = $('#' + keepFocus); if (keepVal != null && el.value !== undefined && el.type !== 'file' && el.tagName !== 'SELECT' && el.type !== 'checkbox' && el.type !== 'radio') el.value = keepVal; el.focus({ preventScroll: true }); if (el.setSelectionRange && el.value != null) try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
 }
 
 /* ================= WEB ================= */
@@ -605,6 +607,22 @@ function reportData(kind) {
   const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
     .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.flags.transferred ? 'โอนแล้ว (AS02)' : s2.rv.move === 'approved' ? 'อนุมัติแล้ว · รอโอน' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
   return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'คนนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
+}
+function editDialog(code) {
+  const s2 = compute().cur.get(code), a = master.get(code); if (!s2) { S.editPop = null; return ''; }
+  const f = S.editF || (S.editF = { what: null });
+  const W = (k, l) => `<button class="tog" aria-pressed="${f.what === k}" data-a="editwhat" data-v="${k}">${l}</button>`;
+  let body = '';
+  if (f.what === 'cond') body = `<div class="chips">${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(x => `<button class="tog" aria-pressed="${s2.cond === x}" data-a="edset" data-f="cond" data-c="${x}" data-v="${esc(code)}">${x}</button>`).join('')}</div>`;
+  if (f.what === 'remark') body = `<input class="in" id="edRemark" value="${esc(s2.remark)}" placeholder="Remark"><button class="btn pri" data-a="edsave" data-f="remark" data-v="${esc(code)}" style="align-self:flex-start">บันทึก</button>`;
+  if (f.what === 'room') body = `<input class="in" id="edRoom" value="${esc(s2.room)}" placeholder="เช่น ชั้น 2 ห้องประชุม"><button class="btn pri" data-a="edsave" data-f="room" data-v="${esc(code)}" style="align-self:flex-start">บันทึก</button>`;
+  if (f.what === 'area') body = `<select class="in" id="edArea">${(meta.areas || []).map(x => `<option value="${esc(x.code)}" ${String(x.code) === String(s2.area) ? 'selected' : ''}>${esc(x.code)}${x.name !== String(x.code) ? ' · ' + esc(x.name) : ''}</option>`).join('')}</select><button class="btn pri" data-a="edsave" data-f="area" data-v="${esc(code)}" style="align-self:flex-start">บันทึก</button>`;
+  if (f.what === 'flags') body = `<div class="chips">${flagChips(s2, 'leadflag')}</div>`;
+  return `<div class="dupbg" data-a="closeedit" role="dialog" aria-labelledby="edH"><div class="card" data-stop="1" style="width:100%;max-width:460px;gap:12px">
+    <div class="row" style="justify-content:space-between;align-items:center"><b id="edH" style="font-size:18px">แก้ไข <span class="mono">${esc(code)}</span></b><button class="btn sm" data-a="closeedit">ปิด</button></div>
+    <span class="sub">${esc(a?.name || s2.uname || '')} · ตอนนี้: ${esc(s2.cond)} · พบที่ ${esc(s2.areaName)}${s2.room ? ' · ' + esc(s2.room) : ''}${s2.remark ? ' · ' + esc(s2.remark) : ''}</span>
+    <b>ต้องการแก้ไขอะไร?</b><div class="chips">${W('cond', 'สภาพ')}${W('remark', 'Remark')}${W('area', 'CC ที่พบ')}${W('room', 'ห้อง / Location')}${W('flags', 'ป้าย + การโอนย้าย')}</div>
+    ${body ? `<div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px">${body}</div>` : ''}</div></div>`;
 }
 function crPanel() {
   const C = crConf(), F = crFields(), H = F.filter(([k]) => k.startsWith('h:'));
@@ -867,12 +885,12 @@ function webCC() {
       <select class="in" data-ccf="cond" aria-label="สภาพ"><option value="">สภาพ: ทั้งหมด</option>${['ปกติ', 'ชำรุด', 'รอซ่อม', 'ไม่ใช้งาน'].map(c => `<option ${F.cond === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
       <select class="in" data-ccf="qr" aria-label="QR"><option value="">QR: ทั้งหมด</option><option value="done" ${F.qr === 'done' ? 'selected' : ''}>QR ครบแล้ว</option><option value="need" ${F.qr === 'need' ? 'selected' : ''}>ต้องสร้าง QR</option></select>
       ${Object.values(F).some(Boolean) ? '<button class="btn sm" data-a="ccfclear">ล้างตัวกรอง</button>' : ''}<span class="sub">แสดง ${N(rows.length)} รายการ</span></div>
-    <div class="row pair"><section class="card grow" style="min-width:0"><div class="tbl-wrap"><table class="tfix"><colgroup><col style="width:88px"><col style="min-width:180px">${all ? '<col style="width:76px">' : ''}<col style="width:118px"><col style="width:78px"><col style="width:70px"><col style="width:92px"><col style="width:58px"><col style="width:100px"></colgroup><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th></tr></thead><tbody>`;
+    <div class="row pair"><section class="card grow" style="min-width:0"><div class="tbl-wrap"><table class="tfix"><colgroup><col style="width:98px"><col>${all ? '<col style="width:72px">' : ''}<col style="width:108px"><col style="width:62px"><col style="width:58px"><col style="width:76px"><col style="width:50px"><col style="width:72px"><col style="width:114px"></colgroup><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th><th></th></tr></thead><tbody>`;
   const ST = { lost: '<span class="chip c-bad">สูญหาย</span>', left: '<span class="chip c-warn">รอตรวจ</span>', done: '<span class="chip c-ok">ตรวจแล้ว</span>', unk: '<span class="chip c-bad">ไม่อยู่ในทะเบียน</span>' };
   for (const r of rows.slice(0, 500)) {
     const s2 = r.s, mvTxt = r.state === 'moveout' ? `<span class="chip c-oth">ต้องย้ายไป ${esc(s2.areaName)}</span>` : r.state === 'movein' ? `<span class="chip c-oth">ย้ายมาจาก ${esc(r.a.cc)}</span>` : ST[r.state];
     const decided = s2 && s2.rv.move ? (s2.rv.move === 'approved' ? ' <span class="chip c-blue">อนุมัติแล้ว</span>' : ' <span class="chip c-gray">ไม่ย้าย</span>') : s2 && s2.dec === 'borrowed' && (r.state === 'moveout' || r.state === 'movein') ? ' <span class="chip c-gray">ยืมมา</span>' : '';
-    h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td></tr>`;
+    h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td><td style="overflow:visible">${!s2 ? '' : S.confirmUndo === r.code ? `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm red" data-a="wundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">ยืนยัน</button><button class="btn sm" data-a="noundo" style="min-height:28px;padding:2px 8px;font-size:12px">ไม่</button></span>` : `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm" data-a="editpop" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">แก้ไข</button><button class="btn sm red" data-a="askundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px" title="ยกเลิกตรวจนับ">ยกเลิก</button></span>`}</td></tr>`;
   }
   h += `</tbody></table></div>${rows.length > 500 ? `<p class="sub">แสดง 500 จาก ${N(rows.length)} รายการ · ค้นหาเพื่อกรอง</p>` : ''}${rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>
     <aside class="card side compact" style="flex:0 0 300px">${S.ccPick ? `<div class="sticker"><canvas id="ccSticker" width="560" height="296" aria-label="สติ๊กเกอร์ ${esc(S.ccPick)}"></canvas></div>` + ccDetail(S.ccPick, ccCode) : '<div class="sticker" style="opacity:.35"><canvas id="ccSticker" width="560" height="296" aria-hidden="true"></canvas></div><p class="sub" style="text-align:center">แตะรายการทางซ้ายเพื่อดูสติ๊กเกอร์ รายละเอียด และแก้ไข</p>'}</aside></div></main>`;
@@ -1468,6 +1486,14 @@ document.addEventListener('click', async e => {
     case 'wcond': edit(v, { cond: t.dataset.c }); return;
     case 'wremark': edit(v, { remark: ($('#wRemark')?.value || '').trim() }); flash('บันทึก Remark แล้ว'); return;
     case 'askundo': S.confirmUndo = v; break;
+    case 'editpop': S.editPop = v; S.editF = { what: null }; break;
+    case 'closeedit': S.editPop = null; break;
+    case 'editwhat': S.editF = { what: v }; break;
+    case 'edset': edit(v, { [t.dataset.f]: t.dataset.c }); flash('แก้ไขแล้ว'); return;
+    case 'edsave': { const f = t.dataset.f;
+      if (f === 'area') { const ar = (meta.areas || []).find(x => String(x.code) === $('#edArea').value); if (ar) edit(v, { area: String(ar.code), areaName: ar.name }); }
+      else edit(v, { [f]: ($(f === 'remark' ? '#edRemark' : '#edRoom')?.value || '').trim() });
+      S.editPop = null; flash('บันทึกแล้ว'); render(); return; }
     case 'noundo': S.confirmUndo = null; break;
     case 'wundo': pushEvent({ k: 'del', code: v, round: meta.id }); S.confirmUndo = null; flash('ยกเลิกผลนับแล้ว · กลับเป็นรอตรวจ'); break;
     case 'wfound': pushEvent({ k: 'scan', code: v, round: meta.id, area: String(t.dataset.cc), areaName: t.dataset.ccn || String(t.dataset.cc), shared: false, room: '', ns: true, src: 'web' }); flash('บันทึกว่าพบแล้ว · ติด "ต้องพิมพ์สติ๊กเกอร์ใหม่" ให้แล้ว'); break;
@@ -1581,9 +1607,9 @@ document.addEventListener('change', async e => {
   if (t.dataset.ccf) { S.ccF = { ...(S.ccF || {}), [t.dataset.ccf]: t.value }; render(); }
 
 });
-document.addEventListener('input', e => { if (e.target.id === 'areaQ') { S.areaQ = e.target.value; clearTimeout(window._aq); window._aq = setTimeout(() => { render(); const i = $('#areaQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); return; }
+document.addEventListener('input', e => { if (e.target.id === 'areaQ') { S.areaQ = e.target.value; clearTimeout(window._aq); window._aq = setTimeout(() => { render(); const i = $('#areaQ'); if (i) { i.focus({ preventScroll: true }); i.setSelectionRange(i.value.length, i.value.length); } }, 200); return; }
   if (e.target.id === 'ccQ' || e.target.id === 'ccItemQ') { S[e.target.id] = e.target.value; clearTimeout(window._cq); window._cq = setTimeout(render, 200); return; } if (e.target.id === 'srchIn' && S.search) { S.search.q = e.target.value; clearTimeout(window._sq); window._sq = setTimeout(render, 150); return; } if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
-document.addEventListener('submit', e => { if (e.target.id === 'loginForm') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'scanForm') { e.preventDefault(); const i = $('#scanIn'); const v = i.value; i.value = ''; doScan(v); setTimeout(() => $('#scanIn')?.focus(), 0); } });
+document.addEventListener('submit', e => { if (e.target.id === 'loginForm') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'scanForm') { e.preventDefault(); const i = $('#scanIn'); const v = i.value; i.value = ''; doScan(v); setTimeout(() => $('#scanIn')?.focus({ preventScroll: true }), 0); } });
 // ---------- scanner input ----------
 // 1) Android app receives the scan as an Intent (CipherLab "Intent" output) → window.AMSScan(code)
 // 2) Keyboard Emulation while the scan box isn't focused → collect keys here
@@ -1624,7 +1650,7 @@ document.addEventListener('keydown', e => {
     clearTimeout(keyTimer); keyTimer = setTimeout(() => { if (keyBuf.length >= 4) { const v = keyBuf; keyBuf = ''; routeScan(v); } keyBuf = ''; }, 350);
   }
 }, true);
-document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick) setTimeout(() => { const a = document.activeElement; if (!a || a === document.body) $('#scanIn')?.focus(); }, 50); });
+document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick) setTimeout(() => { const a = document.activeElement; if (!a || a === document.body) $('#scanIn')?.focus({ preventScroll: true }); }, 50); });
 
 // Android back button: close sheet → go to home tab → leave app
 window.AMSBack = () => {
@@ -1797,8 +1823,8 @@ function afterRender() {
   const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
   const cs = $('#ccSticker'); if (cs) drawSticker(cs, S.ccPick || ccRows(S.ccSel || '*')[0]?.code || '');
-  if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && !S.search && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus();
-  if (S.search && !S.item && document.activeElement?.id !== 'srchIn') { const si = $('#srchIn'); if (si) { si.focus(); try { si.setSelectionRange(si.value.length, si.value.length); } catch {} } }
+  if (S.mode === 'app' && S.app === 'scan' && !S.item && !S.areaPick && !S.search && document.activeElement?.id !== 'scanIn') $('#scanIn')?.focus({ preventScroll: true });
+  if (S.search && !S.item && document.activeElement?.id !== 'srchIn') { const si = $('#srchIn'); if (si) { si.focus({ preventScroll: true }); try { si.setSelectionRange(si.value.length, si.value.length); } catch {} } }
 }
 document.fonts?.ready?.then(() => render());
 render(); connect();
