@@ -192,6 +192,8 @@ const LS = {
 };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const norm = s => String(s ?? '').trim().toUpperCase();
+// Cost Center is matched by its code only (names are just labels): ' 001010410 ' = '1010410'
+const ccKey = v => String(v ?? '').trim().toUpperCase().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
 const N = n => Number(n || 0).toLocaleString();
 const fmtT = t => t ? new Date(t).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 const hm = t => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
@@ -225,7 +227,7 @@ function saveMine() { if (meta) { LS.set('mine-' + meta.id, mine); LS.set('dirty
 function indexMaster(rows) {
   master = new Map(); altIx = new Map();
   for (const r of rows) {
-    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: r[6], wo: !!r[7] });
+    master.set(r[0], { code: r[0], name: r[1], ccName: r[2], cls: r[3], alt: r[4], raws: r[5] || [], cc: ccKey(r[6]), wo: !!r[7] });
     if (r[4]) altIx.set(r[4], r[0]);
   }
 }
@@ -276,7 +278,10 @@ function compute() {
 const SRC = { qr: ['ยิง QR', 'c-ok'], barcode: ['ยิงบาร์โค้ด', 'c-gray'], manual: ['พิมพ์ / ค้นหาบนเครื่อง', 'c-warn'], web: ['บันทึกบนเว็บ', 'c-blue'] };
 const srcChip = s => s ? `<span class="chip ${SRC[s.src][1]}">${SRC[s.src][0]}</span>` : '';
 const needQR = s => !!s && master.has(s.code) && s.src !== 'qr' && !s.printedAt;   // QR scanned = sticker already done
-const isOther = s => { const a = master.get(s.code); return !!(a && !s.shared && s.area && a.cc && String(s.area) !== String(a.cc)); };
+const isOther = s => { const a = master.get(s.code); return !!(a && !s.shared && s.area && a.cc && ccKey(s.area) !== ccKey(a.cc)); };
+// same CC code but the file spells the department differently → warn only, never counts as a move
+const ccNameOf = code => (meta?.areas || []).find(x => String(x.code) === String(code))?.name || String(code);
+const ccNameDiff = code => (meta?.ccNames || {})[String(code)] || null;
 const isMoved = s => isOther(s) && s.dec !== 'borrowed' && s.rv.move !== 'keep';
 const counted = a => !a.wo;   // rows already written off before this round are not counted
 
@@ -575,7 +580,7 @@ function webLive(c) {
     const r = x.total ? x.found / x.total : 0, p = Math.round(r * 100), mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
     const bg = r >= 1 ? '#12b76a' : r >= .66 ? '#6ce9a6' : r >= .33 ? '#a6f4c5' : r > 0 ? '#d1fadf' : '#f2f4f7';
     const fg = r >= 1 ? '#ffffff' : r > 0 ? '#053321' : '#344054';
-    const flags = [mv ? `<span class="chip c-oth">ย้าย CC ${mv}</span>` : '', d ? `<span class="chip c-warn">รอตัดสิน ${d}</span>` : '', u ? `<span class="chip c-bad">นอกทะเบียน ${u}</span>` : ''].join('');
+    const flags = [mv ? `<span class="chip c-oth">ย้าย CC ${mv}</span>` : '', d ? `<span class="chip c-warn">รอตัดสิน ${d}</span>` : '', u ? `<span class="chip c-bad">นอกทะเบียน ${u}</span>` : '', ccNameDiff(x.code) ? '<span class="chip c-warn" title="ชื่อแผนกในไฟล์ไม่ตรงกัน · ยึดรหัส CC">⚠ ชื่อไม่ตรง</span>' : ''].join('');
     h += `<button class="tile click" data-a="opencc" data-v="${esc(x.code)}" title="เปิดรายละเอียด ${esc(x.code)}" style="background:${bg};color:${fg};cursor:pointer"><b class="mono">${esc(x.code)}</b>${x.name !== String(x.code) ? `<small style="opacity:.85">${esc(x.name)}</small>` : ''}<span class="p">${p}%</span><small>ตรวจ ${N(x.found)}/${N(x.total)} · เหลือ ${N(x.total - x.found)}</small>${flags ? `<span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${flags}</span>` : ''}</button>`;
   }
   h += `</div>${rows.length ? '' : '<p class="sub">ไม่พบ CC</p>'}</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
@@ -619,6 +624,7 @@ function webCC() {
   let h = `<main class="wrap"><div><button class="btn sm" data-a="web" data-v="live">← กลับหน้ารวม</button></div>
     <div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · 2 · นับ</p><h1>${title}</h1></div>
     <div class="chips"><span class="chip c-gray">ทั้งหมด ${N(totalOwn)}</span><span class="chip c-ok">ตรวจแล้ว ${N(doneOwn)}</span><span class="chip c-warn">เหลือ ${N(totalOwn - doneOwn)}</span>${n.move ? `<span class="chip c-oth">ต้องย้าย CC ${n.move}</span>` : ''}${n.unk ? `<span class="chip c-bad">ไม่อยู่ในทะเบียน ${n.unk}</span>` : ''}</div></div>
+    ${!all && ccNameDiff(ccCode) ? `<div class="msg warn">⚠ ชื่อแผนกของ CC ${esc(ccCode)} ในไฟล์ไม่ตรงกัน: ${ccNameDiff(ccCode).map(esc).join(' / ')} · ระบบยึดรหัส CC เป็นหลัก ไม่นับว่าต้องย้าย</div>` : ''}
     <div class="bar" aria-label="ความคืบหน้า"><i style="width:${totalOwn ? doneOwn / totalOwn * 100 : 0}%;background:var(--ok)"></i></div>
     <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${CC_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="cctab" data-v="${k}">${l} [${n[k]}]</button>`).join('')}</div>
     <input class="in" id="ccItemQ" value="${esc(S.ccItemQ || '')}" placeholder="ค้นหาเลข Asset หรือชื่อ" style="max-width:260px" aria-label="ค้นหาในรายการ"></div>
@@ -681,6 +687,7 @@ function inboxDetail(code) {
   if (!s) return '<p class="sub">ไม่มีผลนับ</p>';
   let h = `<div class="row" style="justify-content:space-between"><b class="mono" style="font-size:22px">${esc(code)}</b>${badge(s)}</div><div style="font-size:17px">${esc(a?.name || s.uname || '(คนนับไม่ได้กรอกชื่อ)')}${a ? ` · Class ${esc(a.cls)}` : ''}</div>`;
   if (a) h += `<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;text-align:center"><div class="card" style="background:#f4f5fa;padding:12px"><span class="sub">ในทะเบียน</span><b>${esc(a.ccName)}</b>${a.ccName !== String(a.cc) ? `<span class="sub mono">${esc(a.cc)}</span>` : ''}</div><b style="color:var(--oth)">${isOther(s) ? '→' : '='}</b><div class="card" style="background:${isOther(s) ? 'var(--oth-soft)' : 'var(--ok-soft)'};padding:12px"><span class="sub">พบจริงที่</span><b>${esc(s.areaName)}</b><span class="sub">${esc(s.room || '')}</span></div></div>`;
+  if (a && !isOther(s) && !s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc)) h += `<div class="msg warn">⚠ CC ตรงกัน (${esc(a.cc)}) แต่ชื่อแผนกไม่ตรง: ทะเบียน "${esc(a.ccName)}" · พบที่ "${esc(s.areaName)}" · ไม่ต้องย้าย</div>`;
   h += `<p class="sub">${esc(s.by)} · ${fmtT(s.t)} · สภาพ <b>${esc(s.cond)}</b>${s.remark ? ' · ' + esc(s.remark) : ''}</p><div class="row" style="align-items:center">${srcChip(s)}${!a ? '' : s.src === 'qr' ? '<span class="chip c-ok">QR ครบแล้ว · ไม่ต้องสร้างป้าย</span>' : s.printedAt ? `<span class="chip c-ok">ติด QR แล้ว ${fmtT(s.printedAt)}</span>` : '<span class="chip c-blue">ยังไม่มี QR · อยู่ในคิวสร้าง QR</span>'}</div>`;
   const B = (act, label, cls) => `<button class="btn ${cls || ''}" data-a="rv" data-act="${act}" data-v="${esc(code)}">${label}</button>`;
   h += `<div class="row">`;
@@ -862,7 +869,7 @@ function appScan() {
       const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="dec" data-d="${d}" data-v="${esc(card.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
       h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ทะเบียน CC ${esc(a.cc)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)}</span><span class="sub" style="color:var(--oth-ink)">ทะเบียนอยู่ CC ${esc(a.cc)} แต่พบที่ ${esc(s.areaName)} (แผนกที่คุณเลือก) · อยู่ที่นี่เพราะ?</span><div class="chips">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
     } else {
-      h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span><span>${srcChip(s)}${s.src === 'qr' ? ' <span class="chip c-ok">ครบ</span>' : ''}</span></span>${tick}</button>`;
+      h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span><span>${srcChip(s)}${s.src === 'qr' ? ' <span class="chip c-ok">ครบ</span>' : ''}</span>${!s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc) ? `<span class="sub" style="color:var(--warn-ink)">⚠ CC ตรง แต่ชื่อในทะเบียนเป็น "${esc(a.ccName)}"</span>` : ''}</span>${tick}</button>`;
     }
   }
   if (!S.cards.length) h += `<p class="sub" style="text-align:center">ผลการสแกนจะขึ้นเป็นการ์ดที่นี่<br>ไม่มีสติ๊กเกอร์? กดปุ่มด้านล่างเพื่อค้นหารายการ</p>`;
@@ -1312,14 +1319,15 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && (S.item ||
 
 async function doImport() {
   const I = S.imp, m = I.map, g = (r, i) => i >= 0 ? String(r[i] ?? '').trim() : '';
-  const out = new Map(), cc = {}, statusIx = I.tpl.status;
+  const out = new Map(), cc = {}, nmSeen = {}, statusIx = I.tpl.status;
   for (const r of I.rows) {
     const code = norm(r[m.code]); if (!code) continue;
     const wo = statusIx >= 0 && r[statusIx] === 'Write - Off';
-    const ccCode = g(r, m.cc), ccNm = g(r, m.ccName) || ccCode;   // no department-name column: the Cost Center code is the department
+    const ccCode = ccKey(g(r, m.cc)), ccNm = g(r, m.ccName) || ccCode;   // no department-name column: the Cost Center code is the department
     if (ccCode && !cc[ccCode]) cc[ccCode] = ccNm;
+    if (ccCode) (nmSeen[ccCode] = nmSeen[ccCode] || new Set()).add(ccNm);
     const ex = out.get(code); if (ex) { ex[5].push(r); continue; }
-    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], g(r, m.cc), wo]);
+    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], ccCode, wo]);
   }
   const rows = [...out.values()], counts = {};
   for (const r of rows) if (!r[7]) counts[r[6]] = (counts[r[6]] || 0) + 1;
@@ -1333,11 +1341,12 @@ async function doImport() {
   const areas = Object.entries(cc).filter(([k]) => k).sort((a, b) => a[1].localeCompare(b[1])).map(([code, name]) => ({ code, name, count: counts[code] || 0, assignee: prev.get(code)?.assignee || null, shared: false }));
   for (const a of meta.areas || []) if (a.shared) areas.push(a);
   const woCount = rows.filter(r => r[7]).length;
+  const ccNames = Object.fromEntries(Object.entries(nmSeen).filter(([, v]) => v.size > 1).map(([k, v]) => [k, [...v]]));
   S.imp = null; flash('กำลังนำเข้า…');
-  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, areas, woCount });
+  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, areas, woCount, ccNames });
   if (fresh) subscribeEvents();
   S.web = 'live';
-  flash(`นำเข้าแล้ว ${N(rows.length)} รายการ · ${areas.length} แผนก`);
+  flash(`นำเข้าแล้ว ${N(rows.length)} รายการ · ${areas.length} แผนก${Object.keys(ccNames).length ? ` · ⚠ ชื่อแผนกไม่ตรงกัน ${Object.keys(ccNames).length} CC (ยึดรหัส CC)` : ''}`);
 }
 async function verify() {
   if (!db) { S.verify = [`ผลนับในเครื่องนี้ ${mine.length} รายการ · ยังไม่ได้เชื่อมฐานข้อมูลออนไลน์`, 'warn']; return; }
@@ -1374,9 +1383,9 @@ function exportBook(kind) {
   const left = [...master.values()].filter(a => counted(a) && !cur.has(a.code));
   if (kind === 'main' || kind === 'summary') {
     const by = new Map();
-    for (const a of master.values()) { if (!counted(a)) continue; const s = cur.get(a.code), e = by.get(a.ccName) || { code: a.cc, total: 0, found: 0, moved: 0, dmg: 0, re: 0 }; e.total++; if (s) { e.found++; if (isMoved(s)) e.moved++; if (s.cond !== 'ปกติ') e.dmg++; if (s.flags.reprint || s.flags.namebad) e.re++; } by.set(a.ccName, e); }
+    for (const a of master.values()) { if (!counted(a)) continue; const s = cur.get(a.code), e = by.get(a.cc) || { code: a.cc, total: 0, found: 0, moved: 0, dmg: 0, re: 0 }; e.total++; if (s) { e.found++; if (isMoved(s)) e.moved++; if (s.cond !== 'ปกติ') e.dmg++; if (s.flags.reprint || s.flags.namebad) e.re++; } by.set(a.cc, e); }
     const sum = [[`สรุปผลตรวจนับ · ${meta.name}${draft ? ' · ฉบับร่าง' : ''}`], [], ['Cost Center', 'Department', 'รหัสที่ต้องนับ', 'นับพบ', 'ยังไม่พบ', 'ย้ายแผนก', 'ชำรุด / รอซ่อม / ไม่ใช้งาน', 'ต้องพิมพ์ป้ายใหม่', '% นับพบ']];
-    for (const [k, e] of [...by].sort((x, y) => String(x[1].code).localeCompare(String(y[1].code)))) sum.push([e.code, k, e.total, e.found, e.total - e.found, e.moved, e.dmg, e.re, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%']);
+    for (const [k, e] of [...by].sort((x, y) => String(x[1].code).localeCompare(String(y[1].code)))) sum.push([e.code, ccNameOf(k), e.total, e.found, e.total - e.found, e.moved, e.dmg, e.re, e.total ? Math.round(e.found / e.total * 1000) / 10 + '%' : '0%']);
     sum.push([], ['ไม่อยู่ในทะเบียน', [...cur.values()].filter(s => !master.has(s.code)).length], ['ไม่นับ (Write-Off เดิม)', meta.woCount || 0], ['ส่งออกเมื่อ', new Date().toLocaleString('th-TH')]);
     add('สรุป', sum, [1]);
   }
