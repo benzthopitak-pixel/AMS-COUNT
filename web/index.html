@@ -510,7 +510,11 @@ function render() {
   }
   html += S.mode === 'web' ? webView(c) + '</div></div>' : appView(c);
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
+  // keep every scrolled box where it was (a tap inside the right panel must not jump it back to the top)
+  const KS = ['.pair > *', '.tbl-wrap', '.sheet', '.side-nav', '.pbody'], kept = KS.map(q => [...root.querySelectorAll(q)].map(e => e.scrollTop)), winY = window.scrollY;
   root.innerHTML = html;
+  KS.forEach((q, i) => { const els = [...root.querySelectorAll(q)]; if (els.length !== kept[i].length) return; els.forEach((e, j) => { if (S.resetRight && q === '.pair > *' && e.tagName === 'ASIDE') return; if (kept[i][j]) e.scrollTop = kept[i][j]; }); });
+  S.resetRight = false; if (Math.abs(window.scrollY - winY) > 1) window.scrollTo(0, winY);
   afterRender();
   if (scanVal && $('#scanIn')) $('#scanIn').value = scanVal;
   if (keepFocus && $('#' + keepFocus)) { const el = $('#' + keepFocus); if (keepVal != null && el.value !== undefined && el.type !== 'file' && el.tagName !== 'SELECT' && el.type !== 'checkbox' && el.type !== 'radio') el.value = keepVal; el.focus(); if (el.setSelectionRange && el.value != null) try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
@@ -1296,7 +1300,7 @@ document.addEventListener('click', async e => {
     case 'livearea': S.liveArea = S.liveArea === v ? null : v; break;
     case 'opencc': S.web = 'cc'; S.ccSel = String(v); S.ccTab = t.dataset.t || 'all'; S.ccPick = null; S.ccItemQ = ''; S.confirmUndo = null; break;
     case 'cctab': S.ccTab = v; S.ccPick = null; break;
-    case 'ccpick': S.ccPick = v; S.confirmUndo = null; break;
+    case 'ccpick': S.resetRight = S.ccPick !== v; S.ccPick = v; S.confirmUndo = null; break;
     case 'openitemcc': { const a2 = master.get(v), s2 = compute().cur.get(v); S.web = 'cc'; S.ccSel = String(a2 ? a2.cc : s2?.area || '*'); S.ccTab = 'all'; S.ccItemQ = ''; S.ccPick = v; break; }
     case 'wcond': edit(v, { cond: t.dataset.c }); return;
     case 'wremark': edit(v, { remark: ($('#wRemark')?.value || '').trim() }); flash('บันทึก Remark แล้ว'); return;
