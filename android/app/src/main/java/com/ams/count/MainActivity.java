@@ -11,6 +11,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.provider.Settings;
+import java.util.List;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -279,6 +283,11 @@ public class MainActivity extends Activity {
         try { unregisterReceiver(scanReceiver); } catch (Exception ignored) { }
     }
 
+    private List<ResolveInfo> launchers() {
+        Intent main = new Intent(Intent.ACTION_MAIN); main.addCategory(Intent.CATEGORY_LAUNCHER);
+        return getPackageManager().queryIntentActivities(main, 0);
+    }
+
     /** หน้าจอแอปต้องใช้ Android System WebView เวอร์ชัน 90 ขึ้นไป · ถ้าเก่ากว่าให้อัปเดตก่อน */
     private void warnIfOldWebView() {
         try {
@@ -380,6 +389,44 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void checkUpdate() { checkWebUpdate(true); }
+
+        /** แอปที่อาจแย่งหัวอ่าน (ชื่อมีคำว่า AMS แต่ไม่ใช่แอปนี้) → JSON [{pkg,label}] */
+        @JavascriptInterface
+        public String scannerConflicts() {
+            JSONArray out = new JSONArray();
+            try {
+                for (ResolveInfo r : launchers()) {
+                    String pkg = r.activityInfo.packageName, label = String.valueOf(r.loadLabel(getPackageManager()));
+                    if (pkg.equals(getPackageName())) continue;
+                    if (label.toUpperCase().contains("AMS") || pkg.toLowerCase().contains(".ams")) out.put(new JSONObject().put("pkg", pkg).put("label", label));
+                }
+            } catch (Exception ignored) { }
+            return out.toString();
+        }
+
+        /** เปิดหน้าข้อมูลแอปนั้น (Force stop / Uninstall) */
+        @JavascriptInterface
+        public void openAppInfo(String pkg) {
+            runOnUiThread(() -> { try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg))); } catch (Exception ignored) { } });
+        }
+
+        /** เปิดแอป ReaderConfig ของ CipherLab (หาจากชื่อแอป) → "OK" หรือ "NOTFOUND" */
+        @JavascriptInterface
+        public String openReaderConfig() {
+            try {
+                for (ResolveInfo r : launchers()) {
+                    String label = String.valueOf(r.loadLabel(getPackageManager())).toLowerCase().replace(" ", ""), pkg = r.activityInfo.packageName.toLowerCase();
+                    if (label.contains("readerconfig") || (pkg.contains("cipherlab") && (label.contains("reader") || pkg.contains("reader")))) {
+                        Intent i = getPackageManager().getLaunchIntentForPackage(r.activityInfo.packageName);
+                        if (i == null) continue;
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        runOnUiThread(() -> { try { startActivity(i); } catch (Exception ignored) { } });
+                        return "OK";
+                    }
+                }
+            } catch (Exception ignored) { }
+            return "NOTFOUND";
+        }
 
         @JavascriptInterface
         public void reload() { runOnUiThread(() -> { if (web != null) web.loadUrl(START_URL); }); }

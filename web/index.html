@@ -920,6 +920,20 @@ function appFeed() {
   h += `</div>${list.length ? '' : '<p class="sub" style="text-align:center">ยังไม่มีรายการ</p>'}</div>`;
   return h;
 }
+// step-by-step scanner setup, with shortcuts the Android app can open directly
+function scannerSetup() {
+  const B = window.AndroidBridge, conf = (() => { try { return B?.scannerConflicts ? JSON.parse(B.scannerConflicts()) : []; } catch { return []; } })();
+  const st = (n, t, d) => `<div class="row" style="align-items:flex-start;gap:10px"><span class="dot" style="width:26px;height:26px;flex:none;background:var(--blue);color:#fff;font-size:13px">${n}</span><span style="flex:1"><b>${t}</b><br><span class="sub">${d}</span></span></div>`;
+  let h = `<div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ยิง QR ไม่เข้า ทำตามนี้ทีละข้อ แล้วลองยิงที่การ์ด "ทดสอบปุ่มยิง"</p>`;
+  h += conf.length ? `<div class="msg warn">พบแอปที่อาจแย่งหัวอ่าน: ${conf.map(c => `<b>${esc(c.label)}</b>`).join(', ')} · กด Force stop หรือ Uninstall</div><div class="chips">${conf.map(c => `<button class="btn sm red" data-a="appinfo" data-v="${esc(c.pkg)}">เปิด ${esc(c.label)}</button>`).join('')}</div>`
+    : st(1, 'ปิดแอป AMS ตัวเก่า', B?.scannerConflicts ? 'ไม่พบแอปที่แย่งหัวอ่าน ✓' : 'ตั้งค่า → แอป → AMS ตัวเก่า → Force stop / Uninstall');
+  h += st(2, 'ReaderConfig → โปรไฟล์ Default', 'ตั้งค่าที่โปรไฟล์ Default (หรือสร้างโปรไฟล์ใหม่ Associated App = AMS Count)')
+    + st(3, 'Data Output → Keyboard Emulation = KeyEvent', 'ห้ามเป็น None · Auto Enter Character = Decoded data + Enter char')
+    + st(4, 'Symbology → เปิด QR Code', 'และ Code 128 สำหรับบาร์โค้ดเดิม')
+    + st(5, 'Data Output → Code ID = AIM', 'ใช้แยก "ยิง QR" กับ "ยิงบาร์โค้ด" · ห้ามเลือก CipherLab ID');
+  if (B?.openReaderConfig) h += `<button class="btn pri" data-a="openrc">เปิด ReaderConfig</button>`;
+  return h + `</div>`;
+}
 function appMeBlock() {
   const mineSent = db ? mine.filter(e => isServer(e.id)).length : mine.length, p = pendingCount();
   return `<div class="card"><div class="row" style="align-items:center"><span class="dot" style="width:48px;height:48px;background:var(--orange);color:#1d0e00">${esc(S.user?.name?.slice(0, 1) || '?')}</span><span style="flex:1"><b style="font-size:19px">${esc(S.user?.name || '-')}</b><br><span class="sub">เครื่อง ${esc(dev)}</span></span></div></div>
@@ -928,7 +942,7 @@ function appMeBlock() {
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
     <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(window.AndroidBridge?.appVersion?.() || 'เว็บ')}${window.AndroidBridge?.webVersion ? ' · หน้าจอ ' + esc(window.AndroidBridge.webVersion()) : ''} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
     <div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>
-    <div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ReaderConfig → Data Output → <b>Keyboard Emulation</b> (หรือ <b>Intent</b>: Action = <span class="mono">com.ams.count.SCAN</span> · Extra = <span class="mono">data</span>) · Suffix = Enter · เปิด QR Code + Code 128</p></div>
+    ${scannerSetup()}
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
 }
 
@@ -1235,6 +1249,8 @@ document.addEventListener('click', async e => {
     case 'srchsave': { const q = S.search.q.trim(); if (!q) return; S.search = null; S.manual = true; doScan(q); S.manual = false; return; }
     case 'closedup': clearTimeout(S.dupT); S.dupPop = null; break;
     case 'closeoth': S.othPop = null; break;
+    case 'openrc': if (window.AndroidBridge.openReaderConfig() !== 'OK') flash('ไม่พบแอป ReaderConfig · เปิดจากหน้ารวมแอปของเครื่อง'); return;
+    case 'appinfo': window.AndroidBridge.openAppInfo(v); return;
     case 'chkupd': flash('กำลังตรวจหาอัปเดต…'); window.AndroidBridge.checkUpdate(); return;
     case 'applyupd': flush().finally(() => window.AndroidBridge?.reload ? window.AndroidBridge.reload() : location.reload()); return;
     case 'popdec': edit(v, { dec: t.dataset.d }); S.othPop = null; render(); return;
