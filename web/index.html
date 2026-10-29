@@ -496,23 +496,35 @@ function detectTpl(h) {
   const find = f => h.findIndex(f), ccNew = find(x => norm(x).replace(/\s/g, '').includes('CC(NEW)'));
   return { sticker: find(x => x.includes('ติดสติ') && !x.includes('ยังไม่')), nosticker: find(x => x.includes('ยังไม่ติด')), note: find(x => x.includes('หมายเหตุ')), status: find(x => norm(x) === 'STATUS'), ccNew, ccNewName: ccNew >= 0 && ccNew + 1 < h.length ? ccNew + 1 : -1 };
 }
-const cellStr = v => v instanceof Date ? `${v.getMonth() + 1}/${v.getDate()}/${v.getFullYear()}` : String(v ?? '').trim();
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const cellStr = v => typeof v === 'string' ? v.trim() : v == null ? '' : v;   // numbers stay numbers, dates arrive as yyyy-mm-dd
+const filled = c => c !== '' && c != null;
 function readSheet(buf, name) {
-  const wb = XLSX.read(buf, { type: 'array', codepage: 874, cellDates: true, sheets: name }), ws = wb.Sheets[name];
+  const wb = XLSX.read(buf, { type: 'array', codepage: 874, cellDates: false, cellNF: true, cellStyles: true, sheets: name }), ws = wb.Sheets[name];
   if (ws['!ref']) { const r = XLSX.utils.decode_range(ws['!ref']); if (r.e.r > 60000) r.e.r = 60000; if (r.e.c > 120) r.e.c = 120; ws['!ref'] = XLSX.utils.encode_range(r); }
+  // dates: read the calendar day exactly as Excel stores it (no time-zone shift)
+  for (const k in ws) {
+    if (k[0] === '!') continue; const c = ws[k];
+    if (c && c.t === 'n' && c.z && XLSX.SSF.is_date(c.z)) { const d = XLSX.SSF.parse_date_code(c.v); if (d) { c.t = 's'; c.v = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`; c.isDate = true; } }
+    else if (c && c.t === 'd' && c.v instanceof Date) { c.t = 's'; c.v = c.v.toISOString().slice(0, 10); }
+  }
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   let rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }).map(r => r.map(cellStr));
   const hi = Math.max(0, rows.slice(0, 15).findIndex(r => r.some(c => norm(c) === 'ASSET')));
-  rows = rows.slice(hi).filter(r => r.some(c => c));
+  rows = rows.slice(hi).filter(r => r.some(filled));
   if (rows.length < 2) return null;
   const width = Math.max(...rows.map(r => r.length)), keep = [];
-  for (let i = 0; i < width; i++) if (rows.some(r => r[i])) keep.push(i);
+  for (let i = 0; i < width; i++) if (rows.some(r => filled(r[i]))) keep.push(i);
+  // remember how the source file shows each column (number format, width) so the export looks the same
+  const fmts = keep.map(i => { for (let r = range.s.r + hi + 1; r <= Math.min(range.e.r, range.s.r + hi + 40); r++) { const c = ws[XLSX.utils.encode_cell({ r, c: range.s.c + i })]; if (c && filled(c.v)) return c.isDate ? 'date:' + (c.z || 'dd/mm/yyyy') : c.t === 'n' && c.z && c.z !== 'General' ? c.z : ''; } return ''; });
+  const widths = keep.map(i => (ws['!cols'] && ws['!cols'][range.s.c + i] && (ws['!cols'][range.s.c + i].wch || ws['!cols'][range.s.c + i].width)) || 0);
   rows = rows.map(r => keep.map(i => r[i] ?? ''));
-  return { headers: rows[0].map((h, i) => h || 'คอลัมน์ ' + (i + 1)), rows: rows.slice(1) };
+  return { headers: rows[0].map((h, i) => String(h || 'คอลัมน์ ' + (i + 1))), rows: rows.slice(1), fmts, widths };
 }
 function prepareImport(name) {
   const p = readSheet(S.imp.buf, name); if (!p) { S.imp.err = 'ชีตนี้ไม่มีข้อมูลทะเบียน'; return; }
   const h = p.headers, b = p.rows, ex = h.findIndex(x => norm(x) === 'ASSET');
-  Object.assign(S.imp, { sheet: name, headers: h, rows: b, err: null, tpl: detectTpl(h), map: {
+  Object.assign(S.imp, { sheet: name, headers: h, rows: b, fmts: p.fmts, widths: p.widths, err: null, tpl: detectTpl(h), map: {
     code: ex >= 0 ? ex : Math.max(0, guess(h, ['ASSET', 'รหัส', 'CODE'])), alt: guess(h, ['INVENTORY'], b), name: guess(h, ['DESC', 'ชื่อ', 'รายการ', 'NAME']),
     ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER'], b), cls: guess(h, ['ASSET CLASS', 'CLASS']) } });
 }
@@ -659,7 +671,7 @@ function labelCC(code) {
   if (s && s.rv.move === 'approved') return { code: s.area, name: s.areaName };
   return { code: a?.cc || '', name: a?.ccName || '' };
 }
-function dmy(s) { const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return `${m[2].padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`; const m2 = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m2 ? `${m2[1]}/${m2[2]}/${m2[3]}` : String(s || ''); }
+function dmy(s) { const iso = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`; const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return `${m[2].padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`; const m2 = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m2 ? `${m2[1]}/${m2[2]}/${m2[3]}` : String(s || ''); }
 function capDate(a) { const i = meta?.headers ? meta.headers.findIndex(h => norm(h).includes('CAPITALIZED')) : -1; return i >= 0 && a.raws[0] ? dmy(a.raws[0][i]) : ''; }
 function drawSticker(cv, code) {
   const ctx = cv?.getContext?.('2d'); if (!ctx) return;
@@ -1207,9 +1219,10 @@ async function doImport() {
   for (const r of I.rows) {
     const code = norm(r[m.code]); if (!code) continue;
     const wo = statusIx >= 0 && r[statusIx] === 'Write - Off';
-    if (g(r, m.ccName) && !cc[g(r, m.cc)]) cc[g(r, m.cc)] = g(r, m.ccName);
+    const ccCode = g(r, m.cc), ccNm = g(r, m.ccName) || ccCode;   // no department-name column: the Cost Center code is the department
+    if (ccCode && !cc[ccCode]) cc[ccCode] = ccNm;
     const ex = out.get(code); if (ex) { ex[5].push(r); continue; }
-    out.set(code, [code, g(r, m.name), g(r, m.ccName), g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], g(r, m.cc), wo]);
+    out.set(code, [code, g(r, m.name), ccNm, g(r, m.cls), m.alt >= 0 ? norm(r[m.alt]) : '', [r], g(r, m.cc), wo]);
   }
   const rows = [...out.values()], counts = {};
   for (const r of rows) if (!r[7]) counts[r[6]] = (counts[r[6]] || 0) + 1;
@@ -1224,7 +1237,7 @@ async function doImport() {
   for (const a of meta.areas || []) if (a.shared) areas.push(a);
   const woCount = rows.filter(r => r[7]).length;
   S.imp = null; flash('กำลังนำเข้า…');
-  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, tpl: I.tpl, areas, woCount });
+  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, areas, woCount });
   if (fresh) subscribeEvents();
   S.web = 'live';
   flash(`นำเข้าแล้ว ${N(rows.length)} รายการ · ${areas.length} แผนก`);
@@ -1245,7 +1258,18 @@ async function verify() {
 const toCell = v => typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && !/^-?0\d/.test(v) && v.length < 16 ? Number(v) : v;
 function exportBook(kind) {
   const { cur } = compute(), wb = XLSX.utils.book_new(), h = meta.headers || [], t = meta.tpl || {}, draft = meta.status !== 'closed', wo = meta.leftChoice !== 'recount';
-  const add = (name, rows, wide) => { const ws = XLSX.utils.aoa_to_sheet(rows.map(r => r.map(toCell))); ws['!cols'] = (rows.find(r => r.length > 3) || rows[0] || []).map((_, i) => ({ wch: wide?.includes(i) ? 38 : 14 })); XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); };
+  const dataSheetName = String(meta.sheet || 'ผลนับ').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31) === 'สรุป' ? 'ข้อมูล' : String(meta.sheet || 'ผลนับ').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31);
+  const serial = iso => { const [y, m, d] = iso.split('-').map(Number); return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000; };
+  const fixDates = (ws, fmtOf) => { for (const k in ws) { if (k[0] === '!') continue; const c = ws[k]; if (c.t === 's' && ISO_DATE.test(c.v)) { const col = XLSX.utils.decode_cell(k).c, f = fmtOf ? fmtOf(col) : ''; c.t = 'n'; c.v = serial(c.v); c.z = f && f.startsWith('date:') ? f.slice(5) : 'dd/mm/yyyy'; } } };
+  const addData = (name, rows, nSrc) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows), fm = meta.colFmts || [], wd = meta.colWidths || [];
+    fixDates(ws, col => fm[col] || '');
+    for (const k in ws) { if (k[0] === '!') continue; const a = XLSX.utils.decode_cell(k); if (a.r > 0 && a.c < nSrc && ws[k].t === 'n' && fm[a.c] && !fm[a.c].startsWith('date:')) ws[k].z = fm[a.c]; }
+    ws['!cols'] = rows[0].map((_, i) => ({ wch: i < nSrc ? (wd[i] || 14) : (i === nSrc ? 16 : 14) }));
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: rows[0].length - 1 } }) };
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+  };
+  const add = (name, rows, wide) => { const ws = XLSX.utils.aoa_to_sheet(rows.map(r => r.map(toCell))); fixDates(ws); ws['!cols'] = (rows.find(r => r.length > 3) || rows[0] || []).map((_, i) => ({ wch: wide?.includes(i) ? 38 : 14 })); XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); };
   const ix = re => h.findIndex(x => re.test(norm(x)));
   const ci = { cap: ix(/CAPITALIZED/), acq: ix(/ACQUIS|CUM\.ACQ/), dep: ix(/ACCUM/), book: ix(/BOOK VAL|END BOOK/) };
   const sumIdx = (a, i) => i < 0 ? '' : Math.round(a.raws.reduce((n, r) => n + (Number(String(r[i]).replace(/,/g, '')) || 0), 0) * 100) / 100;
@@ -1276,10 +1300,10 @@ function exportBook(kind) {
           if (t.ccNew >= 0) r[t.ccNew] = s ? (mv ? s.area : a.cc) : '';
           if (t.ccNewName >= 0) r[t.ccNewName] = s ? (mv ? s.areaName : a.ccName) : '';
         }
-        data.push([...r, !s ? 'ไม่พบ' : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? `${s.shared ? '' : s.area + ' '}${s.areaName}` : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.transferred ? 'มีการโอนย้ายแล้ว' : s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '']);
+        data.push([...r, !s ? 'ไม่พบ' : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.transferred ? 'มีการโอนย้ายแล้ว' : s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '']);
       }
     }
-    add('Data ' + (meta.sheet || 'ผลนับ'), data, [6]);
+    addData(dataSheetName, data, h.length);
   }
   if (kind === 'main' || kind === 'transfer') {
     add('Transfer Sheet', [['Status', 'เปลี่ยน Cost center', '', 'T-Code :  AS02'], [], ['Cost Center', 'Department', 'Asset', 'Sub-number', 'Description', 'CC ( New )', 'CC Name2', 'สถานะ']].concat(moved.map(s => { const a = master.get(s.code); return [a.cc, a.ccName, s.code, '(blank)', a.name, s.area, s.areaName, s.rv.move === 'approved' ? (s.flags.transferred ? 'มีการโอนย้ายแล้ว' : 'รอโอนย้าย') : 'รออนุมัติ']; })), [4]);
@@ -1295,6 +1319,7 @@ function exportBook(kind) {
     add('คิวพิมพ์สติ๊กเกอร์', [['No.', 'Date', 'CC', 'HO (แผนก)', 'ชื่อ', 'เหตุผล']].concat([...cur.values()].filter(s => master.has(s.code) && (s.flags.reprint || s.flags.namebad || s.ns || s.rv.move === 'approved')).map(s => { const a = master.get(s.code), cc = labelCC(s.code); return [s.code, capDate(a), cc.code, cc.name, a.name, [s.flags.reprint && 'ต้องพิมพ์ใหม่', s.flags.namebad && 'ชื่อไม่ตรง', s.ns && 'ไม่มีสติ๊กเกอร์', s.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · ')]; })), [4]);
     add('ไม่อยู่ในทะเบียน', [['รหัสที่สแกน', 'ชื่อ (คนนับกรอก)', 'พื้นที่ที่พบ', 'ห้อง', 'ผลตรวจ Admin', 'ผู้นับ', 'เวลานับ']].concat([...cur.values()].filter(s => !master.has(s.code)).map(s => [s.code, s.uname, s.areaName, s.room, { accepted: 'รับเข้าทะเบียน', rejected: 'ไม่ใช่ของเรา' }[s.rv.unk] || 'รอตรวจ', s.by, fmtT(s.t)])), [1]);
   }
+  if (wb.SheetNames.includes(dataSheetName)) wb.SheetNames = [dataSheetName, ...wb.SheetNames.filter(n => n !== dataSheetName)];
   return wb;
 }
 async function exportFile(kind) {
