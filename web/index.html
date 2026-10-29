@@ -1155,12 +1155,20 @@ const LBL_STD = { id: 'std', name: 'ป้ายมาตรฐาน (แบบ
   { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
   { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
   { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset}' }] };
-const LBL_SIZES = [[50, 25], [50, 30], [50, 40], [40, 30], [60, 40], [70, 40], [80, 50], [100, 50], [100, 75], [100, 100], [100, 150], [32, 25], [30, 20], [25, 15]];   // common thermal rolls in Thailand
+// thermal roll 70 × 50 mm with a 10 mm pre-printed header band: everything sits in the 40 mm below it
+const LBL_7050 = { id: 'std7050', name: 'ป้าย 70 × 50 (หัวแถบสี 10 มม.)', w: 70, h: 50, builtin: true, pre: { top: 10, color: '#1e88e5' }, els: [
+  { id: 'b0', t: 'qr', x: 3, y: 14, w: 32, h: 32, data: '{Asset}', ecc: 'M' },
+  { id: 'b1', t: 'text', x: 37, y: 14, w: 31, h: 5, text: '{Asset}', fs: 12, bold: true, align: 'left' },
+  { id: 'b2', t: 'text', x: 37, y: 20.5, w: 31, h: 10, text: '{ชื่อ}', fs: 8, align: 'left', wrap: true },
+  { id: 'b3', t: 'text', x: 37, y: 31.5, w: 31, h: 3.6, text: 'CC : {CC บนป้าย}', fs: 7.5, align: 'left' },
+  { id: 'b4', t: 'text', x: 37, y: 35.5, w: 31, h: 3.6, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.5, align: 'left' },
+  { id: 'b5', t: 'text', x: 37, y: 39.5, w: 31, h: 3.6, text: 'Date : {วันที่ซื้อ}', fs: 7.5, align: 'left' }] };
+const LBL_SIZES = [[50, 25], [50, 30], [50, 40], [40, 30], [60, 40], [70, 40], [70, 50], [80, 50], [100, 50], [100, 75], [100, 100], [100, 150], [32, 25], [30, 20], [25, 15]];   // common thermal rolls in Thailand
 const LBL_TYPES = { text: 'ข้อความ', qr: 'QR Code', bar: 'บาร์โค้ด', box: 'กรอบ', line: 'เส้น / แถบทึบ' };
 const clone = o => JSON.parse(JSON.stringify(o));
 const lk = k => String(k ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 let lblTpls = LS.get('lblTpls', []);
-const lblAll = () => [LBL_STD, ...lblTpls];
+const lblAll = () => [LBL_STD, LBL_7050, ...lblTpls];
 const lblActive = () => lblAll().find(t => t.id === S.lblId) || LBL_STD;
 const lblDpi = () => +LS.get('lblDpi', 300) || 300;
 async function lblLoad() { if (!db) return; try { const d = await db.doc('labels').get(); if (d.exists) { lblTpls = (d.data().list || []).filter(t => t && t.id && t.els); LS.set('lblTpls', lblTpls); render(); } } catch {} }
@@ -1201,9 +1209,12 @@ function wrapText(ctx, txt, maxW, maxL) {
   return out.map((l, i) => { if (i !== out.length - 1 || ctx.measureText(l).width <= maxW) return l; let s = l; while (s.length > 1 && ctx.measureText(s).width > maxW) s = s.slice(0, -2) + '…'; return s; });
 }
 // draw one sticker at k pixels per mm (the printer's dots: 203 dpi = 8, 300 dpi ≈ 11.8)
-function lblDraw(ctx, tpl, rec, k) {
+// guide = true on screen only: shows what is already printed on the paper (e.g. a blue header band) so the layout avoids it · never sent to the printer
+function lblDraw(ctx, tpl, rec, k, guide) {
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.textBaseline = 'top'; ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const P = tpl.pre; if (guide && P) { ctx.fillStyle = P.color || '#1e88e5'; const W = tpl.w * k, H = tpl.h * k;
+    if (P.top) ctx.fillRect(0, 0, W, P.top * k); if (P.bottom) ctx.fillRect(0, H - P.bottom * k, W, P.bottom * k); if (P.left) ctx.fillRect(0, 0, P.left * k, H); if (P.right) ctx.fillRect(W - P.right * k, 0, P.right * k, H); } ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.textBaseline = 'top'; ctx.imageSmoothingEnabled = false;
   for (const e of tpl.els) {
     const x = e.x * k, y = e.y * k, w = e.w * k, h = e.h * k;
     if (e.t === 'text') {
@@ -1232,7 +1243,7 @@ function lblDraw(ctx, tpl, rec, k) {
 // preview canvases elsewhere (CC page, item sheet) follow the active template
 function drawSticker(cv, code) {
   if (!cv?.getContext) return; const tpl = lblActive(); cv.height = Math.round(cv.width * tpl.h / tpl.w);
-  lblDraw(cv.getContext('2d'), tpl, lblRecord(code), cv.width / tpl.w);
+  lblDraw(cv.getContext('2d'), tpl, lblRecord(code), cv.width / tpl.w, true);
 }
 
 /* ---------- 5 · print page ---------- */
@@ -1373,6 +1384,9 @@ function webLabelDesign() {
       <div class="row" style="gap:8px;align-items:flex-end"><label class="f" style="flex:1">กว้าง (มม.)<input class="in" type="number" step="0.5" min="5" max="200" data-lt="w" value="${t.w}"></label><span style="padding-bottom:12px">×</span><label class="f" style="flex:1">สูง (มม.)<input class="in" type="number" step="0.5" min="5" max="200" data-lt="h" value="${t.h}"></label></div>
       <label class="f">หรือเลือกขนาดที่ใช้บ่อย<select class="in" id="lblPreset"><option value="">— เลือก —</option>${LBL_SIZES.map(([w, h]) => `<option value="${w}x${h}" ${t.w === w && t.h === h ? 'selected' : ''}>${w} × ${h} มม.</option>`).join('')}</select></label>
       <div class="row" style="gap:8px"><label class="f" style="flex:1">ดวงต่อแถว (ม้วน)<input class="in" type="number" data-prn="across" min="1" max="6" step="1" value="${prn().across}"></label><label class="f" style="flex:1">ช่องว่างระหว่างดวง (มม.)<input class="in" type="number" data-prn="gap" min="0" max="20" step="0.5" value="${prn().gap}"></label></div>
+      <details ${t.pre && (t.pre.top || t.pre.bottom || t.pre.left || t.pre.right) ? 'open' : ''}><summary style="cursor:pointer"><b>ส่วนที่พิมพ์มาแล้วบนกระดาษ</b> <span class="sub">เช่น แถบสีหัวสติกเกอร์</span></summary>
+        <div class="row" style="gap:8px;margin-top:6px">${['top', 'bottom', 'left', 'right'].map(k => `<label class="f" style="flex:1">${{ top: 'บน', bottom: 'ล่าง', left: 'ซ้าย', right: 'ขวา' }[k]} (มม.)<input class="in" type="number" min="0" max="100" step="0.5" data-lpre2="${k}" value="${t.pre?.[k] || 0}"></label>`).join('')}</div>
+        <label class="f">สีแถบ (แสดงบนจอเท่านั้น ไม่พิมพ์)<input class="in" type="color" data-lpre2="color" value="${esc(t.pre?.color || '#1e88e5')}" style="height:40px;padding:4px"></label></details>
       <span class="sub">${prn().across > 1 ? `กระดาษ 1 แถว = ${+(prn().left + prn().across * t.w + (prn().across - 1) * prn().gap).toFixed(2)} × ${t.h} มม. · ` : ''}ดวงต่อแถว/ช่องว่าง ใช้กับเครื่องพิมพ์ในคอมเครื่องนี้</span>`;
   if (!e) h += `<p class="sub">คลิกชิ้นบนป้ายเพื่อแก้ไข หรือกดปุ่ม ＋ ด้านซ้ายเพื่อเพิ่ม</p>`;
   else {
@@ -1397,7 +1411,7 @@ function webLabelDesign() {
 function lblPaint() {
   const cv = $('#lblCv'), t = S.lblEdit; if (!cv || !t) return;
   const z = lblZoom(t), r = Math.min(3, window.devicePixelRatio || 1) * 1.5; cv.width = Math.round(t.w * z * r); cv.height = Math.round(t.h * z * r);
-  lblDraw(cv.getContext('2d'), t, lblSample(), z * r);
+  lblDraw(cv.getContext('2d'), t, lblSample(), z * r, true);
 }
 const lblTouch = () => { S.lblDirty = true; };
 // "No. : {Asset}" → { pre: 'No. : ', col: 'Asset' } · anything with 2+ columns or text after the column = advanced
@@ -1455,6 +1469,7 @@ document.addEventListener('change', async ev => {
   if (t.dataset.lp) { lblSetProp(t.dataset.lp, t.type === 'checkbox' ? t.checked : t.value, false); setTimeout(render); return; }
   if (t.dataset.lt && S.lblEdit) { if (t.dataset.lt === 'name') S.lblEdit.name = t.value.trim() || 'แม่แบบ'; else { const v = +t.value; if (v >= 5 && v <= 200) S.lblEdit[t.dataset.lt] = v; } lblTouch(); setTimeout(render); return; }
   if (t.dataset.lpre) { setTimeout(render); return; }
+  if (t.dataset.lpre2 && S.lblEdit) { const k = t.dataset.lpre2, P = { ...(S.lblEdit.pre || {}) }; P[k] = k === 'color' ? t.value : Math.max(0, +t.value || 0); S.lblEdit.pre = P; lblTouch(); setTimeout(render); return; }
   if (t.dataset.lcol !== undefined) { const e = lblEl(); if (e) { const k = t.dataset.lcol, c0 = lblSplit(e[k]), pre = c0.adv || c0.pre === 'ข้อความ' ? '' : c0.pre; e[k] = t.value ? (k === 'data' ? '' : pre) + `{${t.value}}` : (c0.adv ? '' : pre); lblTouch(); } setTimeout(render); return; }
   if (t.dataset.lfield !== undefined && t.value) { const e = lblEl(); if (e) { e[t.dataset.lfield] = (e[t.dataset.lfield] || '') + `{${t.value}}`; lblTouch(); } setTimeout(render); return; }
   if (t.id === 'lblPick') { if (S.lblDirty && S.stMode === 'design' && !confirm('ยังไม่ได้บันทึกแม่แบบที่แก้ไว้ · เปลี่ยนแม่แบบและทิ้งการแก้ไข?')) { t.value = S.lblEdit.id; return; } S.lblId = t.value; LS.set('lblId', t.value); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null; setTimeout(render); return; }
@@ -1466,7 +1481,7 @@ document.addEventListener('change', async ev => {
   if (t.id === 'xlsFile' && t.files?.[0]) { try { await readLabelXls(t.files[0]); S.msg.st = [`อ่านไฟล์แล้ว ${N(S.xls.recs.length)} แถว`, 'ok']; } catch (e) { S.msg.st = ['อ่านไฟล์ไม่ได้: ' + e.message, 'bad']; } render(); return; }
   if (t.id === 'lblImp' && t.files?.[0]) {
     try { const j = JSON.parse(await t.files[0].text()), list = Array.isArray(j) ? j : j.templates || [j]; let n = 0;
-      for (const x of list) { if (!x || !Array.isArray(x.els) || !(+x.w > 0) || !(+x.h > 0)) continue; const tp = { id: 't' + Date.now().toString(36) + n, name: String(x.name || 'แม่แบบนำเข้า'), w: +x.w, h: +x.h, els: x.els.filter(e => e && LBL_TYPES[e.t]).map((e, i) => ({ ...e, id: 'e' + i + Math.random().toString(36).slice(2, 6) })) }; lblTpls.push(tp); S.lblId = tp.id; n++; }
+      for (const x of list) { if (!x || !Array.isArray(x.els) || !(+x.w > 0) || !(+x.h > 0)) continue; const tp = { id: 't' + Date.now().toString(36) + n, name: String(x.name || 'แม่แบบนำเข้า'), w: +x.w, h: +x.h, pre: x.pre && typeof x.pre === 'object' ? x.pre : undefined, els: x.els.filter(e => e && LBL_TYPES[e.t]).map((e, i) => ({ ...e, id: 'e' + i + Math.random().toString(36).slice(2, 6) })) }; lblTpls.push(tp); S.lblId = tp.id; n++; }
       if (!n) throw new Error('ไม่ใช่ไฟล์แม่แบบของ AssetSync');
       await lblSaveAll(); LS.set('lblId', S.lblId); S.lblEdit = null; S.lblDirty = false; S.msg.lbl = [`นำเข้าแม่แบบแล้ว ${n} แบบ`, 'ok'];
     } catch (e) { S.msg.lbl = ['นำเข้าไม่ได้: ' + e.message, 'bad']; }
@@ -1489,7 +1504,7 @@ async function lblAction(a, v) {
     case 'lbldel': lblTpls = lblTpls.filter(x => x.id !== t.id); S.lblConfirmDel = false; S.lblId = 'std'; LS.set('lblId', 'std'); S.lblEdit = null; S.lblDirty = false; S.lblSelEl = null;
       try { await lblSaveAll(); S.msg.lbl = ['ลบแม่แบบแล้ว', 'ok']; } catch (e) { S.msg.lbl = ['ลบไม่สำเร็จ: ' + e.message, 'bad']; } break;
     case 'lblsave': {
-      const x = clone(t); if (x.builtin) { x.id = 't' + Date.now().toString(36); x.name = x.name === LBL_STD.name ? 'ป้ายของฉัน' : x.name; } delete x.builtin;
+      const x = clone(t); if (x.builtin) { x.id = 't' + Date.now().toString(36); x.name = x.name === LBL_STD.name || x.name === LBL_7050.name ? x.name + ' (แก้ไข)' : x.name; } delete x.builtin;
       const i = lblTpls.findIndex(y => y.id === x.id); if (i >= 0) lblTpls[i] = x; else lblTpls.push(x);
       S.lblId = x.id; LS.set('lblId', x.id); S.lblEdit = clone(x); S.lblDirty = false;
       try { await lblSaveAll(); S.msg.lbl = [`บันทึกแม่แบบ "${x.name}" แล้ว · ทุกคนในทีมใช้แม่แบบนี้ได้`, 'ok']; } catch (e) { S.msg.lbl = ['บันทึกขึ้นระบบไม่สำเร็จ (เก็บไว้ในเครื่องนี้แล้ว): ' + e.message, 'warn']; }
@@ -2392,7 +2407,7 @@ async function mountPivot() {
 function afterRender() {
   if (S.mode === 'web' && S.web === 'pivot') setTimeout(mountPivot, 0);
   const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
-  const st = $('#stPrev'); if (st) { const tpl = lblActive(); st.height = Math.round(st.width * tpl.h / tpl.w); lblDraw(st.getContext('2d'), tpl, lblSample(), st.width / tpl.w); }
+  const st = $('#stPrev'); if (st) { const tpl = lblActive(); st.height = Math.round(st.width * tpl.h / tpl.w); lblDraw(st.getContext('2d'), tpl, lblSample(), st.width / tpl.w, true); }
   if ($('#lblCv')) lblPaint();
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);
   const cs = $('#ccSticker'); if (cs) drawSticker(cs, S.ccPick || ccRows(S.ccSel || '*')[0]?.code || '');
