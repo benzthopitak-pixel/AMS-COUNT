@@ -5,12 +5,16 @@
   const KEY = 'amt.demoState';
   const seedEl = document.getElementById('demo-seed');
   const fresh = () => JSON.parse(seedEl.textContent);
+  // a different seed (new review file) wipes what this browser kept from the old one
+  const seedTxt = seedEl.textContent; let h = 0; for (let i = 0; i < seedTxt.length; i += 97) h = (h * 31 + seedTxt.charCodeAt(i)) | 0;
+  const sig = seedTxt.length + ':' + h;
+  try { if (localStorage.getItem('amt.demoSeed') !== sig) { Object.keys(localStorage).filter(k => k.startsWith('amt.')).forEach(k => localStorage.removeItem(k)); localStorage.setItem('amt.demoSeed', sig); } } catch {}
   let T;
   try { T = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { T = null; }
   if (!T || !T.kv) T = fresh();
   let saveT = null;
   const persist = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(T)); } catch {} }, 400); };
-  window.AMSDemoReset = () => { try { Object.keys(localStorage).filter(k => k.startsWith('amt.')).forEach(k => localStorage.removeItem(k)); } catch {} location.reload(); };
+  window.AMSDemoReset = () => { try { Object.keys(localStorage).filter(k => k.startsWith('amt.') && k !== 'amt.demoSeed').forEach(k => localStorage.removeItem(k)); } catch {} location.reload(); };
 
   // always signed in as the demo Admin
   try { if (!localStorage.getItem('amt.auth')) localStorage.setItem('amt.auth', JSON.stringify({ access_token: 'demo', user: { id: 'u1' } })); } catch {}
