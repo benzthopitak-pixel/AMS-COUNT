@@ -176,7 +176,7 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .nav-item.on .nav-num { background: rgb(255 255 255 / .2); color: #fff; }
 .nav-label { flex: 1 1 auto; min-width: 0; }
 .nav-badge { flex: 0 0 auto; background: var(--orange); color: #1d0e00; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
-.nav-group { display: flex; align-items: center; gap: 10px; padding: 10px 12px 4px; font-size: 15px; color: #344054; font-weight: 600; }
+.nav-group { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 12px; padding: 10px 12px; min-height: 44px; font-size: 15px; color: #344054; font-weight: 600; } .nav-group:hover { background: #f2f4f7; } .nav-chev { margin-left: auto; color: var(--muted); font-size: 13px; }
 .nav-item.nav-sub { padding-left: 26px; min-height: 38px; font-size: 14px; } .nav-item.nav-sub .nav-num { flex-basis: 34px; font-size: 12px; }
 .nav-sep { height: 1px; background: var(--line); margin: 6px 8px; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
@@ -561,13 +561,15 @@ function render() {
     // computer: menu runs down the left side
     const stg = stageOf();
     const I = (v, num, label, n, doneAt, sub) => { const on = S.web === v || (v === 'live' && S.web === 'cc'); return `<button class="nav-item ${sub ? 'nav-sub ' : ''}${on ? 'on' : (stg > doneAt ? 'done' : '')}" data-a="web" data-v="${v}" ${on ? 'aria-current="page"' : ''}><span class="nav-num">${num}</span><span class="nav-label">${label}</span>${n ? `<span class="nav-badge">${n}</span>` : ''}</button>`; };
-    const G = (num, label, kids) => `<span class="nav-group"><span class="nav-num">${num}</span>${label}</span>${kids}`;
+    // groups fold away; the one holding the open page stays open
+    const G = (num, label, kids, pages) => { const here = pages.includes(S.web), open = here || (LS.get('navOpen', {})[num] ?? false);
+      return `<button class="nav-group" data-a="navgrp" data-v="${num}" aria-expanded="${open}"><span class="nav-num">${num}</span><span class="nav-label">${label}</span><span class="nav-chev" aria-hidden="true">${open ? '▾' : '▸'}</span></button>${open ? kids : ''}`; };
     let items;
     if (meta && !isLead()) items = I('live', '2', 'รายการตรวจนับ (ดูได้อย่างเดียว)', 0, 99);
     else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'รายการตรวจนับ', inboxN, 99) + I('close', '3', 'ปิดงาน', 0, 99)
-      + G('4', 'สรุปผล', I('pivot', '4.1', 'Pivot Report', 0, 99, 1) + I('report', '4.2', 'รายงานสรุปผล', 0, 99, 1))
+      + G('4', 'สรุปผล', I('pivot', '4.1', 'Pivot Report', 0, 99, 1) + I('report', '4.2', 'รายงานสรุปผล', 0, 99, 1), ['pivot', 'report'])
       + I('stickers', '5', 'พิมพ์สติกเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99)
-      + G('6', 'ตั้งค่า', I('usb', '6.1', 'เชื่อมต่อแบบออฟไลน์', 0, 99, 1) + (usbMode ? '' : I('team', '6.2', 'User', 0, 99, 1)));
+      + G('6', 'ตั้งค่า', I('usb', '6.1', 'เชื่อมต่อแบบออฟไลน์', 0, 99, 1) + (usbMode ? '' : I('team', '6.2', 'User', 0, 99, 1)), ['usb', 'team']);
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
@@ -1599,6 +1601,7 @@ document.addEventListener('click', async e => {
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
+    case 'navgrp': { const o = LS.get('navOpen', {}); o[v] = !(o[v] ?? false); LS.set('navOpen', o); break; }
     case 'gopivot': S.web = 'pivot'; S.repTab = 'pv'; break;
     case 'exprep': S.msg.exp = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.exp = await reportFile(t.dataset.k, v); } catch (e) { S.msg.exp = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
     case 'pvreset': LS.set('pv-' + meta.id, null); { const b = $('#pivotBox'); if (b) delete b.dataset.ready; } break;
