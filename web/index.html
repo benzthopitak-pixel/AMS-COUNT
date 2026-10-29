@@ -263,12 +263,15 @@ function compute() {
   if (_cache && key === _cacheKey) return _cache;
   const cur = new Map(), recount = new Set(), hist = new Map(), ccDone = new Map(), lost = new Map(), dups = new Map();
   const H = (c, txt, e) => { let h = hist.get(c); if (!h) hist.set(c, h = []); h.push({ t: e.t, by: e.by, txt }); };
+  const dropped = new Set(evs.filter(e => e.k === 'edit' && e.dropScan).map(e => e.dropScan));   // duplicate scans someone removed
   for (const e of evs) {
     const c = e.code; let s = cur.get(c);
+    if (e.k === 'edit' && e.dropScan) { H(c, 'ลบรายการยิงซ้ำ', e); continue; }
+    if (e.k === 'scan' && dropped.has(e.id)) continue;
     if (String(c).startsWith('#CC:')) { const k = c.slice(4); if (e.areaDone) ccDone.set(k, { by: e.by, t: e.t, left: e.left || 0, dev: e.dev }); else ccDone.delete(k); continue; }   // "นับครบแล้ว" for one Cost Center
     if (e.k === 'edit' && e.lost !== undefined && !s) { if (e.lost) { lost.set(c, { by: e.by, t: e.t, remark: e.remark || '', area: e.area || '' }); H(c, 'บันทึกว่าสูญหาย' + (e.remark ? ' · ' + e.remark : ''), e); } else { lost.delete(c); H(c, 'ยกเลิกสูญหาย', e); } continue; }
     if (e.k === 'scan') {
-      if (s) { H(c, `สแกนซ้ำที่ ${e.areaName || ''}`, e); if (e.dev !== s.dev) { const l = dups.get(c) || []; l.push({ by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, t: e.t }); dups.set(c, l); } continue; }   // two scanners counted it while offline: the earlier scan counts, Admin sees both
+      if (s) { H(c, `สแกนซ้ำที่ ${e.areaName || ''}`, e); if (e.dev !== s.dev) { const l = dups.get(c) || []; l.push({ id: e.id, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, t: e.t }); dups.set(c, l); } continue; }   // two scanners counted it while offline: the earlier scan counts, Admin sees both
       lost.delete(c);
       cur.set(c, { code: c, t: e.t, by: e.by, dev: e.dev, area: e.area, areaName: e.areaName, shared: !!e.shared, room: e.room || '', ns: !!e.ns, src: e.src || (e.ns ? 'manual' : 'barcode'), cond: 'ปกติ', remark: '', dec: null, uname: '', flags: { reprint: !!e.ns }, rv: {}, printedAt: 0 });
       recount.delete(c); H(c, `${SRC[e.src || (e.ns ? 'manual' : 'barcode')][0]} · พบที่ ${e.areaName}${e.room ? ' · ' + e.room : ''}`, e);
@@ -298,6 +301,13 @@ const SRC = { qr: ['ยิง QR', 'c-ok'], barcode: ['ยิงบาร์โ�
 const srcChip = s => s ? `<span class="chip ${SRC[s.src][1]}">${SRC[s.src][0]}</span>` : '';
 const needQR = s => !!s && master.has(s.code) && s.src !== 'qr' && !s.printedAt;   // QR scanned = sticker already done
 const dupOf = code => { const s2 = compute().cur.get(code), l = compute().dups.get(code); return l && s2 && !s2.rv.dup ? l : null; };
+const myDups = () => { const { dups, cur } = compute(), out = []; for (const [code, l] of dups) for (const d of l) if (d.dev === dev) out.push({ ...d, code, first: cur.get(code) }); return out; };
+function dupSyncPop() {
+  const l = myDups(); if (!l.length || S.dupSyncHide === l.length || S.mode !== 'app' || S.dupPop || S.othPop) return '';
+  return `<div class="dupbg" role="alertdialog" aria-labelledby="dsH"><div class="duppop" data-stop="1" style="max-width:380px;align-items:stretch;text-align:left"><span class="dupicon" aria-hidden="true" style="align-self:center">!</span><b id="dsH" style="text-align:center">เน็ตกลับมาแล้ว · พบรายการซ้ำ ${l.length} รายการ</b><span class="sub" style="text-align:center">ตอนเน็ตหลุด มีเครื่องอื่นนับรายการเหล่านี้ไปก่อนแล้ว ระบบนับครั้งเดียว</span>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto">${l.map(d => `<div class="row" style="align-items:center;gap:8px;background:#f8f9fc;border-radius:12px;padding:8px 10px"><span style="flex:1;min-width:0"><b class="mono">${esc(d.code)}</b><br><span class="sub">${esc(master.get(d.code)?.name || '')} · ${esc(d.first?.by || '')} นับก่อน ${d.first ? hm(d.first.t) : ''} ที่ ${esc(d.first?.areaName || '')}</span></span><button class="btn sm red" data-a="dupdrop" data-v="${esc(d.code)}" data-id="${esc(d.id)}">ลบ</button></div>`).join('')}</div>
+    <button class="btn red" data-a="dupdropall">ลบรายการซ้ำทั้งหมด (${l.length})</button><button class="btn" data-a="duplater">ไว้ทีหลัง</button></div></div>`;
+}
 const lostOf = code => compute().lost.get(code) || null;
 // choices for an item nobody has scanned: found (no sticker / with its condition) or lost
 const markChoices = (code, act, extra = '') => {
@@ -964,7 +974,7 @@ function inboxDetail(code) {
   h += `<p class="sub">${esc(s.by)} · ${fmtT(s.t)} · สภาพ <b>${esc(s.cond)}</b>${s.remark ? ' · ' + esc(s.remark) : ''}</p><div class="row" style="align-items:center">${srcChip(s)}${!a ? '' : s.src === 'qr' ? '<span class="chip c-ok">QR ครบแล้ว · ไม่ต้องสร้างป้าย</span>' : s.printedAt ? `<span class="chip c-ok">ติด QR แล้ว ${fmtT(s.printedAt)}</span>` : '<span class="chip c-blue">ยังไม่มี QR · อยู่ในคิวสร้าง QR</span>'}</div>`;
   const B = (act, label, cls) => `<button class="btn ${cls || ''}" data-a="rv" data-act="${act}" data-v="${esc(code)}">${label}</button>`;
   const dl = dupOf(code);
-  if (dl) h += `<div class="msg warn" style="display:flex;flex-direction:column;gap:6px"><b>ยิงซ้ำจาก ${dl.length + 1} เครื่อง (ตอนออฟไลน์)</b><span>ใช้ผลแรก: ${esc(s.by)} · ${fmtT(s.t)} · พบที่ ${esc(s.areaName)}</span>${dl.map(d => `<span>${esc(d.by)} · ${fmtT(d.t)} · พบที่ ${esc(d.areaName)}${String(d.area) !== String(s.area) ? ` <button class="btn sm" data-a="dupuse" data-v="${esc(code)}" data-cc="${esc(d.area)}" data-ccn="${esc(d.areaName)}">ใช้ที่พบนี้แทน</button>` : ' (ที่เดียวกัน)'}</span>`).join('')}<button class="btn sm" data-a="rv" data-act="dup_ack" data-v="${esc(code)}" style="align-self:flex-start">รับทราบ</button></div>`;
+  if (dl) h += `<div class="msg warn" style="display:flex;flex-direction:column;gap:6px"><b>ยิงซ้ำจาก ${dl.length + 1} เครื่อง (ตอนออฟไลน์)</b><span>ใช้ผลแรก: ${esc(s.by)} · ${fmtT(s.t)} · พบที่ ${esc(s.areaName)}</span>${dl.map(d => `<span>${esc(d.by)} · ${fmtT(d.t)} · พบที่ ${esc(d.areaName)}${String(d.area) !== String(s.area) ? ` <button class="btn sm" data-a="dupuse" data-v="${esc(code)}" data-cc="${esc(d.area)}" data-ccn="${esc(d.areaName)}">ใช้ที่พบนี้แทน</button>` : ' (ที่เดียวกัน)'} <button class="btn sm red" data-a="dupdrop" data-v="${esc(code)}" data-id="${esc(d.id)}">ลบรายการนี้</button></span>`).join('')}<button class="btn sm" data-a="rv" data-act="dup_ack" data-v="${esc(code)}" style="align-self:flex-start">รับทราบ</button></div>`;
   h += `<div class="row">`;
   if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมชั่วคราว)') + B('recount', 'สั่งนับซ้ำ');
   if (!a && !s.rv.unk) h += B('unk_accept', 'รับเข้าทะเบียน', 'pri') + B('unk_reject', 'ไม่ใช่ของเรา');
@@ -1069,6 +1079,7 @@ function appView(c) {
   if (S.item) h += itemSheet(S.item);
   if (S.areaPick) h += areaPicker();
   if (S.search && !S.item) h += searchSheet();
+  h += dupSyncPop();
   if (S.othPop && S.mode === 'app' && !S.dupPop) { const a = master.get(S.othPop.code), s = compute().cur.get(S.othPop.code);
     if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
       h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
@@ -1490,6 +1501,9 @@ document.addEventListener('click', async e => {
     case 'askbulk': S.confirmBulk = v; break;
     case 'nobulk': S.confirmBulk = null; break;
     case 'bulkmove': { const list = pendingMoves(v); for (const s2 of list) pushEvent({ k: 'rv', act: 'approve_move', code: s2.code, round: meta.id }); S.confirmBulk = null; flash(`อนุมัติย้าย ${list.length} รายการ · รอโอนย้ายใน SAP`); break; }
+    case 'dupdrop': pushEvent({ k: 'edit', code: v, round: meta.id, dropScan: t.dataset.id }); flash('ลบรายการซ้ำแล้ว'); break;
+    case 'dupdropall': { const l = myDups(); for (const d of l) pushEvent({ k: 'edit', code: d.code, round: meta.id, dropScan: d.id }); S.dupSyncHide = 0; flash(`ลบรายการซ้ำ ${l.length} รายการแล้ว`); break; }
+    case 'duplater': S.dupSyncHide = myDups().length; break;
     case 'dupuse': edit(v, { area: String(t.dataset.cc), areaName: t.dataset.ccn }); pushEvent({ k: 'rv', act: 'dup_ack', code: v, round: meta.id }); flash('เปลี่ยนที่พบแล้ว'); return;
     case 'askclose': S.confirmClose = v; break;
     case 'noclose': S.confirmClose = null; break;
