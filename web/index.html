@@ -191,6 +191,14 @@ table.tfix { table-layout: fixed; } .tfix td { white-space: nowrap; overflow: hi
 .duppop b#dupH { font-size: 24px; color: var(--warn-ink); }
 .duppop.oth { border-top-color: var(--oth); } .duppop.oth b#othH { font-size: 22px; color: var(--oth-ink); } .duppop.oth .dupicon { background: var(--oth); color: #fff; }
 .dupicon { width: 56px; height: 56px; border-radius: 50%; background: var(--warn); color: #1d0e00; font-size: 32px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+/* pivot */
+.pv-wrap { overflow: auto; max-height: 72vh; } .pv-wrap table.pvtUi { font-family: var(--display); font-size: 13px; border-collapse: separate; border-spacing: 6px; }
+.pv-wrap .pvtAxisContainer, .pv-wrap .pvtVals { background: #f4f5fa; border: 1px dashed #d0d5dd; border-radius: 12px; padding: 6px; }
+.pv-wrap .pvtAxisContainer li span.pvtAttr { background: #fff; border: 1px solid #d0d5dd; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.pv-wrap select { font: inherit; border: 1px solid #d0d5dd; border-radius: 8px; padding: 3px 6px; background: #fff; }
+.pv-wrap table.pvtTable { font-family: var(--display); font-size: 12.5px; } .pv-wrap table.pvtTable thead tr th, .pv-wrap table.pvtTable tbody tr th { background: #eaeeff; border-color: #d0d5dd; font-size: 12px; }
+.pv-wrap table.pvtTable tbody tr td { border-color: #e4e7ec; font-variant-numeric: tabular-nums; }
+.pv-wrap .pvtFilterBox { border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .15); font-family: var(--display); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -554,7 +562,9 @@ function render() {
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
   // keep every scrolled box where it was (a tap inside the right panel must not jump it back to the top)
   const KS = ['.pair > *', '.tbl-wrap', '.sheet', '.side-nav', '.pbody'], kept = KS.map(q => [...root.querySelectorAll(q)].map(e => e.scrollTop)), winY = window.scrollY;
+  const pvKeep = $('#pivotBox[data-ready]');
   root.innerHTML = html;
+  if (pvKeep) { const slot = $('#pivotBox'); if (slot) slot.replaceWith(pvKeep); }
   KS.forEach((q, i) => { const els = [...root.querySelectorAll(q)]; if (els.length !== kept[i].length) return; els.forEach((e, j) => { if (S.resetRight && q === '.pair > *' && e.tagName === 'ASIDE') return; if (kept[i][j]) e.scrollTop = kept[i][j]; }); });
   S.resetRight = false; if (Math.abs(window.scrollY - winY) > 1) window.scrollTo(0, winY);
   afterRender();
@@ -578,7 +588,7 @@ function webView(c) {
   return webRounds(c);
 }
 /* ---------- 3 · summary reports: on screen, Excel and PDF ---------- */
-const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['bw', 'รายการยืมมา'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)']];
+const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['bw', 'รายการยืมมา'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)'], ['pv', 'Pivot (สร้างเอง)']];
 // custom report: group by any column of the imported file, pick the columns to print
 const RES_F = [['r:res', 'ผลการนับ'], ['r:cond', 'สภาพ'], ['r:area', 'CC ที่พบ'], ['r:areaName', 'ชื่อ CC ที่พบ'], ['r:by', 'ผู้นับ'], ['r:t', 'เวลานับ'], ['r:src', 'วิธีตรวจนับ'], ['r:qr', 'QR'], ['r:remark', 'Remark']];
 function crFields() { return (meta.headers || []).map((h, i) => ['h:' + i, h]).concat(RES_F); }
@@ -606,6 +616,13 @@ function reportData(kind) {
     const tot = rows.reduce((t, r) => { for (let i = 2; i <= 8; i++) t[i] += r[i]; return t; }, ['รวม', '', 0, 0, 0, 0, 0, 0, 0]);
     tot.push(tot[2] ? Math.round(tot[3] / tot[2] * 1000) / 10 + '%' : '0%', ''); rows.push(tot);
     return { title: 'สรุปผลตรวจนับ', head: ['Cost Center', 'ชื่อ CC', 'ทั้งหมด', 'ตรวจแล้ว', 'ไม่พบ', 'สูญหาย', 'ย้ายแผนก', 'ชำรุด ฯลฯ', 'ต้องพิมพ์ QR', '% ตรวจแล้ว', 'ปิดงาน'], rows, w: [11, 22, 8, 8, 8, 8, 8, 9, 10, 9, 8], num: [2, 3, 4, 5, 6, 7, 8] };
+  }
+  if (kind === 'pv') {
+    const tb = document.querySelector('#pivotBox table.pvtTable');
+    if (!tb) return { title: 'Pivot', head: ['ยังไม่มีตาราง'], rows: [], w: [100] };
+    const aoa = XLSX.utils.sheet_to_json(XLSX.utils.table_to_sheet(tb, { raw: true }), { header: 1, defval: '' });
+    const cfg = LS.get('pv-' + meta.id, {}), n = Math.max(...aoa.map(r => r.length), 1);
+    return { title: 'Pivot' + (cfg.rows?.length ? ' · ' + cfg.rows.join(' / ') : '') + (cfg.cols?.length ? ' × ' + cfg.cols.join(' / ') : ''), head: Array.from({ length: n }, (_, i) => String(aoa[0]?.[i] ?? '')), rows: aoa.slice(1).map(r => Array.from({ length: n }, (_, i) => r[i] ?? '').map((v, i) => i >= ((cfg.rows || []).length || 1) && typeof v === 'string' && /^-?[\d,]+(\.\d+)?$/.test(v.trim()) ? Number(v.replace(/,/g, '')) : v)), w: Array(n).fill(10), num: [...Array(n).keys()].slice((cfg.rows || []).length || 1) };
   }
   if (kind === 'cr') {
     const C = crConf(), stOk = (a, s2) => C.status === 'all' || (C.status === 'found' ? !!s2 : C.status === 'nf' ? !s2 : C.status === 'lost' ? !s2 && !!lostOf(a.code) : C.status === 'mv' ? !!s2 && isOther(s2) : true);
@@ -672,13 +689,15 @@ const bulkMoveBox = (ccF, where) => { const n = pendingMoves(ccF).length; if (!n
     : `<button class="btn oth" data-a="askbulk" data-v="${where}">✓ อนุมัติย้ายทั้งหมด (${n})</button>`; };
 function webReport() {
   const tab = S.repTab || 'sum', d = reportData(tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
-  const n = Object.fromEntries(REP_TABS.map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
+  const n = Object.fromEntries(REP_TABS.filter(([k]) => k !== 'pv' && k !== 'cr').map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
   let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด${meta.status === 'closed' ? '' : ' · ฉบับร่าง (ยังไม่ปิดรอบ)'}</p><h1>3 · สรุปผล</h1></div>
     <div class="row"><button class="btn" data-a="repdl" data-v="xlsx">⬇ Excel</button><button class="btn pri" data-a="repdl" data-v="pdf">⬇ PDF</button></div></div>
-    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l}${k === 'cr' ? '' : ` [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]`}</button>`).join('')}</div>
+    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l}${k === 'cr' || k === 'pv' ? '' : ` [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]`}</button>`).join('')}</div>
     <select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select></div>
+    ${tab === 'pv' ? `<section class="card" style="gap:8px"><span class="sub">ลากหัวข้อจากด้านซ้ายไปวางเป็นแถว (ซ้าย) หรือคอลัมน์ (บน) · เลือกวิธีคำนวณ เช่น จำนวน / ผลรวม · คลิก ▾ ที่หัวข้อเพื่อกรอง · ระบบจำรูปแบบไว้ให้ครั้งหน้า</span><div class="row"><button class="btn sm" data-a="pvreset">เริ่มใหม่</button></div><div id="pivotBox" class="pv-wrap"><p class="sub">กำลังโหลดเครื่องมือ Pivot…</p></div></section>` : ''}
     ${tab === 'cr' ? crPanel() : ''}${tab === 'mv' ? `<div class="row" style="justify-content:flex-end">${bulkMoveBox(S.repCC || '', 'rep')}</div>` : ''}
-    <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
+${tab === 'pv' ? '' : `    <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`}`;
+  if (tab === 'pv') return h + (S.msg.rep ? `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>` : '') + `</main>`;
   for (const r of d.rows.slice(0, 1000)) { const tot = (tab === 'sum' || d.totRow) && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
   h += `</tbody></table></div>${d.rows.length > 1000 ? `<p class="sub">แสดง 1,000 จาก ${N(d.rows.length)} · ไฟล์ที่ดาวน์โหลดมีครบ</p>` : ''}${d.rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>`;
   if (S.msg.rep) h += `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>`;
@@ -690,7 +709,7 @@ async function reportFile(kind, fmt) {
   if (fmt === 'xlsx') {
     const ws = XLSX.utils.aoa_to_sheet([[d.title], [sub], [], d.head, ...d.rows]);
     ws['!cols'] = d.w.map(x => ({ wch: Math.max(8, Math.round(x * 1.4)) })); ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 3, c: 0 }, e: { r: 3 + d.rows.length, c: d.head.length - 1 } }) };
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, d.title.slice(0, 31));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, d.title.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31));
     return await save(name + '.xlsx', new Blob([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
   // PDF: Thai needs the app font, so each A4 page is drawn on a canvas and placed as an image
@@ -706,12 +725,12 @@ async function reportFile(kind, fmt) {
     ctx.font = `700 ${5 * K}px Prompt, sans-serif`; ctx.fillText(d.title, M, M + 3 * K);
     ctx.font = `400 ${2.6 * K}px Prompt, sans-serif`; ctx.fillStyle = '#667085'; ctx.fillText(sub, M, M + 9 * K); ctx.textAlign = 'right'; ctx.fillText(`หน้า ${pg + 1} / ${pages}`, W - M, M + 9 * K); ctx.textAlign = 'left';
     let y = top0; ctx.fillStyle = '#eef1fb'; ctx.fillRect(M, y, W - 2 * M, rowH); ctx.fillStyle = '#121826'; ctx.font = `600 ${fs}px Prompt, sans-serif`;
-    let x = M; d.head.forEach((t, i) => { ctx.fillText(cut(t, cols[i] - 2 * K), x + K, y + rowH / 2); x += cols[i]; }); y += rowH;
+    let x = M; d.head.forEach((t, i) => { const right = (d.num || []).includes(i) || (kind === 'sum' && i === 9); ctx.textAlign = right ? 'right' : 'left'; ctx.fillText(cut(t, cols[i] - 2 * K), right ? x + cols[i] - K : x + K, y + rowH / 2); x += cols[i]; }); ctx.textAlign = 'left'; y += rowH;
     ctx.font = `400 ${fs}px Prompt, sans-serif`;
     for (const r of d.rows.slice(pg * perPage, (pg + 1) * perPage)) {
       const tot = (kind === 'sum' || d.totRow) && r[0] === 'รวม'; if (tot) { ctx.fillStyle = '#f4f5fa'; ctx.fillRect(M, y, W - 2 * M, rowH); ctx.font = `700 ${fs}px Prompt, sans-serif`; }
       ctx.fillStyle = '#121826'; x = M;
-      r.forEach((t, i) => { const right = (d.num || []).includes(i) || (kind === 'sum' && i === 9); ctx.textAlign = right ? 'right' : 'left'; ctx.fillText(cut(t, cols[i] - 2 * K), right ? x + cols[i] - K : x + K, y + rowH / 2); x += cols[i]; });
+      r.forEach((t, i) => { if (typeof t === 'number') t = t.toLocaleString('en-US', { maximumFractionDigits: 2 }); const right = (d.num || []).includes(i) || (kind === 'sum' && i === 9); ctx.textAlign = right ? 'right' : 'left'; ctx.fillText(cut(t, cols[i] - 2 * K), right ? x + cols[i] - K : x + K, y + rowH / 2); x += cols[i]; });
       ctx.textAlign = 'left'; ctx.strokeStyle = '#eaecf0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(M, y + rowH); ctx.lineTo(W - M, y + rowH); ctx.stroke(); y += rowH;
     }
     if (!d.rows.length) ctx.fillText('ไม่มีรายการ', M + K, y + rowH / 2);
@@ -1508,8 +1527,9 @@ document.addEventListener('click', async e => {
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
+    case 'pvreset': LS.set('pv-' + meta.id, null); { const b = $('#pivotBox'); if (b) delete b.dataset.ready; } break;
     case 'crcol': { const C = crConf(); C.cols = C.cols.includes(v) ? C.cols.filter(x => x !== v) : [...C.cols, v]; LS.set('cr-' + meta.id, C); break; }
-    case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); S.msg.rep = await reportFile(S.repTab || 'sum', v); break;
+    case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); try { S.msg.rep = await reportFile(S.repTab || 'sum', v); } catch (e) { S.msg.rep = ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; } break;
     case 'askbulk': S.confirmBulk = v; break;
     case 'nobulk': S.confirmBulk = null; break;
     case 'bulkmove': { const list = pendingMoves(v); for (const s2 of list) pushEvent({ k: 'rv', act: 'approve_move', code: s2.code, round: meta.id }); S.confirmBulk = null; flash(`อนุมัติย้าย ${list.length} รายการ · รอโอนย้ายใน SAP`); break; }
@@ -1906,7 +1926,47 @@ async function stickerPdf(test) {
   return await save(`AssetSync-สติกเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
 }
 
+// ---------- Pivot (PivotTable.js, loaded only when the tab opens) ----------
+const PV_LIBS = [['css', 'lib/pivot.min.css'], ['js', 'lib/jquery.min.js'], ['js', 'lib/jquery-ui.min.js'], ['js', 'lib/pivot.min.js']];
+let pvLoading = null;
+function loadPivot() {
+  if (window.jQuery?.fn?.pivotUI) return Promise.resolve();
+  return pvLoading || (pvLoading = PV_LIBS.reduce((p, [kind, src]) => p.then(() => new Promise((ok, bad) => {
+    const inl = document.getElementById('lazy-' + src.split('/').pop());   // review copy carries the files inline
+    if (kind === 'css') { const st = document.createElement(inl ? 'style' : 'link'); if (inl) st.textContent = inl.textContent; else { st.rel = 'stylesheet'; st.href = src; } document.head.appendChild(st); return ok(); }
+    const sc = document.createElement('script'); if (inl) { sc.textContent = inl.textContent; document.head.appendChild(sc); return ok(); }
+    sc.src = src; sc.onload = ok; sc.onerror = () => bad(new Error('โหลด ' + src + ' ไม่ได้')); document.head.appendChild(sc);
+  })), Promise.resolve()));
+}
+function pivotRecords() {
+  const { cur } = compute(), H = (meta.headers || []).map(h => String(h).trim()), out = [];
+  const num = v => { if (typeof v === 'number') return v; const t = String(v ?? '').replace(/,/g, '').trim(); return t !== '' && !isNaN(Number(t)) && /^-?[\d.]+$/.test(t) && !/^0\d/.test(t) ? Number(t) : v; };
+  for (const a of master.values()) {
+    if (!counted(a)) continue;
+    const s2 = cur.get(a.code), L = !s2 && lostOf(a.code);
+    const res = { 'ผลการนับ': s2 ? (isBorrowed(s2) ? 'ยืมมา' : isMoveCase(s2) ? 'ต้องย้าย CC' : 'ตรวจแล้ว') : L ? 'สูญหาย' : 'ยังไม่พบ', 'สภาพ': s2?.cond || '', 'CC ที่พบ': s2 ? String(s2.area) : '', 'ชื่อ CC ที่พบ': s2?.areaName || '', 'ผู้นับ': s2?.by || '', 'วิธีตรวจนับ': s2 ? SRC[s2.src][0] : '', 'QR': !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', 'สถานะย้าย': s2 && isMoveCase(s2) ? (s2.rv.move === 'approved' ? 'รอโอนย้าย' : 'รออนุมัติ') : '', 'วันที่นับ': s2 ? new Date(s2.t).toLocaleDateString('th-TH') : '', 'ปิดงาน CC': ccClosed(a.cc) ? 'ปิดแล้ว' : 'ยังไม่ปิด' };
+    for (const raw of a.raws.length ? a.raws : [[]]) { const rec = {}; H.forEach((h, i) => { if (h) rec[h] = num(raw[i] ?? ''); }); out.push(Object.assign(rec, res)); }
+  }
+  return out;
+}
+async function mountPivot() {
+  const box = $('#pivotBox'); if (!box || box.dataset.ready === _cacheKey + meta.id) return;
+  try { await loadPivot(); } catch (e) { box.innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; return; }
+  const jq = window.jQuery, U = jq.pivotUtilities, T = U.aggregatorTemplates, nf = U.numberFormat({ thousandsSep: ',', decimalSep: '.', digitsAfterDecimal: 0 }), nf2 = U.numberFormat({ thousandsSep: ',', decimalSep: '.', digitsAfterDecimal: 2 });
+  const H = (meta.headers || []).map(h => String(h).trim()), m0 = meta.map || {}, ccH = H[m0.cc ?? -1] || H.find(h => /COST CE/i.test(h)) || 'ผลการนับ';
+  const saved = LS.get('pv-' + meta.id, null) || { rows: [ccH], cols: ['ผลการนับ'], vals: [], aggregatorName: 'จำนวน', rendererName: 'ตาราง' };
+  jq(box).pivotUI(pivotRecords(), {
+    rows: saved.rows, cols: saved.cols, vals: saved.vals, aggregatorName: saved.aggregatorName, rendererName: saved.rendererName, inclusions: saved.inclusions || {}, exclusions: saved.exclusions || {},
+    aggregators: { 'จำนวน': T.count(nf), 'นับไม่ซ้ำ': T.countUnique(nf), 'ผลรวม': T.sum(nf2), 'เฉลี่ย': T.average(nf2), 'ต่ำสุด': T.min(nf2), 'สูงสุด': T.max(nf2), 'จำนวน (% ของทั้งหมด)': T.fractionOf(T.count(), 'total'), 'ผลรวม (% ของทั้งหมด)': T.fractionOf(T.sum(), 'total') },
+    renderers: { 'ตาราง': U.renderers['Table'], 'ตาราง + แถบ': U.renderers['Table Barchart'], 'ไล่สี (Heatmap)': U.renderers['Heatmap'] },
+    unusedAttrsVertical: true, menuLimit: 2000, rendererOptions: { localeStrings: { totals: 'รวม', vs: 'กับ', by: 'ตาม' } },
+    localeStrings: { renderError: 'สร้างตารางไม่ได้', computeError: 'คำนวณไม่ได้', uiRenderError: 'แสดงหน้าจอไม่ได้', selectAll: 'เลือกทั้งหมด', selectNone: 'ไม่เลือก', tooMany: '(มีมากเกินไป)', filterResults: 'ค้นหา', apply: 'ตกลง', cancel: 'ยกเลิก', totals: 'รวม', vs: 'กับ', by: 'ตาม' },
+    onRefresh: c => { try { LS.set('pv-' + meta.id, { rows: c.rows, cols: c.cols, vals: c.vals, aggregatorName: c.aggregatorName, rendererName: c.rendererName, inclusions: c.inclusions, exclusions: c.exclusions }); } catch {} }
+  }, true);
+  box.dataset.ready = _cacheKey + meta.id;
+}
 function afterRender() {
+  if (S.mode === 'web' && S.web === 'report' && S.repTab === 'pv') setTimeout(mountPivot, 0);
   const iq = $('#installQr'); if (iq && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(new URL('install.html', location.href).href); q.make(); const n = q.getModuleCount(), c = iq.getContext('2d'), m = Math.floor(iq.width / (n + 4)), o = Math.floor((iq.width - n * m) / 2); c.fillStyle = '#fff'; c.fillRect(0, 0, iq.width, iq.height); c.fillStyle = '#121826'; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(o + k * m, o + r * m, m, m); }
   const st = $('#stPrev'); if (st) drawSticker(st, [...S.stSel][0] || stickerList(cats())[0] || [...master.keys()][0] || '51000001');
   const it = $('#itemSticker'); if (it) drawSticker(it, S.item);

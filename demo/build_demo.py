@@ -30,6 +30,10 @@ subs = {
 for a, b in subs.items():
     assert html.count(a) == 1, a
     html = html.replace(a, b)
+# Pivot libraries load on demand; the review copy carries them inline as inert blocks the loader picks up
+lazy = ''.join(f'<script type="text/x-lazy" id="lazy-{n}">' + (WEB / 'lib' / n).read_text().replace('</script', '<\\/script').replace('\ufffd', '\\ufffd') + '</script>' for n in ['jquery.min.js', 'jquery-ui.min.js', 'pivot.min.js'])
+lazy += '<script type="text/x-lazy" id="lazy-pivot.min.css">' + (WEB / 'lib' / 'pivot.min.css').read_text() + '</script>'
+html = html.replace('\n</body>', lazy + '\n</body>', 1)
 html = re.sub(r'url\(fonts/([\w.-]+\.woff2)\)', lambda m: f'url({b64("fonts/" + m.group(1), "font/woff2")})', html)
 html = html.replace('src="logo-mark.svg"', f'src="{b64("logo-mark.svg", "image/svg+xml")}"').replace('src="logo.svg"', f'src="{b64("logo.svg", "image/svg+xml")}"')
 
