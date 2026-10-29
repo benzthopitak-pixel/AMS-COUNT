@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ติดตั้ง AMS Count</title>
+<title>ติดตั้ง AssetSync</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script src="lib/qrcode.js"></script>
 <style>
@@ -28,19 +28,19 @@ code { background: #eef0f6; padding: 1px 6px; border-radius: 6px; }
 </head>
 <body>
 <main>
-  <div class="hero"><img src="logo-mark.svg" alt=""><div><h1>ติดตั้ง AMS Count</h1><span id="ver">แอปตรวจนับทรัพย์สินสำหรับเครื่องยิง Android</span></div></div>
+  <div class="hero"><img src="logo-mark.svg" alt=""><div><h1>ติดตั้ง AssetSync</h1><span id="ver">แอปตรวจนับทรัพย์สินสำหรับเครื่องยิง Android</span></div></div>
   <a class="btn" id="dl" href="download/ams-count.apk" download>ดาวน์โหลดแอป (.apk)</a>
   <div class="card"><h2>ติดตั้งบนเครื่องยิง</h2><ol>
     <li>เปิดหน้านี้ใน Chrome บนเครื่องยิง แล้วกดปุ่มดาวน์โหลดด้านบน</li>
     <li>แตะไฟล์ <code>ams-count.apk</code> ที่ดาวน์โหลดเสร็จ</li>
     <li>ถ้าเครื่องถาม "อนุญาตให้ติดตั้งแอปจากแหล่งนี้" ให้เปิดอนุญาตสำหรับ Chrome</li>
     <li>ถ้ามีคำเตือนจาก Play Protect ให้กด "ติดตั้งต่อ" (แอปของบริษัทเอง ไม่ได้อยู่ใน Play Store)</li>
-    <li>เปิดแอป AMS Count แล้วเข้าสู่ระบบด้วยรหัสพนักงาน + PIN</li></ol>
+    <li>เปิดแอป AssetSync แล้วเข้าสู่ระบบด้วยรหัสพนักงาน + PIN</li></ol>
     <p class="sub">อัปเดตเวอร์ชันใหม่: ดาวน์โหลดแล้วติดตั้งทับได้เลย ผลนับในเครื่องไม่หาย</p></div>
   <div class="card"><h2>เปิดหน้านี้บนเครื่องยิง</h2><p class="sub">ยิง QR นี้ด้วยเครื่องยิง (ลิงก์จะพิมพ์ลงช่องที่อยู่ของ Chrome) หรือสแกนด้วยกล้อง</p><canvas id="qr" width="400" height="400" aria-label="QR ลิงก์หน้านี้"></canvas></div>
   <div class="card"><h2>ไม่มีเน็ต?</h2><p class="sub">ดาวน์โหลดไฟล์ .apk บนคอม → ต่อสาย USB → ก๊อปไปไว้ใน Download ของเครื่องยิง → เปิดแอป Files บนเครื่องยิงแล้วแตะไฟล์</p></div>
   <div class="card"><h2>ตั้งค่าเครื่องยิง CipherLab</h2><p class="sub">ReaderConfig → Output → Keyboard Emulation · Suffix = Enter (ขึ้นบรรทัดใหม่) · เปิดอ่าน QR Code และ Code 128</p></div>
-  <p class="sub" style="text-align:center"><a href="./">กลับไปหน้าเว็บ AMS Count</a></p>
+  <p class="sub" style="text-align:center"><a href="./">กลับไปหน้าเว็บ AssetSync</a></p>
 </main>
 <script>
 (() => {

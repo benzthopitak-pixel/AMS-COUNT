@@ -207,14 +207,14 @@
     }
   };
 
-  /* ---------- files: Android app saves to Download/AMS Count, browser downloads ---------- */
+  /* ---------- files: Android app saves to Download/AssetSync, browser downloads ---------- */
   const blobToB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
   const downloads = {
     async save({ filename, data, type }) {
       const blob = data instanceof Blob ? data : new Blob([data], { type: type || 'application/octet-stream' });
       if (window.AndroidBridge && window.AndroidBridge.saveFile) {
         const r = String(window.AndroidBridge.saveFile(filename, await blobToB64(blob), blob.type || type || 'application/octet-stream'));
-        if (r.startsWith('OK')) return { status: 'saved', where: r.slice(3) || 'Download/AMS Count' };
+        if (r.startsWith('OK')) return { status: 'saved', where: r.slice(3) || 'Download/AssetSync' };
         const e = new Error(r.replace(/^ERR:/, '')); e.code = 'save_failed'; throw e;
       }
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#3b5bfd">
-<title>AMS Count</title>
+<title>AssetSync</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script src="config.js"></script>
 <script src="build.js"></script>
@@ -517,11 +517,11 @@ function render() {
     if (meta && !isLead()) items = I('live', '2', 'นับ (ดูอย่างเดียว)', 0, 99);
     else items = I('rounds', '1', 'เพิ่มข้อมูลตรวจนับ', 0, 0) + I('live', '2', 'นับ', inboxN, 99) + I('report', '3', 'สรุปผล', 0, 99) + I('close', '4', 'ปิด + ส่งออก', 0, 99)
       + `<span class="nav-sep" aria-hidden="true"></span>` + I('stickers', '5', 'พิมพ์สติ๊กเกอร์', c ? c.reprint.length + c.namebad.length : 0, 99) + I('usb', '6', 'สาย USB', 0, 99) + (usbMode ? '' : I('team', '7', 'ทีม + ตั้งค่า', 0, 99));
-    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count ${verTag()}</span>${syncHtml()}</div>
+    html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
       <div class="side-foot">${meta ? `<span class="sub">งานที่เปิดอยู่</span>${jobList().length > 1 ? `<select class="in" id="jobSel" aria-label="สลับงาน" style="font-weight:600">${jobList().map(j => `<option value="${esc(j.id)}" ${j.id === meta.id ? 'selected' : ''}>${esc(j.name)}${j.status === 'closed' ? ' (ปิดแล้ว)' : ''}</option>`).join('')}</select>` : `<b>${esc(meta.name)}</b>`}` : '<span class="sub">ยังไม่มีงานนับ</span>'}${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'คนนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
   } else {
-    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AMS Count ${verTag()}</span>${syncHtml()}</div></header>`;
+    html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div></header>`;
   }
   html += S.mode === 'web' ? webView(c) + '</div></div>' : appView(c);
   if (S.toast) html += `<div class="toast" role="status">${esc(S.toast)}</div>`;
@@ -631,7 +631,7 @@ function webReport() {
   return h + `</main>`;
 }
 async function reportFile(kind, fmt) {
-  const d = reportData(kind), stamp = new Date().toLocaleString('th-TH'), name = `AMS-${d.title}${S.repCC ? '-CC' + S.repCC : ''}-${meta.name}`.replace(/[\\/:*?"<>|]/g, '_');
+  const d = reportData(kind), stamp = new Date().toLocaleString('th-TH'), name = `AssetSync-${d.title}${S.repCC ? '-CC' + S.repCC : ''}-${meta.name}`.replace(/[\\/:*?"<>|]/g, '_');
   const sub = `${meta.name}${S.repCC ? ' · CC ' + S.repCC : ''} · ${meta.status === 'closed' ? 'ปิดรอบแล้ว' : 'ฉบับร่าง'} · พิมพ์เมื่อ ${stamp}`;
   if (fmt === 'xlsx') {
     const ws = XLSX.utils.aoa_to_sheet([[d.title], [sub], [], d.head, ...d.rows]);
@@ -1045,7 +1045,7 @@ function appView(c) {
 }
 function appLogin() {
   const team = meta?.team || [];
-  return `<div class="pbody"><div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
+  return `<div class="pbody"><div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AssetSync</b><span>เลือกชื่อของคุณเพื่อเริ่มนับ</span></div>
     ${team.length ? team.map((u, i) => `<button class="li" data-a="login" data-v="${i}"><span class="dot" style="background:${u.role === 'lead' ? 'var(--blue)' : 'var(--orange)'};color:${u.role === 'lead' ? '#fff' : '#1d0e00'}">${esc(u.name.slice(0, 1))}</span><span class="t"><b>${esc(u.name)}</b><span>${u.role === 'lead' ? 'Admin' : 'คนนับ'}</span></span></button>`).join('') : `<div class="card"><p class="sub">ยังไม่มีรายชื่อทีม Admin เพิ่มได้ที่เมนู ทีม + ตั้งค่า บนคอม หรือใส่ชื่อทดสอบด้านล่าง</p></div>`}
     <div class="card"><label class="f">หรือพิมพ์ชื่อ<input class="in" id="loginName" placeholder="ชื่อของคุณ"></label><button class="btn pri" data-a="loginname">เข้าใช้งาน</button></div>
     <p class="sub">โหมดสาย USB · เลือกชื่อจากแพ็กเกจที่นำเข้า · เครื่องนี้: ${esc(dev)}</p></div>`;
@@ -1174,7 +1174,7 @@ function scannerSetup() {
   let h = `<div class="card"><b>ตั้งค่าเครื่องยิง CipherLab</b><p class="sub">ยิง QR ไม่เข้า ทำตามนี้ทีละข้อ แล้วลองยิงที่การ์ด "ทดสอบปุ่มยิง"</p>`;
   h += conf.length ? `<div class="msg warn">พบแอปที่อาจแย่งหัวอ่าน: ${conf.map(c => `<b>${esc(c.label)}</b>`).join(', ')} · กด Force stop หรือ Uninstall</div><div class="chips">${conf.map(c => `<button class="btn sm red" data-a="appinfo" data-v="${esc(c.pkg)}">เปิด ${esc(c.label)}</button>`).join('')}</div>`
     : st(1, 'ปิดแอป AMS ตัวเก่า', B?.scannerConflicts ? 'ไม่พบแอปที่แย่งหัวอ่าน ✓' : 'ตั้งค่า → แอป → AMS ตัวเก่า → Force stop / Uninstall');
-  h += st(2, 'ReaderConfig → โปรไฟล์ Default', 'ตั้งค่าที่โปรไฟล์ Default (หรือสร้างโปรไฟล์ใหม่ Associated App = AMS Count)')
+  h += st(2, 'ReaderConfig → โปรไฟล์ Default', 'ตั้งค่าที่โปรไฟล์ Default (หรือสร้างโปรไฟล์ใหม่ Associated App = AssetSync)')
     + st(3, 'Data Output → Keyboard Emulation = KeyEvent', 'ห้ามเป็น None · Auto Enter Character = Decoded data + Enter char')
     + st(4, 'Symbology → เปิด QR Code', 'และ Code 128 สำหรับบาร์โค้ดเดิม')
     + st(5, 'Data Output → Code ID = AIM', 'ใช้แยก "ยิง QR" กับ "ยิงบาร์โค้ด" · ห้ามเลือก CipherLab ID');
@@ -1187,7 +1187,7 @@ function appMeBlock() {
     ${usbCard()}
     ${usbMode ? '' : `<div class="card"><b>การซิงก์</b>${db ? '' : '<p class="sub">ยังไม่ได้เชื่อมต่อระบบ (ไม่มีเน็ต?) · ผลนับเก็บในเครื่องไว้ก่อน</p>'}<div class="cnt3"><div style="background:#f4f5fa"><b>${mine.length}</b><span style="font-size:11px">ในเครื่อง</span></div><div style="background:var(--ok-soft);color:var(--ok-ink)"><b>${mineSent}</b><span style="font-size:11px">ถึงระบบ ✓✓</span></div><div style="background:var(--warn-soft);color:var(--warn-ink)"><b>${p}</b><span style="font-size:11px">รอส่ง</span></div></div>
     <button class="btn pri" data-a="verify">ส่ง + ตรวจครบ</button>${S.verify ? `<div class="msg ${S.verify[1]}">${esc(S.verify[0])}</div>` : ''}</div>`}
-    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AMS Count ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
+    <div class="card"><b>เกี่ยวกับ</b><p class="sub">AssetSync ${esc(VER())}${window.AMS_BUILT ? ' (' + esc(window.AMS_BUILT) + ')' : ''}${window.AndroidBridge?.appVersion ? ' · แอป ' + esc(window.AndroidBridge.appVersion()) : ' · เว็บ'} · ${esc(Store.auth.config().url.replace(/^https:\/\//, '') || 'ยังไม่ตั้งค่า')}</p>${window.AndroidBridge?.checkUpdate ? '<button class="btn sm" data-a="chkupd" style="align-self:flex-start">ตรวจหาอัปเดต</button>' : ''}${usbMode ? '' : '<button class="btn sm" data-a="editcfg" style="align-self:flex-start">ตั้งค่าการเชื่อมต่อ</button>'}</div>
     <div class="card"><b>ทดสอบปุ่มยิง</b><p class="sub">กดปุ่มยิงที่สติ๊กเกอร์ แล้วดูว่ามีรายการขึ้นด้านล่างไหม</p>${scanLog.length ? scanLog.map(x => `<span class="sub mono">${hm(x.t)} · ${esc(x.how)} · ${esc(x.v)}</span>`).join('') : '<span class="sub">ยังไม่ได้รับอะไรจากปุ่มยิง</span>'}<p class="sub">มีเสียงบี๊บแต่ไม่มีอะไรขึ้น = แอป AMS เดิมเปิดค้างอยู่และแย่งหัวอ่าน → ปัดแอปเดิมทิ้งจากหน้าแอปที่เปิดค้าง · ไม่มีบี๊บ = ตั้งค่า ReaderConfig (ด้านล่าง)</p></div>
     <button class="btn red" data-a="logout">ออกจากระบบ / เปลี่ยนคน</button>`;
 }
@@ -1215,7 +1215,7 @@ function webUsb() {
       <p class="sub">แพ็กเกจมีทะเบียน ${N(master.size)} รหัส · พื้นที่ · ทีม · ผลนับล่าสุดของทุกเครื่อง (ไว้เช็กนับซ้ำ) · ส่งซ้ำได้เพื่ออัปเดตผลตัดสินของ Admin</p>
       <button class="btn pri" data-a="usbpkg" ${master.size ? '' : 'disabled'}>ดาวน์โหลดแพ็กเกจ</button>${S.msg.pkg ? `<div class="msg ${S.msg.pkg[1]}">${esc(S.msg.pkg[0])}</div>` : ''}</section>
     <section class="card grow"><span class="chip c-ok" style="align-self:flex-start">ขั้นที่ 2 · เครื่องยิง → คอม</span><h2>รับผลนับจากเครื่องยิง</h2>
-      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย · คัดลอกไฟล์ <span class="mono">AMS-ผลนับ-….xlsx</span> จาก Download ของเครื่องยิงมาไว้ที่คอม</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
+      <ol class="sub" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px"><li>เครื่องยิง: แท็บ ฉัน → <b>ส่งออกผลนับ (Report)</b></li><li>ต่อสาย · คัดลอกไฟล์ <span class="mono">AssetSync-ผลนับ-….xlsx</span> จาก Download ของเครื่องยิงมาไว้ที่คอม</li><li>เลือกไฟล์ด้านล่าง (เลือกหลายไฟล์ / หลายเครื่องพร้อมกันได้ · นำเข้าไฟล์เดิมซ้ำไม่นับซ้ำ)</li></ol>
       <div class="drop" data-drop="usb"><b>ลากไฟล์ผลนับจากเครื่องยิงมาวางตรงนี้</b><span class="sub">.xlsx ที่แอปส่งออก · เปิดดูใน Excel ได้ด้วย (ชีต ผลนับ)</span><button class="btn pri" data-a="pick" data-v="usb">เลือกไฟล์ (หลายไฟล์ได้)</button></div>
       ${S.msg.usb ? `<div class="msg ${S.msg.usb[1]}">${S.msg.usb[0].map(esc).join('<br>')}</div>` : ''}
       <div class="tbl-wrap"><table><thead><tr><th>คนนับ</th><th>เครื่อง</th><th>รายการ</th><th>ไฟล์ล่าสุด</th><th>รับเมื่อ</th></tr></thead><tbody>${Object.entries(info).map(([d, x]) => `<tr><td><b>${esc(x.by)}</b></td><td class="mono">${esc(d)}</td><td>${N(x.n)}</td><td>${esc(x.file)}</td><td>${fmtT(x.at)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">ยังไม่ได้รับไฟล์</td></tr>'}</tbody></table></div></section></div></main>`;
@@ -1224,7 +1224,7 @@ function webUsb() {
 const rowsOfMaster = () => [...master.values()].map(a => [a.code, a.name, a.ccName, a.cls, a.alt, a.raws, a.cc, a.wo]);
 async function exportPackage() {
   const pkg = { kind: 'ams-package', v: 1, at: Date.now(), meta: { ...meta, status: meta.status === 'closed' ? 'closed' : 'counting' }, rows: rowsOfMaster(), events: allEvents() };
-  return save(`AMS-แพ็กเกจ-${meta.id}.json`, new TextEncoder().encode(JSON.stringify(pkg)), 'application/json');
+  return save(`AssetSync-แพ็กเกจ-${meta.id}.json`, new TextEncoder().encode(JSON.stringify(pkg)), 'application/json');
 }
 async function importPackage(file) {
   let pkg; try { pkg = JSON.parse(await file.text()); } catch { return ['ไฟล์นี้ไม่ใช่แพ็กเกจ AMS (.json)', 'bad']; }
@@ -1250,7 +1250,7 @@ async function exportReport() {
   XLSX.utils.book_append_sheet(wb, ws, 'ผลนับ'); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(raw), '_ams');
   wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
   const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-  const r = await save(`AMS-ผลนับ-${S.user?.name || 'ไม่ระบุ'}-${dev}-${stamp}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const r = await save(`AssetSync-ผลนับ-${S.user?.name || 'ไม่ระบุ'}-${dev}-${stamp}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   if (r[1] === 'ok') LS.set('usbOut-' + meta.id, mine.length);
   return r;
 }
@@ -1280,7 +1280,7 @@ async function importReports(files) {
 function gateView() {
   const cfg = Store.auth.config(), msg = S.gateMsg ? `<div class="msg bad">${esc(S.gateMsg)}</div>` : '';
   const wrap = inner => `<div class="phone" style="min-height:100vh;justify-content:center"><div class="pbody" style="padding-bottom:40px">
-    <div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AMS Count</b><span>ระบบตรวจนับทรัพย์สิน · ${esc(VER())}</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
+    <div class="brand"><img src="logo.svg" alt="Innovative Passionately"><b>AssetSync</b><span>ระบบตรวจนับทรัพย์สิน · ${esc(VER())}</span></div>${inner}</div></div>${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}`;
   if (S.gate === 'boot') return wrap(`<div class="card"><p class="sub">กำลังเชื่อมต่อ…</p></div>`);
   if (S.gate === 'setup') return wrap(`<div class="card"><h2>ตั้งค่าการเชื่อมต่อ</h2><p class="sub">ใส่ค่าจาก Supabase → Project Settings → API (ทำครั้งเดียวต่อเครื่อง)</p>
     <label class="f">Project URL<input class="in mono" id="cfgUrl" value="${esc(cfg.url)}" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
@@ -1773,7 +1773,7 @@ async function exportFile(kind) {
   try {
     const wb = exportBook(kind), data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const nm = { main: 'ผลตรวจนับ', transfer: 'Transfer-AS02', writeoff: 'WriteOff-ABAVN' }[kind];
-    return await save(`AMS-${nm}${meta.status === 'closed' ? '' : '-ฉบับร่าง'}-${new Date().toISOString().slice(0, 10)}.xlsx`, new Uint8Array(data), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return await save(`AssetSync-${nm}${meta.status === 'closed' ? '' : '-ฉบับร่าง'}-${new Date().toISOString().slice(0, 10)}.xlsx`, new Uint8Array(data), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { return ['สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'bad']; }
 }
 async function stickerPdf(test) {
@@ -1789,7 +1789,7 @@ async function stickerPdf(test) {
     if (roll) { if (i) pdf.addPage([w, hgt], 'l'); pdf.addImage(img, 'PNG', 0, 0, w, hgt, undefined, 'FAST'); }
     else { const k = i % 24; if (i && !k) pdf.addPage(); pdf.addImage(img, 'PNG', (k % 3) * w, Math.floor(k / 3) * hgt, w, hgt, undefined, 'FAST'); }
   });
-  return await save(`AMS-สติ๊กเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
+  return await save(`AssetSync-สติ๊กเกอร์-${codes.length}ดวง.pdf`, pdf.output('blob'), 'application/pdf');
 }
 
 function afterRender() {

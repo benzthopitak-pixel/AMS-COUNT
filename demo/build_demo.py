@@ -36,7 +36,7 @@ html = html.replace('src="logo-mark.svg"', f'src="{b64("logo-mark.svg", "image/s
 mode_line = "  mode: window.AndroidBridge || new URLSearchParams(location.search).get('mode') === 'app' ? 'app' : 'web',"
 assert html.count(mode_line) == 1
 html = html.replace(mode_line, "  mode: location.hash === '#app' ? 'app' : 'web',")
-html = html.replace('<title>AMS Count</title>', '<title>AMS Count ตัวอย่าง</title>')
+html = html.replace('<title>AssetSync</title>', '<title>AssetSync ตัวอย่าง</title>')
 
 bar = """
 <style>

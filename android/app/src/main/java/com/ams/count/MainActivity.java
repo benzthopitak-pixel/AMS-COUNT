@@ -355,19 +355,19 @@ public class MainActivity extends Activity {
                     ContentValues v = new ContentValues();
                     v.put(MediaStore.MediaColumns.DISPLAY_NAME, safe);
                     v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AMS Count");
+                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AssetSync");
                     Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                     if (uri == null) return "ERR:สร้างไฟล์ไม่ได้";
                     try (OutputStream os = cr.openOutputStream(uri)) { os.write(bytes); }
-                    where = "Download/AMS Count";
+                    where = "Download/AssetSync";
                 } else {
                     File f;
                     try {
-                        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AMS Count");
+                        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AssetSync");
                         if (!dir.exists() && !dir.mkdirs()) throw new Exception("no access");
                         f = new File(dir, safe);
                         try (FileOutputStream os = new FileOutputStream(f)) { os.write(bytes); }
-                        where = "Download/AMS Count";
+                        where = "Download/AssetSync";
                     } catch (Exception noPublicAccess) {
                         // Android 7–9 ที่ยังไม่ให้สิทธิ์ storage: เก็บในโฟลเดอร์ของแอปแทน
                         f = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), safe);
