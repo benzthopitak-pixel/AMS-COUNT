@@ -550,7 +550,25 @@ function webView(c) {
   return webRounds(c);
 }
 /* ---------- 3 · summary reports: on screen, Excel and PDF ---------- */
-const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก']];
+const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)']];
+// custom report: group by any column of the imported file, pick the columns to print
+const RES_F = [['r:res', 'ผลการนับ'], ['r:cond', 'สภาพ'], ['r:area', 'CC ที่พบ'], ['r:areaName', 'ชื่อ CC ที่พบ'], ['r:by', 'ผู้นับ'], ['r:t', 'เวลานับ'], ['r:src', 'วิธีตรวจนับ'], ['r:qr', 'QR'], ['r:remark', 'Remark']];
+function crFields() { return (meta.headers || []).map((h, i) => ['h:' + i, h]).concat(RES_F); }
+function crConf() {
+  if (S.cr && S.cr.job === meta.id) return S.cr;
+  const H = meta.headers || [], find = re => H.findIndex(h => re.test(norm(h))), m0 = meta.map || {};
+  let g = find(/\bMAT|MATERIAL/); if (g < 0) g = find(/ASSET CLASS|^CLASS/); if (g < 0) g = m0.cc ?? 0;
+  const saved = LS.get('cr-' + meta.id, null);
+  S.cr = saved || { job: meta.id, group: 'h:' + g, mode: 'sum', status: 'all', cols: ['h:' + (m0.code ?? 0), 'h:' + (m0.name ?? 1), 'h:' + (m0.cc ?? 2), 'r:res', 'r:cond', 'r:by'].filter(x => !/:-1$/.test(x)) };
+  return S.cr;
+}
+function crVal(key, a, s2) {
+  const [k, f] = key.split(':');
+  if (k === 'h') return a.raws[0]?.[+f] ?? '';
+  const L = !s2 && lostOf(a.code);
+  return { res: s2 ? (isMoved(s2) ? 'พบ (ย้ายแผนก)' : isOther(s2) ? 'พบ (ยืมมา)' : 'พบ') : L ? 'สูญหาย' : 'ไม่พบ', cond: s2?.cond || '', area: s2 ? String(s2.area) : '', areaName: s2?.areaName || '', by: s2?.by || L?.by || '', t: s2 ? fmtT(s2.t) : '', src: s2 ? SRC[s2.src][0] : '', qr: !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', remark: s2?.remark || L?.remark || '' }[f] ?? '';
+}
+const crLabel = key => (crFields().find(([k]) => k === key) || [key, key])[1];
 function reportData(kind) {
   const { cur } = compute(), ccF = S.repCC || '', inCC = a => !ccF || String(a.cc) === ccF;
   if (kind === 'sum') {
@@ -560,6 +578,19 @@ function reportData(kind) {
     const tot = rows.reduce((t, r) => { for (let i = 2; i <= 8; i++) t[i] += r[i]; return t; }, ['รวม', '', 0, 0, 0, 0, 0, 0, 0]);
     tot.push(tot[2] ? Math.round(tot[3] / tot[2] * 1000) / 10 + '%' : '0%', ''); rows.push(tot);
     return { title: 'สรุปผลตรวจนับ', head: ['Cost Center', 'ชื่อ CC', 'ทั้งหมด', 'ตรวจแล้ว', 'ไม่พบ', 'สูญหาย', 'ย้ายแผนก', 'ชำรุด ฯลฯ', 'ต้องพิมพ์ QR', '% ตรวจแล้ว', 'ปิดงาน'], rows, w: [11, 22, 8, 8, 8, 8, 8, 9, 10, 9, 8], num: [2, 3, 4, 5, 6, 7, 8] };
+  }
+  if (kind === 'cr') {
+    const C = crConf(), stOk = (a, s2) => C.status === 'all' || (C.status === 'found' ? !!s2 : C.status === 'nf' ? !s2 : C.status === 'lost' ? !s2 && !!lostOf(a.code) : C.status === 'mv' ? !!s2 && isOther(s2) : true);
+    const list = [...master.values()].filter(a => counted(a) && inCC(a)).map(a => ({ a, s2: cur.get(a.code) })).filter(x => stOk(x.a, x.s2));
+    const gv = x => String(crVal(C.group, x.a, x.s2) || '(ว่าง)');
+    if (C.mode === 'sum') {
+      const by = new Map(); for (const x of list) { const k = gv(x), e = by.get(k) || [k, 0, 0, 0, 0, 0]; e[1]++; if (x.s2) { e[2]++; if (isOther(x.s2)) e[5]++; } else if (lostOf(x.a.code)) e[4]++; else e[3]++; by.set(k, e); }
+      const rows = [...by.values()].sort((x, y) => String(x[0]).localeCompare(String(y[0]), 'th', { numeric: true })).map(e => [...e, e[1] ? Math.round(e[2] / e[1] * 1000) / 10 + '%' : '0%']);
+      const tot = rows.reduce((t, r) => { for (let i = 1; i <= 5; i++) t[i] += r[i]; return t; }, ['รวม', 0, 0, 0, 0, 0]); tot.push(tot[1] ? Math.round(tot[2] / tot[1] * 1000) / 10 + '%' : '0%'); rows.push(tot);
+      return { title: 'สรุปตาม ' + crLabel(C.group), head: [crLabel(C.group), 'ทั้งหมด', 'ตรวจแล้ว', 'ไม่พบ', 'สูญหาย', 'ย้ายแผนก', '% ตรวจแล้ว'], rows, w: [30, 12, 12, 12, 12, 12, 12], num: [1, 2, 3, 4, 5, 6], totRow: true };
+    }
+    const cols = C.cols.filter(k => k !== C.group), rows = list.sort((x, y) => gv(x).localeCompare(gv(y), 'th', { numeric: true }) || x.a.code.localeCompare(y.a.code)).map(x => [gv(x), ...cols.map(k => crVal(k, x.a, x.s2))]);
+    return { title: 'รายการตาม ' + crLabel(C.group), head: [crLabel(C.group), ...cols.map(crLabel)], rows, w: [12, ...cols.map(k => /DESC|ชื่อ|NAME/i.test(crLabel(k)) ? 26 : 11)] };
   }
   if (kind === 'nf') {
     const rows = [...master.values()].filter(a => counted(a) && inCC(a) && !cur.has(a.code)).sort((x, y) => String(x.cc).localeCompare(String(y.cc)) || x.code.localeCompare(y.code))
@@ -575,15 +606,26 @@ function reportData(kind) {
     .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('คนนับ: ', ''), s2.flags.transferred ? 'โอนแล้ว (AS02)' : s2.rv.move === 'approved' ? 'อนุมัติแล้ว · รอโอน' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืม)' : 'รอ Admin อนุมัติ', s2.by]; });
   return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'คนนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
 }
+function crPanel() {
+  const C = crConf(), F = crFields(), H = F.filter(([k]) => k.startsWith('h:'));
+  const tog = (k, l) => `<button class="tog" aria-pressed="${C.cols.includes(k)}" data-a="crcol" data-v="${esc(k)}">${C.cols.includes(k) ? '✓ ' : ''}${esc(l)}</button>`;
+  return `<section class="card" style="gap:10px"><h2>เลือกสิ่งที่จะพิมพ์</h2><div class="fbar">
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">จัดกลุ่มตาม<select class="in" data-cr="group">${F.map(([k, l]) => `<option value="${esc(k)}" ${C.group === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">แบบ<select class="in" data-cr="mode"><option value="sum" ${C.mode === 'sum' ? 'selected' : ''}>สรุปจำนวนต่อกลุ่ม</option><option value="list" ${C.mode === 'list' ? 'selected' : ''}>รายการทั้งหมดเรียงตามกลุ่ม</option></select></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">รายการ<select class="in" data-cr="status">${[['all', 'ทั้งหมด'], ['found', 'ตรวจแล้ว'], ['nf', 'ยังไม่พบ'], ['lost', 'สูญหาย'], ['mv', 'ย้ายแผนก']].map(([k, l]) => `<option value="${k}" ${C.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+    ${C.mode === 'list' ? `<span class="sub">คอลัมน์ที่จะพิมพ์ (จากไฟล์ที่นำเข้า)</span><div class="chips">${H.map(([k, l]) => tog(k, l)).join('')}</div><span class="sub">ผลการตรวจนับ</span><div class="chips">${RES_F.map(([k, l]) => tog(k, l)).join('')}</div>` : ''}
+    <span class="sub">ระบบจำตัวเลือกไว้ให้ครั้งหน้า</span></section>`;
+}
 function webReport() {
   const tab = S.repTab || 'sum', d = reportData(tab), areas = (meta.areas || []).filter(a => !a.shared).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
   const n = Object.fromEntries(REP_TABS.map(([k]) => [k, k === tab ? d.rows.length : reportData(k).rows.length]));
   let h = `<main class="wrap"><div class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="sub">${esc(meta.name)} · อัปเดตสด${meta.status === 'closed' ? '' : ' · ฉบับร่าง (ยังไม่ปิดรอบ)'}</p><h1>3 · สรุปผล</h1></div>
     <div class="row"><button class="btn" data-a="repdl" data-v="xlsx">⬇ Excel</button><button class="btn pri" data-a="repdl" data-v="pdf">⬇ PDF</button></div></div>
-    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l} [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]</button>`).join('')}</div>
+    <div class="row" style="justify-content:space-between;align-items:center"><div class="pills">${REP_TABS.map(([k, l]) => `<button class="pill ${tab === k ? 'on' : ''}" data-a="reptab" data-v="${k}">${l}${k === 'cr' ? '' : ` [${k === 'sum' ? Math.max(0, n[k] - 1) + ' CC' : N(n[k])}]`}</button>`).join('')}</div>
     <select class="in" id="repCC" style="width:auto" aria-label="เลือก CC"><option value="">ทุก CC</option>${areas.map(a => `<option value="${esc(a.code)}" ${S.repCC === String(a.code) ? 'selected' : ''}>${esc(a.code)}${a.name !== String(a.code) ? ' · ' + esc(a.name) : ''}</option>`).join('')}</select></div>
+    ${tab === 'cr' ? crPanel() : ''}
     <section class="card"><h2>${esc(d.title)}${S.repCC ? ' · CC ' + esc(S.repCC) : ''} (${N(tab === 'sum' ? Math.max(0, d.rows.length - 1) : d.rows.length)})</h2><div class="tbl-wrap" style="max-height:66vh;overflow-y:auto"><table class="tfix"><colgroup>${d.w.map(x => `<col style="width:${x}%">`).join('')}</colgroup><thead><tr>${d.head.map((x, i) => `<th style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</th>`).join('')}</tr></thead><tbody>`;
-  for (const r of d.rows.slice(0, 1000)) { const tot = tab === 'sum' && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
+  for (const r of d.rows.slice(0, 1000)) { const tot = (tab === 'sum' || d.totRow) && r[0] === 'รวม'; h += `<tr style="${tot ? 'font-weight:700;background:#f4f5fa' : ''}">${r.map((x, i) => `<td class="${i === 0 && tab !== 'sum' ? 'mono' : ''}" title="${esc(x)}" style="${(d.num || []).includes(i) || (tab === 'sum' && i === 9) ? 'text-align:right' : ''}">${esc(x)}</td>`).join('')}</tr>`; }
   h += `</tbody></table></div>${d.rows.length > 1000 ? `<p class="sub">แสดง 1,000 จาก ${N(d.rows.length)} · ไฟล์ที่ดาวน์โหลดมีครบ</p>` : ''}${d.rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>`;
   if (S.msg.rep) h += `<div class="msg ${S.msg.rep[1]}">${esc(S.msg.rep[0])}</div>`;
   return h + `</main>`;
@@ -613,7 +655,7 @@ async function reportFile(kind, fmt) {
     let x = M; d.head.forEach((t, i) => { ctx.fillText(cut(t, cols[i] - 2 * K), x + K, y + rowH / 2); x += cols[i]; }); y += rowH;
     ctx.font = `400 ${fs}px Prompt, sans-serif`;
     for (const r of d.rows.slice(pg * perPage, (pg + 1) * perPage)) {
-      const tot = kind === 'sum' && r[0] === 'รวม'; if (tot) { ctx.fillStyle = '#f4f5fa'; ctx.fillRect(M, y, W - 2 * M, rowH); ctx.font = `700 ${fs}px Prompt, sans-serif`; }
+      const tot = (kind === 'sum' || d.totRow) && r[0] === 'รวม'; if (tot) { ctx.fillStyle = '#f4f5fa'; ctx.fillRect(M, y, W - 2 * M, rowH); ctx.font = `700 ${fs}px Prompt, sans-serif`; }
       ctx.fillStyle = '#121826'; x = M;
       r.forEach((t, i) => { const right = (d.num || []).includes(i) || (kind === 'sum' && i === 9); ctx.textAlign = right ? 'right' : 'left'; ctx.fillText(cut(t, cols[i] - 2 * K), right ? x + cols[i] - K : x + K, y + rowH / 2); x += cols[i]; });
       ctx.textAlign = 'left'; ctx.strokeStyle = '#eaecf0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(M, y + rowH); ctx.lineTo(W - M, y + rowH); ctx.stroke(); y += rowH;
@@ -976,7 +1018,7 @@ function drawSticker(cv, code) {
 function appView(c) {
   let h = `<div class="phone">`;
   if (!S.user) h += appLogin();
-  else if (!meta || !master.size) h += `<div class="pbody"><div class="card"><h2>ยังไม่มีภารกิจ</h2><p class="sub">${!meta ? 'Admin ยังไม่สร้างรอบนับ' : 'Admin กำลังเตรียมรอบ ยังไม่ปล่อยภารกิจ'} · หน้านี้อัปเดตเองเมื่อพร้อม</p></div>${appMeBlock()}</div>`;
+  else if (!meta || !master.size) h += `<div class="pbody"><div class="card"><h2>ยังไม่มีงาน</h2><p class="sub">${!meta ? 'Admin ยังไม่สร้างรอบนับ' : 'Admin กำลังเตรียมรอบ ยังไม่ปล่อยภารกิจ'} · หน้านี้อัปเดตเองเมื่อพร้อม</p></div>${appMeBlock()}</div>`;
   else if (S.app === 'home') h += appHome(c);
   else if (S.app === 'area') h += appArea();
   else if (S.app === 'scan') h += appScan();
@@ -985,7 +1027,7 @@ function appView(c) {
   h += `</div>`;
   if (S.user && meta && master.size) {
     const B = (v, l) => `<button class="${S.app === v ? 'on' : ''}" data-a="app" data-v="${v}">${l}</button>`;
-    h += `<nav class="bnav" aria-label="เมนูแอป"><div class="bnav-in">${B('home', 'ภารกิจ')}${B('area', 'พื้นที่')}<button class="fab" data-a="app" data-v="scan" aria-label="สแกน">สแกน</button>${B('feed', 'ผลนับ')}${B('me', 'ฉัน')}</div></nav>`;
+    h += `<nav class="bnav" aria-label="เมนูแอป"><div class="bnav-in">${B('home', 'งาน')}${B('area', 'พื้นที่')}<button class="fab" data-a="app" data-v="scan" aria-label="สแกน">สแกน</button>${B('feed', 'ผลนับ')}${B('me', 'ฉัน')}</div></nav>`;
   }
   if (S.updReady && S.mode === 'app') h += `<div style="position:fixed;left:12px;right:12px;top:calc(8px + env(safe-area-inset-top, 0px));z-index:35;max-width:440px;margin:0 auto"><div class="card dark" style="flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:#121826;color:#fff"><span style="flex:1;font-size:14px">มีหน้าจอเวอร์ชันใหม่ (${esc(S.updReady)})</span><button class="btn sm lime" data-a="applyupd">อัปเดตเลย</button></div></div>`;
   if (S.item) h += itemSheet(S.item);
@@ -1401,6 +1443,7 @@ document.addEventListener('click', async e => {
     }
     case 'unlost': pushEvent({ k: 'edit', code: v, round: meta.id, lost: false }); flash('กลับเป็นรอตรวจแล้ว'); break;
     case 'reptab': S.repTab = v; S.msg.rep = null; break;
+    case 'crcol': { const C = crConf(); C.cols = C.cols.includes(v) ? C.cols.filter(x => x !== v) : [...C.cols, v]; LS.set('cr-' + meta.id, C); break; }
     case 'repdl': S.msg.rep = ['กำลังสร้างไฟล์…', 'ok']; render(); S.msg.rep = await reportFile(S.repTab || 'sum', v); break;
     case 'askclose': S.confirmClose = v; break;
     case 'noclose': S.confirmClose = null; break;
@@ -1416,7 +1459,7 @@ document.addEventListener('click', async e => {
     case 'cancelimport': S.imp = null; break;
     case 'adduser': { const n = $('#newUser').value.trim(); if (!n) return; const team = [...(meta.team || [])]; if (!team.some(u => u.name === n)) team.push({ name: n, role: $('#newRole').value }); await saveMeta({ ...meta, team }); return; }
     case 'addarea': { const n = $('#newArea').value.trim(); if (!n) return; const areas = [...(meta.areas || []), { code: 'S' + Date.now().toString(36), name: n, count: 0, assignee: null, shared: true }]; await saveMeta({ ...meta, areas }); return; }
-    case 'release': await saveMeta({ ...meta, status: 'counting', releasedAt: Date.now() }); S.web = 'live'; flash('ปล่อยภารกิจแล้ว · เปิดแท็บ "เครื่องยิง (แอป)" เพื่อเริ่มนับ'); return;
+    case 'release': await saveMeta({ ...meta, status: 'counting', releasedAt: Date.now() }); S.web = 'live'; flash('ปล่อยงานแล้ว · เปิดแท็บ "เครื่องยิง (แอป)" เพื่อเริ่มนับ'); return;
     case 'livearea': S.liveArea = S.liveArea === v ? null : v; break;
     case 'opencc': S.web = 'cc'; S.ccSel = String(v); S.ccTab = t.dataset.t || 'all'; S.ccPick = null; S.ccItemQ = ''; S.confirmUndo = null; break;
     case 'cctab': S.ccTab = v; S.ccPick = null; break;
@@ -1534,6 +1577,7 @@ document.addEventListener('change', async e => {
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
   if (t.id === 'jobSel') { pickJob(t.value); render(); }
   if (t.id === 'repCC') { S.repCC = t.value; render(); }
+  if (t.dataset.cr) { const C = crConf(); C[t.dataset.cr] = t.value; LS.set('cr-' + meta.id, C); render(); }
   if (t.dataset.ccf) { S.ccF = { ...(S.ccF || {}), [t.dataset.ccf]: t.value }; render(); }
 
 });
