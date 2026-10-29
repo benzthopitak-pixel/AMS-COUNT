@@ -375,7 +375,7 @@ async function connect() {
     const m = s.exists ? s.data() : null;
     const roundChanged = (m?.id || null) !== (meta?.id || null);
     if (m && m.ver && m.ver !== LS.get('masterVer', null)) { flash('กำลังโหลดทะเบียน…'); await loadMaster(m); }
-    meta = m; LS.set('meta', m); if (roundChanged) { loadMine(); evRound = null; }
+    meta = m; LS.set('meta', m); if (roundChanged) { loadMine(); evRound = null; S.area = null; LS.set('area', null); S.cards = []; }
     subscribeEvents(); online = true; _cache = null; render(); if (dirty.size) flush();
   }, () => { online = false; paintSync(); });
 }
@@ -563,15 +563,17 @@ function webLive(c) {
     <button class="kpi" data-a="opencc" data-v="*" data-t="left" style="border:none;text-align:left"><span>รอตรวจ</span><b style="color:var(--warn-ink)">${N(T.left)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="move" style="border:none;text-align:left"><span>ต้องย้าย CC</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>${decAll ? `รอตัดสิน ${decAll} เรื่อง →` : 'ดูรายการ →'}</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ดูรายการ →</span></button></div>`;
-  h += `<div class="row"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><h2>Cost Center (${rows.length})</h2>
+  h += `<div class="row"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
     <div class="row" style="align-items:center"><input class="in" id="ccQ" value="${esc(S.ccQ || '')}" placeholder="ค้นหา CC" style="width:160px" aria-label="ค้นหา Cost Center"><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Cost Center</th><th>ทั้งหมด</th><th>ตรวจแล้ว</th><th>เหลือ</th><th style="min-width:140px">ความคืบหน้า</th><th>ต้องย้าย CC</th><th>ไม่อยู่ในทะเบียน</th><th></th></tr></thead><tbody>`;
+    <div class="grid">`;
   for (const x of rows) {
-    const p = x.total ? Math.round(x.found / x.total * 100) : 0, mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
-    h += `<tr class="click" data-a="opencc" data-v="${esc(x.code)}"><td><b class="mono">${esc(x.code)}</b>${x.name !== String(x.code) ? `<br><span class="sub">${esc(x.name)}</span>` : ''}</td><td>${N(x.total)}</td><td style="color:var(--ok-ink);font-weight:600">${N(x.found)}</td><td style="color:var(--warn-ink);font-weight:600">${N(x.total - x.found)}</td>
-      <td><div class="bar" aria-label="${p}%"><i style="width:${p}%;background:${p >= 100 ? 'var(--ok)' : 'var(--blue)'}"></i></div><span class="sub">${p}%</span></td><td>${mv ? `<span class="chip c-oth">${mv}</span>` : '<span class="sub">—</span>'}${d ? ` <span class="chip c-warn">รอตัดสิน ${d}</span>` : ''}</td><td>${u ? `<span class="chip c-bad">${u}</span>` : '<span class="sub">—</span>'}</td><td class="sub" style="white-space:nowrap">เปิด →</td></tr>`;
+    const r = x.total ? x.found / x.total : 0, p = Math.round(r * 100), mv = (out.get(String(x.code)) || 0) + x.other, d = dec.get(String(x.code)) || 0, u = unkHere.get(String(x.code)) || 0;
+    const bg = r >= 1 ? '#12b76a' : r >= .66 ? '#6ce9a6' : r >= .33 ? '#a6f4c5' : r > 0 ? '#d1fadf' : '#f2f4f7';
+    const fg = r >= 1 ? '#ffffff' : r > 0 ? '#053321' : '#344054';
+    const flags = [mv ? `<span class="chip c-oth">ย้าย CC ${mv}</span>` : '', d ? `<span class="chip c-warn">รอตัดสิน ${d}</span>` : '', u ? `<span class="chip c-bad">นอกทะเบียน ${u}</span>` : ''].join('');
+    h += `<button class="tile click" data-a="opencc" data-v="${esc(x.code)}" title="เปิดรายละเอียด ${esc(x.code)}" style="background:${bg};color:${fg};cursor:pointer"><b class="mono">${esc(x.code)}</b>${x.name !== String(x.code) ? `<small style="opacity:.85">${esc(x.name)}</small>` : ''}<span class="p">${p}%</span><small>ตรวจ ${N(x.found)}/${N(x.total)} · เหลือ ${N(x.total - x.found)}</small>${flags ? `<span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${flags}</span>` : ''}</button>`;
   }
-  h += `</tbody></table></div>${rows.length ? '' : '<p class="sub">ไม่พบ CC</p>'}</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
+  h += `</div>${rows.length ? '' : '<p class="sub">ไม่พบ CC</p>'}</section><aside class="side" style="display:flex;flex-direction:column;gap:12px">`;
   const devs = new Map(); for (const e of compute().evs) { const d2 = devs.get(e.dev) || { by: e.by, n: 0, t: 0 }; d2.n++; d2.t = Math.max(d2.t, e.t); d2.by = e.by; devs.set(e.dev, d2); }
   h += `<section class="card"><h2>ทีม / เครื่อง</h2>${[...devs.entries()].map(([d2, x]) => `<div class="row" style="align-items:center"><span class="dot" style="background:var(--orange);color:#1d0e00">${esc((x.by || '?').slice(0, 1))}</span><span style="flex:1"><b>${esc(x.by)}</b><br><span class="sub">เครื่อง ${esc(d2)}${d2 === dev ? ' (เครื่องนี้)' : ''} · ${N(x.n)} รายการ · ล่าสุด ${hm(x.t)}</span></span></div>`).join('') || '<p class="sub">ยังไม่มีใครสแกน</p>'}</section>`;
   const last = [...cur.values()].sort((a, b) => b.t - a.t).slice(0, 8);
@@ -806,7 +808,10 @@ function areaPicker() {
   return `<div class="sheetbg" data-a="closepick"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between"><h2>ตอนนี้คุณอยู่ที่ไหน?</h2><button class="btn sm" data-a="closepick">ปิด</button></div><p class="sub">เลือกพื้นที่ที่ยืนนับจริง ไม่ใช่แผนกในทะเบียน</p>
     ${(meta.areas || []).map(a => areaCard(a, st.get(String(a.code)))).join('')}</div></div>`;
 }
+// the department chosen last time must belong to the current round, otherwise ask again
+function checkArea() { if (S.area && !(meta?.areas || []).some(a => String(a.code) === String(S.area.code))) { S.area = null; LS.set('area', null); } return S.area; }
 function appArea() {
+  checkArea();
   if (!S.area) return `<div class="pbody"><div class="card"><h2>ยังไม่ได้เลือกพื้นที่</h2><button class="btn pri" data-a="areapick">เลือกพื้นที่ที่อยู่ตอนนี้</button></div></div>`;
   const { cur, recount } = compute(), code = String(S.area.code);
   const left = S.area.shared ? [] : [...master.values()].filter(a => counted(a) && String(a.cc) === code && !cur.has(a.code));
@@ -829,9 +834,9 @@ function appArea() {
   return h;
 }
 function appScan() {
-  if (!S.area) return appArea();
+  if (!checkArea()) { S.app = 'area'; return appArea(); }
   const closed = meta.status === 'closed', { cur } = compute(), st = areaStats().get(String(S.area.code));
-  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#c7cbd4">กำลังนับที่</span><br><b>${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:var(--lime);font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span></div>
+  let h = `<div class="areahead dark"><div class="row" style="align-items:center"><span style="flex:1"><span style="font-size:12px;color:#c7cbd4">กำลังนับที่ (แผนกที่ยืนอยู่จริง)</span><br><b style="font-size:20px">${esc(S.area.name)}${S.room ? ' · ' + esc(S.room) : ''}</b></span><span style="color:var(--lime);font-weight:600">${S.area.shared ? '' : `${st?.found || 0}/${st?.total || 0}`}</span><button class="btn sm lime" data-a="areapick" style="margin-left:8px">เปลี่ยน</button></div>
     <form class="scanbox" id="scanForm" autocomplete="off"><b style="color:var(--lime)">${closed ? 'รอบนี้ปิดแล้ว' : S.manual ? 'พิมพ์รหัสแล้วกด Enter' : 'พร้อมสแกน · กดปุ่มยิงข้างเครื่อง'}</b>
     <input id="scanIn" ${S.manual ? 'inputmode="text"' : 'inputmode="none"'} placeholder="${S.manual ? 'เลข Asset' : 'ยิงสติ๊กเกอร์ QR / บาร์โค้ด'}" aria-label="รหัสที่สแกน" enterkeyhint="done" ${closed ? 'disabled' : ''}>
     <span style="font-size:12px;color:#c7cbd4">ยิงต่อได้เลย ไม่ต้องกดบันทึก · บนคอมพิมพ์รหัสแล้ว Enter ได้</span></form></div><div class="pbody">`;
@@ -845,7 +850,7 @@ function appScan() {
         <div class="row"><input class="in" id="un-${esc(card.code)}" value="${esc(s.uname)}" placeholder="ชื่อ / ลักษณะของ" style="flex:1"><button class="btn sm" data-a="uname" data-v="${esc(card.code)}">บันทึก</button></div><div class="row"><button class="btn sm red" data-a="undo" data-v="${esc(card.code)}">ข้าม (สแกนผิด)</button></div></div>`;
     } else if (isOther(s)) {
       const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="dec" data-d="${d}" data-v="${esc(card.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
-      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ของ ${esc(a.ccName)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)} · อยู่ที่นี่เพราะ?</span><div class="chips">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
+      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ทะเบียน CC ${esc(a.cc)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)}</span><span class="sub" style="color:var(--oth-ink)">ทะเบียนอยู่ CC ${esc(a.cc)} แต่พบที่ ${esc(s.areaName)} (แผนกที่คุณเลือก) · อยู่ที่นี่เพราะ?</span><div class="chips">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
     } else {
       h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span></span>${tick}</button>`;
     }
