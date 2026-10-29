@@ -173,6 +173,7 @@ td .chip { white-space: nowrap; }
 .dupbg { position: fixed; inset: 0; z-index: 40; background: rgb(18 24 38 / .55); display: flex; align-items: center; justify-content: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
 .duppop { width: 100%; max-width: 340px; background: var(--card); border-radius: 24px; padding: 22px 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; border-top: 8px solid var(--warn); }
 .duppop b#dupH { font-size: 24px; color: var(--warn-ink); }
+.duppop.oth { border-top-color: var(--oth); } .duppop.oth b#othH { font-size: 22px; color: var(--oth-ink); } .duppop.oth .dupicon { background: var(--oth); color: #fff; }
 .dupicon { width: 56px; height: 56px; border-radius: 50%; background: var(--warn); color: #1d0e00; font-size: 32px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -499,13 +500,14 @@ function importBlock() {
 
 /* ---------- import helpers ---------- */
 function guess(headers, words, rows) {
-  const hits = []; for (const w of words) headers.forEach((h, i) => { if (norm(h).includes(w) && !hits.includes(i)) hits.push(i); });
+  const skip = h => /^COUNT |NAME/.test(norm(h)) && !words.some(w => w.includes('NAME'));   // 'Count Cost Center' is an answer column, not the register
+  const hits = []; for (const w of words) headers.forEach((h, i) => { if (norm(h).includes(w) && !hits.includes(i) && !skip(h)) hits.push(i); });
   if (rows) { const f = hits.find(i => rows.filter(r => String(r[i] ?? '').trim()).length >= rows.length / 2); if (f !== undefined) return f; }
   return hits.length ? hits[0] : -1;
 }
 function detectTpl(h) {
   const find = f => h.findIndex(f), ccNew = find(x => norm(x).replace(/\s/g, '').includes('CC(NEW)'));
-  return { sticker: find(x => x.includes('ติดสติ') && !x.includes('ยังไม่')), nosticker: find(x => x.includes('ยังไม่ติด')), note: find(x => x.includes('หมายเหตุ')), status: find(x => norm(x) === 'STATUS'), ccNew, ccNewName: ccNew >= 0 && ccNew + 1 < h.length ? ccNew + 1 : -1 };
+  return { sticker: find(x => x.includes('ติดสติ') && !x.includes('ยังไม่')), nosticker: find(x => x.includes('ยังไม่ติด')), note: find(x => x.includes('หมายเหตุ')), status: find(x => norm(x) === 'STATUS'), chk: find(x => norm(x) === 'STATUS CHECK'), stA: find(x => norm(x) === 'STATUS ASSET'), scanDate: find(x => norm(x) === 'SCAN DATE'), cntCC: find(x => norm(x) === 'COUNT COST CENTER'), cntLoc: find(x => norm(x) === 'COUNT LOCATION'), rmk: find(x => norm(x) === 'REMARK'), notPlan: find(x => norm(x) === 'ASSET NOT IN PLAN'), ccNew, ccNewName: ccNew >= 0 && ccNew + 1 < h.length ? ccNew + 1 : -1 };
 }
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const cellStr = v => typeof v === 'string' ? v.trim() : v == null ? '' : v;   // numbers stay numbers, dates arrive as yyyy-mm-dd
@@ -537,7 +539,7 @@ function prepareImport(name) {
   const h = p.headers, b = p.rows, ex = h.findIndex(x => norm(x) === 'ASSET');
   Object.assign(S.imp, { sheet: name, headers: h, rows: b, fmts: p.fmts, widths: p.widths, err: null, tpl: detectTpl(h), map: {
     code: ex >= 0 ? ex : Math.max(0, guess(h, ['ASSET', 'รหัส', 'CODE'])), alt: guess(h, ['INVENTORY'], b), name: guess(h, ['DESC', 'ชื่อ', 'รายการ', 'NAME']),
-    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER'], b), cls: guess(h, ['ASSET CLASS', 'CLASS']) } });
+    ccName: guess(h, ['CC NAME', 'COST CENTER NAME', 'แผนก'], b), cc: guess(h, ['COST CTR', 'COST CENTER', 'COST CETER', 'COST CENTRE'].concat(h.some(x => norm(x) === 'CC') ? ['CC'] : []), b), cls: guess(h, ['ASSET CLASS', 'CLASS']) } });
 }
 function importStats() {
   const I = S.imp, m = I.map, codes = new Map(); let wo = 0;
@@ -793,6 +795,12 @@ function appView(c) {
   if (S.item) h += itemSheet(S.item);
   if (S.areaPick) h += areaPicker();
   if (S.search && !S.item) h += searchSheet();
+  if (S.othPop && S.mode === 'app' && !S.dupPop) { const a = master.get(S.othPop.code), s = compute().cur.get(S.othPop.code);
+    if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
+      h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:#f4f5fa"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
+        <span class="sub">บันทึกว่าพบแล้ว · อยู่ที่นี่เพราะ?</span><div class="chips" style="justify-content:center">${D('moved', 'ย้ายมาแล้ว')}${D('borrowed', 'ยืมมา')}${D('unsure', 'ไม่แน่ใจ')}</div>
+        <button class="btn dark" data-a="closeoth" style="align-self:stretch">ตกลง</button></div></div>`; } }
   if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
     h += `<div class="dupbg" data-a="closedup" role="alertdialog" aria-labelledby="dupH"><div class="duppop"><span class="dupicon" aria-hidden="true">!</span><b id="dupH">ตรวจนับซ้ำ</b><span class="mono" style="font-size:20px;font-weight:700">${esc(d.code)}</span>${a ? `<span>${esc(a.name)}</span>` : ''}<span class="sub">นับไปแล้วโดย ${esc(d.by)} · ${hm(d.t)}${d.where ? ' · ' + esc(d.where) : ''}</span><button class="btn dark" data-a="closedup" style="align-self:stretch">ตกลง</button></div></div>`; }
   return h;
@@ -811,19 +819,21 @@ function appHome(c) {
   let h = `<div class="pbody"><div class="row" style="align-items:center"><span class="dot" style="width:44px;height:44px;background:var(--orange);color:#1d0e00">${esc(S.user.name.slice(0, 1))}</span><span style="flex:1"><span class="sub">สวัสดี</span><br><b style="font-size:18px">${esc(S.user.name)}</b></span></div>`;
   if (meta.status === 'closed') h += `<div class="msg ok">Admin ปิดรอบนับแล้ว ขอบคุณที่ช่วยนับ</div>`;
   h += `<div class="hero"><span style="font-size:13px;color:#d6ddff">${esc(meta.name)}</span><div><b style="font-size:42px;line-height:1">${N(T.found)}</b> <span style="font-size:17px;color:#d6ddff">/ ${N(T.total)} รายการ</span></div><div class="bar" style="background:#2e46c9"><i style="width:${T.total ? T.found / T.total * 100 : 0}%;background:var(--lime)"></i></div><span style="font-size:13px;color:#d6ddff">ทั้งทีมนับไป ${T.total ? Math.round(T.found / T.total * 100) : 0}% · คุณนับ ${N(mineN)} รายการ</span></div>
-    <b style="font-size:18px">เลือกแผนกที่จะนับ</b>`;
+    <b style="font-size:18px">เลือก Cost Center ที่จะนับ</b><input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">`;
   const list = (meta.areas || []).slice().sort((a, b) => { const pa = st.get(String(a.code)), pb = st.get(String(b.code)); const da = pa && pa.total && pa.found >= pa.total, dbb = pb && pb.total && pb.found >= pb.total; return (da - dbb) || a.name.localeCompare(b.name); });
-  for (const a of list) h += areaCard(a, st.get(String(a.code)));
+  for (const a of areaFilter(list)) h += areaCard(a, st.get(String(a.code)));
   return h + `</div>`;
 }
 function areaCard(a, x) {
   const p = x && x.total ? x.found / x.total : 0;
-  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><b style="font-size:17px">${esc(a.name)}</b><span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · เจอของแผนกอื่น ${x.other}` : ''}</span></button>`;
+  return `<button class="card" data-a="setarea" data-v="${esc(a.code)}" style="border:none;text-align:left;color:inherit;gap:8px"><div class="row" style="justify-content:space-between"><span style="display:flex;flex-direction:column;min-width:0"><b style="font-size:17px">${esc(a.name)}</b>${!a.shared && a.name !== String(a.code) ? `<span class="sub mono">CC ${esc(a.code)}</span>` : ''}</span><span class="chip ${p >= 1 ? 'c-ok' : p > 0 ? 'c-warn' : 'c-gray'}">${a.shared ? 'ส่วนกลาง' : Math.round(p * 100) + '%'}</span></div>${a.shared ? '' : `<div class="bar"><i style="width:${p * 100}%;background:var(--ok)"></i></div>`}<span class="sub">${a.shared ? `สแกนแล้ว ${x?.here || 0}` : `${N(x?.found || 0)} / ${N(x?.total || 0)}`}${x?.other ? ` · เจอของแผนกอื่น ${x.other}` : ''}</span></button>`;
 }
+const areaFilter = list => { const q = norm(S.areaQ || ''); return q ? list.filter(a => norm(a.name).includes(q) || norm(a.code).includes(q)) : list; };
 function areaPicker() {
   const st = areaStats();
-  return `<div class="sheetbg" data-a="closepick"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between"><h2>ตอนนี้คุณอยู่ที่ไหน?</h2><button class="btn sm" data-a="closepick">ปิด</button></div><p class="sub">เลือกพื้นที่ที่ยืนนับจริง ไม่ใช่แผนกในทะเบียน</p>
-    ${(meta.areas || []).map(a => areaCard(a, st.get(String(a.code)))).join('')}</div></div>`;
+  return `<div class="sheetbg" data-a="closepick"><div class="sheet" data-stop="1"><div class="row" style="justify-content:space-between"><h2>ตอนนี้คุณอยู่ที่ไหน?</h2><button class="btn sm" data-a="closepick">ปิด</button></div><p class="sub">เลือกชื่อ Cost Center ที่ยืนนับอยู่จริง · ยิงของ CC ไหนก็ได้ ถ้าไม่ตรงจะเด้งเตือน</p>
+    <input class="in" id="areaQ" value="${esc(S.areaQ || '')}" placeholder="ค้นหาชื่อ หรือรหัส CC" aria-label="ค้นหา Cost Center">
+    ${areaFilter(meta.areas || []).map(a => areaCard(a, st.get(String(a.code)))).join('') || '<p class="sub">ไม่พบ CC</p>'}</div></div>`;
 }
 // the department chosen last time must belong to the current round, otherwise ask again
 function checkArea() { if (S.area && !(meta?.areas || []).some(a => String(a.code) === String(S.area.code))) { S.area = null; LS.set('area', null); } return S.area; }
@@ -1126,11 +1136,12 @@ function doScan(raw) {
   const code = resolve(raw); if (!code || !S.area) return;
   if (meta.status === 'closed') { flash('รอบนี้ปิดแล้ว'); return; }
   const prev = compute().cur.get(code);
-  if (prev) { beep('dup'); S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return; }
-  S.dupPop = null;
+  if (prev) { beep('dup'); S.othPop = null; S.dupPop = { code, by: prev.by, t: prev.t, where: prev.areaName }; clearTimeout(S.dupT); S.dupT = setTimeout(() => { S.dupPop = null; render(); }, 3500); render(); return; }
+  S.dupPop = null; S.othPop = null;
   pushEvent({ k: 'scan', code, round: meta.id, area: String(S.area.code), areaName: S.area.name, shared: !!S.area.shared, room: S.room, ns: S.manual, src });
   const s = compute().cur.get(code);
   beep(!master.has(code) ? 'unk' : isOther(s) ? 'oth' : 'ok');
+  if (master.has(code) && isOther(s)) S.othPop = { code };
   S.cards.unshift({ code }); render();
 }
 function edit(code, fields) { pushEvent({ k: 'edit', code, round: meta.id, ...fields }); render(); }
@@ -1207,7 +1218,7 @@ document.addEventListener('click', async e => {
     case 'mempin': { const pin = ($('#pin-' + v)?.value || '').trim(); const u = S.team.find(x => x.id === v); if (!/^\d{4,8}$/.test(pin)) { flash('PIN ต้องเป็นตัวเลข 4–8 หลัก'); return; } await teamOp(() => Store.auth.setPin(v, u.code, pin), `ตั้ง PIN ใหม่ให้ ${u.name} แล้ว`); return; }
     case 'areapick': S.areaPick = true; break;
     case 'closepick': S.areaPick = false; break;
-    case 'setarea': { const ar = (meta.areas || []).find(x => String(x.code) === v); S.area = { code: String(ar.code), name: ar.name, shared: !!ar.shared }; LS.set('area', S.area); S.areaPick = false; S.app = 'area'; S.areaTab = 'left'; break; }
+    case 'setarea': { S.areaQ = ''; const ar = (meta.areas || []).find(x => String(x.code) === v); S.area = { code: String(ar.code), name: ar.name, shared: !!ar.shared }; LS.set('area', S.area); S.areaPick = false; S.app = 'area'; S.areaTab = 'left'; break; }
     case 'areatab': S.areaTab = v; break;
     case 'openitem': S.item = v; break;
     case 'closeitem': S.item = null; break;
@@ -1222,6 +1233,8 @@ document.addEventListener('click', async e => {
     case 'srchall': S.search.all = v === '1'; break;
     case 'srchsave': { const q = S.search.q.trim(); if (!q) return; S.search = null; S.manual = true; doScan(q); S.manual = false; return; }
     case 'closedup': clearTimeout(S.dupT); S.dupPop = null; break;
+    case 'closeoth': S.othPop = null; break;
+    case 'popdec': edit(v, { dec: t.dataset.d }); S.othPop = null; render(); return;
     case 'manual': S.manual = !S.manual; break;
     case 'feedf': S.feedF = v; break;
     case 'verify': await verify(); break;
@@ -1268,7 +1281,8 @@ document.addEventListener('change', async e => {
   if (t.id === 'ccSort') { S.ccSort = t.value; render(); }
 
 });
-document.addEventListener('input', e => { if (e.target.id === 'ccQ' || e.target.id === 'ccItemQ') { S[e.target.id] = e.target.value; clearTimeout(window._cq); window._cq = setTimeout(render, 200); return; } if (e.target.id === 'srchIn' && S.search) { S.search.q = e.target.value; clearTimeout(window._sq); window._sq = setTimeout(render, 150); return; } if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
+document.addEventListener('input', e => { if (e.target.id === 'areaQ') { S.areaQ = e.target.value; clearTimeout(window._aq); window._aq = setTimeout(() => { render(); const i = $('#areaQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); return; }
+  if (e.target.id === 'ccQ' || e.target.id === 'ccItemQ') { S[e.target.id] = e.target.value; clearTimeout(window._cq); window._cq = setTimeout(render, 200); return; } if (e.target.id === 'srchIn' && S.search) { S.search.q = e.target.value; clearTimeout(window._sq); window._sq = setTimeout(render, 150); return; } if (e.target.id === 'stPaste') { S.stPaste = e.target.value; clearTimeout(window._sp); window._sp = setTimeout(render, 400); } });
 document.addEventListener('submit', e => { if (e.target.id === 'loginForm') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'scanForm') { e.preventDefault(); const i = $('#scanIn'); const v = i.value; i.value = ''; doScan(v); setTimeout(() => $('#scanIn')?.focus(), 0); } });
 // ---------- scanner input ----------
 // 1) Android app receives the scan as an Intent (CipherLab "Intent" output) → window.AMSScan(code)
@@ -1309,7 +1323,7 @@ document.addEventListener('focusout', () => { if (S.mode === 'app' && S.app === 
 
 // Android back button: close sheet → go to home tab → leave app
 window.AMSBack = () => {
-  if (S.dupPop) { S.dupPop = null; render(); return true; }
+  if (S.dupPop || S.othPop) { S.dupPop = null; S.othPop = null; render(); return true; }
   if (S.item || S.areaPick || S.search) { if (S.item) S.item = null; else { S.areaPick = false; S.search = null; } render(); return true; }
   if (S.mode === 'app' && S.user && S.app !== 'home') { S.app = 'home'; render(); return true; }
   if (S.mode === 'web' && S.web !== 'rounds' && S.web !== 'live') { S.web = isLead() ? 'rounds' : 'live'; render(); return true; }
@@ -1343,7 +1357,7 @@ async function doImport() {
   const woCount = rows.filter(r => r[7]).length;
   const ccNames = Object.fromEntries(Object.entries(nmSeen).filter(([, v]) => v.size > 1).map(([k, v]) => [k, [...v]]));
   S.imp = null; flash('กำลังนำเข้า…');
-  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, areas, woCount, ccNames });
+  await saveMaster(rows, { ...meta, fileName: I.fileName, sheet: I.sheet, headers: I.headers, colFmts: I.fmts, colWidths: I.widths, tpl: I.tpl, map: m, areas, woCount, ccNames });
   if (fresh) subscribeEvents();
   S.web = 'live';
   flash(`นำเข้าแล้ว ${N(rows.length)} รายการ · ${areas.length} แผนก${Object.keys(ccNames).length ? ` · ⚠ ชื่อแผนกไม่ตรงกัน ${Object.keys(ccNames).length} CC (ยึดรหัส CC)` : ''}`);
@@ -1363,7 +1377,7 @@ async function verify() {
 /* ================= exports ================= */
 const toCell = v => typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && !/^-?0\d/.test(v) && v.length < 16 ? Number(v) : v;
 function exportBook(kind) {
-  const { cur } = compute(), wb = XLSX.utils.book_new(), h = meta.headers || [], t = meta.tpl || {}, draft = meta.status !== 'closed', wo = meta.leftChoice !== 'recount';
+  const { cur } = compute(), wb = XLSX.utils.book_new(), h = meta.headers || [], t = meta.tpl || {}, m0 = meta.map || { code: Math.max(0, h.findIndex(x => norm(x) === 'ASSET')), name: -1 }, draft = meta.status !== 'closed', wo = meta.leftChoice !== 'recount';
   const dataSheetName = String(meta.sheet || 'ผลนับ').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31) === 'สรุป' ? 'ข้อมูล' : String(meta.sheet || 'ผลนับ').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31);
   const serial = iso => { const [y, m, d] = iso.split('-').map(Number); return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000; };
   const fixDates = (ws, fmtOf) => { for (const k in ws) { if (k[0] === '!') continue; const c = ws[k]; if (c.t === 's' && ISO_DATE.test(c.v)) { const col = XLSX.utils.decode_cell(k).c, f = fmtOf ? fmtOf(col) : ''; c.t = 'n'; c.v = serial(c.v); c.z = f && f.startsWith('date:') ? f.slice(5) : 'dd/mm/yyyy'; } } };
@@ -1390,7 +1404,17 @@ function exportBook(kind) {
     add('สรุป', sum, [1]);
   }
   if (kind === 'main') {
-    const tplCols = ['sticker', 'nosticker', 'note', 'status', 'ccNew', 'ccNewName'].some(k => t[k] >= 0);
+    const tplCols = ['sticker', 'nosticker', 'note', 'status', 'ccNew', 'ccNewName', 'chk', 'stA', 'scanDate', 'cntCC', 'cntLoc', 'rmk', 'notPlan'].some(k => t[k] >= 0);
+    const dt = ms => { const d = new Date(ms); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    const fillSY = (r, s, unk) => {
+      if (t.chk >= 0) r[t.chk] = s ? (isOther(s) ? 'Found (other CC)' : 'Found') : 'Not Found';
+      if (t.stA >= 0) r[t.stA] = s ? s.cond : '';
+      if (t.scanDate >= 0) r[t.scanDate] = s ? dt(s.t) : '';
+      if (t.cntCC >= 0) r[t.cntCC] = s ? String(s.area) : '';
+      if (t.cntLoc >= 0) r[t.cntLoc] = s ? [s.areaName !== String(s.area) ? s.areaName : '', s.room].filter(Boolean).join(' · ') : '';
+      if (t.rmk >= 0) r[t.rmk] = s ? s.remark : '';
+      if (t.notPlan >= 0) r[t.notPlan] = unk ? 'Y' : '';
+    };
     const extra = ['ผลการนับ', 'พื้นที่ที่พบ', 'ห้อง / Location', 'สภาพ', 'ต้องพิมพ์สติ๊กเกอร์ใหม่', 'ชื่อบนสติ๊กเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'เครื่อง', 'วิธีตรวจนับ', 'QR'];
     const data = [[...h, ...extra]];
     for (const a of master.values()) {
@@ -1405,10 +1429,13 @@ function exportBook(kind) {
           if (t.status >= 0) r[t.status] = !s ? (wo ? 'Write - Off' : 'ไม่พบ (นับซ้ำ)') : mv ? 'เปลี่ยน Cost center' : 'CC เดิม';
           if (t.ccNew >= 0) r[t.ccNew] = s ? (mv ? s.area : a.cc) : '';
           if (t.ccNewName >= 0) r[t.ccNewName] = s ? (mv ? s.areaName : a.ccName) : '';
+          fillSY(r, s, false);
         }
         data.push([...r, !s ? 'ไม่พบ' : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.transferred ? 'มีการโอนย้ายแล้ว' : s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
       }
     }
+    // scanned but not in the register: one row each at the bottom, marked 'Asset Not In Plan'
+    if (t.notPlan >= 0) for (const s of cur.values()) { if (master.has(s.code)) continue; const r = h.map(() => ''); r[m0.code] = s.code; if (m0.name >= 0) r[m0.name] = s.uname || ''; fillSY(r, s, true); data.push(r); }
     addData(dataSheetName, data, h.length);
   }
   if (kind === 'main' || kind === 'transfer') {
