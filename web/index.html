@@ -1336,7 +1336,7 @@ function scannerSetup() {
   h += st(2, 'ReaderConfig → โปรไฟล์ Default', 'ตั้งค่าที่โปรไฟล์ Default (หรือสร้างโปรไฟล์ใหม่ Associated App = AssetSync)')
     + st(3, 'Data Output → Keyboard Emulation = KeyEvent', 'ห้ามเป็น None · Auto Enter Character = Decoded data + Enter char')
     + st(4, 'Symbology → เปิด QR Code', 'และ Code 128 สำหรับบาร์โค้ดเดิม')
-    + st(5, 'Data Output → Code ID = AIM', 'ใช้แยก "สแกน QR" กับ "สแกนบาร์โค้ด" · ห้ามเลือก CipherLab ID');
+    + st(5, 'Data Output → ติ๊ก Display Code Type', 'ใช้แยก "สแกน QR" กับ "สแกนบาร์โค้ด" · ไม่ต้องติ๊ก Display Code Length (บางรุ่นเป็นเมนู Code ID = AIM)');
   if (B?.openReaderConfig) h += `<button class="btn pri" data-a="openrc">เปิด ReaderConfig</button>`;
   return h + `</div>`;
 }
@@ -1550,17 +1550,24 @@ function beep(kind) {
   try { navigator.vibrate?.(kind === 'ok' ? 40 : [80, 60, 80]); } catch {}
 }
 function resolve(raw) {
-  const t = norm(raw); if (!t) return '';
+  const t = norm(stripType(raw)); if (!t) return '';
   const first = t.split(/[|;,\s]+/)[0], base = first.split('-')[0];
   for (const c of [t, first, base]) { if (master.has(c)) return c; if (altIx.has(c)) return altIx.get(c); }
   return first;
 }
 const AIM = /^\][A-Za-z][0-9A-Za-z]/;
+// CipherLab ReaderConfig → Data Output → "Display Code Type" puts the symbology name in front of the data, e.g. "QR Code51000001", "EAN138857129171164"
+const CODE_TYPES = ['QR Code', 'Micro QR', 'MicroQR', 'Data Matrix', 'DataMatrix', 'PDF417', 'MicroPDF417', 'Aztec', 'MaxiCode', 'Han Xin', 'DotCode', 'GS1 DataBar Expanded', 'GS1 DataBar Limited', 'GS1 DataBar', 'GS1-128', 'GS1 128', 'EAN-128', 'EAN128', 'UCC/EAN-128',
+  'Code 128', 'Code128', 'Code 39 Full ASCII', 'Code 39', 'Code39', 'Code 93', 'Code93', 'Code 32', 'Code 11', 'Code11', 'Italian Pharmacode', 'Interleaved 2 of 5', 'Industrial 2 of 5', 'Matrix 2 of 5', 'Standard 2 of 5', 'IATA 2 of 5', 'Codabar', 'MSI', 'Plessey', 'Telepen', 'Trioptic',
+  'EAN-13', 'EAN13', 'EAN-8', 'EAN8', 'UPC-A', 'UPCA', 'UPC-E1', 'UPC-E0', 'UPC-E', 'UPCE', 'ISBN', 'ISSN', 'Composite', 'RSS-14', 'RSS'].sort((x, y) => y.length - x.length);
+const codeType = raw => { const t = String(raw ?? '').trim(), u = t.toUpperCase(); const n = CODE_TYPES.find(k => u.startsWith(k.toUpperCase()) && t.length > k.length); return n ? { type: n, data: t.slice(n.length).trim() } : null; };
+const stripType = raw => { const t = String(raw ?? '').trim().replace(AIM, ''); const c = codeType(t); return c ? c.data : t; };
 const srcOf = raw => { const t = String(raw ?? '').trim(); if (S.manual) return 'manual'; if (/^\]Q/i.test(t)) return 'qr'; if (AIM.test(t)) return 'barcode';
-  return /[\r\n]|https?:|No\s*\.?\s*:/i.test(t) ? 'qr' : 'barcode'; };   // no AIM prefix: multi-line / labelled payloads only come from QR
+  const c = codeType(t); if (c) return /QR/i.test(c.type) ? 'qr' : 'barcode';
+  return /[\r\n]|https?:|No\s*\.?\s*:/i.test(t) ? 'qr' : 'barcode'; };   // no prefix at all: multi-line / labelled payloads only come from QR
 function doScan(raw) {
   if (S.area && !S.area.shared && ccClosed(S.area.code)) { beep('dup'); flash('CC นี้ปิดงานแล้ว · เปิดนับต่อก่อน'); S.app = 'area'; render(); return; }
-  const src = srcOf(raw); raw = String(raw ?? '').trim().replace(AIM, '');
+  const src = srcOf(raw); raw = stripType(raw);
   const code = resolve(raw); if (!code || !S.area) return;
   if (meta.status === 'closed') { flash('รอบนี้ปิดแล้ว'); return; }
   const prev = compute().cur.get(code);
@@ -1781,8 +1788,8 @@ const scanLog = [];
 function logScan(how, v) { scanLog.unshift({ t: Date.now(), how, v: String(v).slice(0, 60) }); scanLog.length = Math.min(scanLog.length, 8); if (S.app === 'me') render(); }
 function routeScan(code) {
   code = String(code || '').replace(/[\r\n\t]+/g, '').trim(); if (!code) return;
-  if (S.mode !== 'app' || !S.user || !meta) { flash('ได้รับรหัส ' + code + ' · เข้าหน้าแอปแล้วเลือกพื้นที่ก่อน'); return; }
-  if (!S.area) { flash('ได้รับรหัส ' + code + ' · เลือกพื้นที่ที่อยู่ตอนนี้ก่อน'); S.app = 'area'; S.areaPick = true; render(); return; }
+  if (S.mode !== 'app' || !S.user || !meta) { flash('ได้รับรหัส ' + stripType(code) + ' · เข้าหน้าแอปแล้วเลือกพื้นที่ก่อน'); return; }
+  if (!S.area) { flash('ได้รับรหัส ' + stripType(code) + ' · เลือกพื้นที่ที่อยู่ตอนนี้ก่อน'); S.app = 'area'; S.areaPick = true; render(); return; }
   if (S.item) S.item = null;
   if (S.app !== 'scan') S.app = 'scan';
   doScan(code);
