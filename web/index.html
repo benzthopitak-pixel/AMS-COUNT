@@ -287,7 +287,7 @@ function compute() {
       if (!s) continue;
       if (e.act === 'approve_move') { s.rv.move = 'approved'; s.flags.pendingTransfer = true; s.flags.reprint = true; s.dec = s.dec || 'moved'; H(c, 'Admin อนุมัติย้ายแผนก', e); }
       if (e.act === 'dup_ack') { s.rv.dup = 'ack'; H(c, 'Admin: รับทราบสแกนซ้ำ', e); }
-      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'Admin: ไม่ย้าย (ยืมใช้ชั่วคราว)', e); }
+      if (e.act === 'keep') { s.rv.move = 'keep'; s.dec = 'borrowed'; H(c, 'Admin: ไม่ย้าย (ยืมมา)', e); }
       if (e.act === 'unk_accept') { s.rv.unk = 'accepted'; H(c, 'Admin: รับเข้าทะเบียน', e); }
       if (e.act === 'unk_reject') { s.rv.unk = 'rejected'; H(c, 'Admin: ไม่ใช่ทรัพย์สินของบริษัท', e); }
       if (e.act === 'dmg_ack') { s.rv.dmg = 'ack'; H(c, 'Admin รับทราบสภาพ', e); }
@@ -324,7 +324,9 @@ const isOther = s => { const a = master.get(s.code); return !!(a && !s.shared &&
 // same CC code but the file spells the department differently → warn only, never counts as a move
 const ccNameOf = code => (meta?.areas || []).find(x => String(x.code) === String(code))?.name || String(code);
 const ccNameDiff = code => (meta?.ccNames || {})[String(code)] || null;
-const isMoved = s => isOther(s) && s.dec !== 'borrowed' && s.rv.move !== 'keep';
+const isBorrowed = s => isOther(s) && (s.dec === 'borrowed' || s.rv.move === 'keep');   // borrowed from another CC: found, but never a CC move
+const isMoveCase = s => isOther(s) && !isBorrowed(s);
+const isMoved = s => isMoveCase(s);
 const counted = a => !a.wo;   // rows already written off before this round are not counted
 
 function cats() {
@@ -573,7 +575,7 @@ function webView(c) {
   return webRounds(c);
 }
 /* ---------- 3 · summary reports: on screen, Excel and PDF ---------- */
-const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)']];
+const REP_TABS = [['sum', 'สรุปผลตรวจนับ'], ['nf', 'รายการที่ตรวจไม่พบ'], ['qr', 'ต้องพิมพ์ QR ใหม่'], ['mv', 'รายการย้ายแผนก'], ['bw', 'รายการยืมมา'], ['cr', 'สรุปตามที่เลือก (เช่น เลข Mat)']];
 // custom report: group by any column of the imported file, pick the columns to print
 const RES_F = [['r:res', 'ผลการนับ'], ['r:cond', 'สภาพ'], ['r:area', 'CC ที่พบ'], ['r:areaName', 'ชื่อ CC ที่พบ'], ['r:by', 'ผู้นับ'], ['r:t', 'เวลานับ'], ['r:src', 'วิธีตรวจนับ'], ['r:qr', 'QR'], ['r:remark', 'Remark']];
 function crFields() { return (meta.headers || []).map((h, i) => ['h:' + i, h]).concat(RES_F); }
@@ -589,7 +591,7 @@ function crVal(key, a, s2) {
   const [k, f] = key.split(':');
   if (k === 'h') return a.raws[0]?.[+f] ?? '';
   const L = !s2 && lostOf(a.code);
-  return { res: s2 ? (isMoved(s2) ? 'พบ (ย้ายแผนก)' : isOther(s2) ? 'พบ (ยืมใช้ชั่วคราว)' : 'พบ') : L ? 'สูญหาย' : 'ไม่พบ', cond: s2?.cond || '', area: s2 ? String(s2.area) : '', areaName: s2?.areaName || '', by: s2?.by || L?.by || '', t: s2 ? fmtT(s2.t) : '', src: s2 ? SRC[s2.src][0] : '', qr: !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', remark: s2?.remark || L?.remark || '' }[f] ?? '';
+  return { res: s2 ? (isMoved(s2) ? 'พบ (ย้ายแผนก)' : isOther(s2) ? 'พบ (ยืมมา)' : 'พบ') : L ? 'สูญหาย' : 'ไม่พบ', cond: s2?.cond || '', area: s2 ? String(s2.area) : '', areaName: s2?.areaName || '', by: s2?.by || L?.by || '', t: s2 ? fmtT(s2.t) : '', src: s2 ? SRC[s2.src][0] : '', qr: !s2 ? '' : s2.src === 'qr' ? 'ครบ' : s2.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง', remark: s2?.remark || L?.remark || '' }[f] ?? '';
 }
 const crLabel = key => (crFields().find(([k]) => k === key) || [key, key])[1];
 function reportData(kind) {
@@ -625,8 +627,13 @@ function reportData(kind) {
       .map(s2 => { const a = master.get(s2.code), cc = labelCC(s2.code); return [s2.code, a.name, cc.code, cc.name, [needQR(s2) && 'ยังไม่มี QR', s2.flags.reprint && 'ขอพิมพ์ใหม่', s2.flags.namebad && 'ชื่อไม่ตรง', s2.rv.move === 'approved' && 'ย้ายแผนก'].filter(Boolean).join(' · '), SRC[s2.src][0], s2.printedAt ? fmtT(s2.printedAt) : '']; });
     return { title: 'รายการที่ต้องพิมพ์ QR ใหม่', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC บนป้าย', 'ชื่อ CC', 'เหตุผล', 'วิธีตรวจนับ', 'พิมพ์ล่าสุด'], rows, w: [11, 30, 10, 16, 20, 14, 12] };
   }
-  const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isOther(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
-    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('ผู้ตรวจนับ: ', ''), s2.rv.move === 'approved' ? 'รอโอนย้าย' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืมใช้ชั่วคราว)' : 'รอ Admin อนุมัติ', s2.by]; });
+  if (kind === 'bw') {
+    const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isBorrowed(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
+      .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, s2.rv.move === 'keep' ? 'Admin ยืนยันว่ายืมมา' : 'ผู้ตรวจนับแจ้งว่ายืมมา', s2.by, fmtT(s2.t)]; });
+    return { title: 'รายการยืมมา (ไม่ย้าย CC)', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC เจ้าของ', 'ชื่อ CC เจ้าของ', 'CC ที่ยืมไปใช้', 'ชื่อ CC ที่ยืม', 'สถานะ', 'ผู้นับ', 'เวลานับ'], rows, w: [11, 24, 10, 13, 10, 13, 15, 10, 11] };
+  }
+  const rows = [...cur.values()].filter(s2 => { const a = master.get(s2.code); return a && isMoveCase(s2) && (!ccF || String(a.cc) === ccF || String(s2.area) === ccF); }).sort((x, y) => x.code.localeCompare(y.code))
+    .map(s2 => { const a = master.get(s2.code); return [s2.code, a.name, String(a.cc), ccNameOf(a.cc), String(s2.area), s2.areaName, decLabel(s2.dec).replace('ผู้ตรวจนับ: ', ''), s2.rv.move === 'approved' ? 'รอโอนย้าย' : s2.rv.move === 'keep' || s2.dec === 'borrowed' ? 'ไม่ย้าย (ยืมมา)' : 'รอ Admin อนุมัติ', s2.by]; });
   return { title: 'รายการย้ายแผนก', head: ['Asset', 'ชื่อทรัพย์สิน', 'CC ทะเบียน', 'ชื่อ CC เดิม', 'CC ที่พบ', 'ชื่อ CC ที่พบ', 'ผู้ตรวจนับแจ้ง', 'สถานะ', 'ผู้นับ'], rows, w: [11, 24, 10, 13, 10, 13, 10, 15, 10] };
 }
 function editDialog(code) {
@@ -712,8 +719,8 @@ async function reportFile(kind, fmt) {
 function totals() {
   const { cur } = compute(); let total = 0, found = 0;
   for (const a of master.values()) { if (!counted(a)) continue; total++; if (cur.has(a.code)) found++; }
-  let other = 0, unk = 0; for (const s of cur.values()) { if (isOther(s)) other++; if (!master.has(s.code)) unk++; }
-  return { total, found, left: total - found, other, unk };
+  let other = 0, unk = 0, borrow = 0; for (const s of cur.values()) { if (isMoveCase(s)) other++; if (isBorrowed(s)) borrow++; if (!master.has(s.code)) unk++; }
+  return { total, found, left: total - found, other, unk, borrow };
 }
 function webRounds(c) {
   let h = `<main class="wrap"><div><p class="sub">แต่ละไฟล์ที่นำเข้า = 1 งาน · มีหลายงานพร้อมกันได้</p><h1>1 · เพิ่มข้อมูลตรวจนับ</h1></div>`;
@@ -803,7 +810,7 @@ function areaStats() {
   const { cur } = compute(), st = new Map();
   for (const a of meta.areas || []) st.set(String(a.code), { ...a, total: 0, found: 0, other: 0, here: 0 });
   for (const a of master.values()) { if (!counted(a)) continue; const x = st.get(String(a.cc)); if (!x) continue; x.total++; if (cur.has(a.code)) x.found++; }
-  for (const s of cur.values()) { const x = st.get(String(s.area)); if (!x) continue; x.here++; if (isOther(s)) x.other++; }
+  for (const s of cur.values()) { const x = st.get(String(s.area)); if (!x) continue; x.here++; if (isMoveCase(s)) x.other++; }
   return st;
 }
 function webLive(c) {
@@ -812,7 +819,7 @@ function webLive(c) {
   const out = new Map(), unkHere = new Map(), dec = new Map();
   for (const s2 of cur.values()) {
     const a = master.get(s2.code);
-    if (a && isOther(s2)) out.set(String(a.cc), (out.get(String(a.cc)) || 0) + 1);
+    if (a && isMoveCase(s2)) out.set(String(a.cc), (out.get(String(a.cc)) || 0) + 1);
     if (!a) unkHere.set(String(s2.area), (unkHere.get(String(s2.area)) || 0) + 1);
     if (needsDecision(s2)) dec.set(String(s2.area), (dec.get(String(s2.area)) || 0) + 1);
   }
@@ -825,6 +832,7 @@ function webLive(c) {
   h += `<div class="kpis"><button class="kpi" data-a="opencc" data-v="*" data-t="done" style="border:none;text-align:left;background:var(--ok);color:#fff"><span style="color:#fff">ตรวจแล้ว</span><b>${N(T.found)}</b><span style="color:#e7f8ef">จาก ${N(T.total)} · ${T.total ? Math.round(T.found / T.total * 100) : 0}%</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="left" style="border:none;text-align:left"><span>รอตรวจ</span><b style="color:var(--warn-ink)">${N(T.left)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="move" style="border:none;text-align:left"><span>ต้องย้าย CC</span><b style="color:var(--oth-ink)">${N(T.other)}</b><span>${decAll ? `รอตัดสิน ${decAll} เรื่อง →` : 'ดูรายการ →'}</span></button>
+ <button class="kpi" data-a="opencc" data-v="*" data-t="borrow" style="border:none;text-align:left"><span>ยืมมา (ไม่ย้าย CC)</span><b style="color:var(--muted)">${N(T.borrow)}</b><span>ดูรายการ →</span></button>
     <button class="kpi" data-a="opencc" data-v="*" data-t="unk" style="border:none;text-align:left"><span>ไม่อยู่ในทะเบียน</span><b style="color:var(--bad-ink)">${N(T.unk)}</b><span>ดูรายการ →</span></button></div>`;
   h += `<div class="row pair"><section class="card grow"><div class="row" style="justify-content:space-between;align-items:center"><div><h2>Cost Center (${rows.length})</h2><span class="sub">สีเข้ม = นับใกล้ครบ · คลิกเพื่อดูรายละเอียด</span></div>
     <div class="row" style="align-items:center"><input class="in" id="ccQ" value="${esc(S.ccQ || '')}" placeholder="ค้นหา CC" style="width:160px" aria-label="ค้นหา Cost Center"><select class="in" id="ccSort" style="width:auto" aria-label="เรียงตาม"><option value="code" ${S.ccSort === 'code' || !S.ccSort ? 'selected' : ''}>เรียงตามรหัส</option><option value="left" ${S.ccSort === 'left' ? 'selected' : ''}>เหลือมากสุดก่อน</option><option value="pct" ${S.ccSort === 'pct' ? 'selected' : ''}>% น้อยสุดก่อน</option></select></div></div>
@@ -869,32 +877,32 @@ function ccRows(ccCode) {
   for (const a of master.values()) {
     if (!counted(a) || (!all && String(a.cc) !== ccCode)) continue;
     const s2 = cur.get(a.code);
-    out.push({ code: a.code, a, s: s2, state: !s2 ? (lostOf(a.code) ? 'lost' : 'left') : isOther(s2) ? 'moveout' : 'done' });
+    out.push({ code: a.code, a, s: s2, state: !s2 ? (lostOf(a.code) ? 'lost' : 'left') : isBorrowed(s2) ? 'lentout' : isOther(s2) ? 'moveout' : 'done' });
   }
   for (const s2 of cur.values()) {
     const a = master.get(s2.code);
     if (!a) { if (all || String(s2.area) === ccCode) out.push({ code: s2.code, a: null, s: s2, state: 'unk' }); continue; }
-    if (!all && isOther(s2) && String(s2.area) === ccCode) out.push({ code: s2.code, a, s: s2, state: 'movein' });
+    if (!all && isOther(s2) && String(s2.area) === ccCode) out.push({ code: s2.code, a, s: s2, state: isBorrowed(s2) ? 'borrowin' : 'movein' });
   }
   return out;
 }
-const CC_TABS = [['all', 'ทั้งหมด'], ['left', 'รอตรวจ'], ['done', 'ตรวจแล้ว'], ['move', 'ต้องย้าย CC'], ['unk', 'ไม่อยู่ในทะเบียน'], ['lost', 'สูญหาย'], ['dup', 'สแกนซ้ำ 2 เครื่อง'], ['noqr', 'ยังไม่มี QR']];
+const CC_TABS = [['all', 'ทั้งหมด'], ['left', 'รอตรวจ'], ['done', 'ตรวจแล้ว'], ['move', 'ต้องย้าย CC'], ['borrow', 'ยืมมา'], ['unk', 'ไม่อยู่ในทะเบียน'], ['lost', 'สูญหาย'], ['dup', 'สแกนซ้ำ 2 เครื่อง'], ['noqr', 'ยังไม่มี QR']];
 const SRC_OPTS = [['', 'ที่มา: ทั้งหมด'], ['scan', 'จากเครื่องสแกนทั้งหมด'], ['qr', 'สแกน QR'], ['barcode', 'สแกนบาร์โค้ด'], ['manual', 'พิมพ์ / ค้นหาบนเครื่อง'], ['web', 'บันทึกบนเว็บ']];
 function webCC() {
   const ccCode = S.ccSel, all = ccCode === '*', area = (meta.areas || []).find(x => String(x.code) === ccCode);
   if (SRC[S.ccTab] || S.ccTab === 'scan') { S.ccF = { ...(S.ccF || {}), src: S.ccTab }; S.ccTab = 'all'; }
   const rowsAll = ccRows(ccCode), tab = S.ccTab || 'all', q = norm(S.ccItemQ || ''), F = S.ccF || {};
-  const n = { all: rowsAll.length, left: rowsAll.filter(r => r.state === 'left').length, done: rowsAll.filter(r => r.state === 'done').length, move: rowsAll.filter(r => r.state === 'moveout' || r.state === 'movein').length, unk: rowsAll.filter(r => r.state === 'unk').length, noqr: rowsAll.filter(r => r.state !== 'movein' && needQR(r.s)).length, lost: rowsAll.filter(r => r.state === 'lost').length, dup: rowsAll.filter(r => dupOf(r.code)).length };
+  const n = { all: rowsAll.length, left: rowsAll.filter(r => r.state === 'left').length, done: rowsAll.filter(r => r.state === 'done').length, move: rowsAll.filter(r => r.state === 'moveout' || r.state === 'movein').length, borrow: rowsAll.filter(r => r.state === 'lentout' || r.state === 'borrowin').length, unk: rowsAll.filter(r => r.state === 'unk').length, noqr: rowsAll.filter(r => r.state !== 'movein' && needQR(r.s)).length, lost: rowsAll.filter(r => r.state === 'lost').length, dup: rowsAll.filter(r => dupOf(r.code)).length };
   const here = r => r.s && (all || String(r.s.area) === ccCode);
   const people = [...new Set(rowsAll.filter(r => r.s).map(r => r.s.by))].sort();
-  let rows = rowsAll.filter(r => tab === 'all' ? true : tab === 'move' ? (r.state === 'moveout' || r.state === 'movein') : tab === 'dup' ? !!dupOf(r.code) : tab === 'noqr' ? (r.state !== 'movein' && needQR(r.s)) : r.state === tab);
+  let rows = rowsAll.filter(r => tab === 'all' ? true : tab === 'move' ? (r.state === 'moveout' || r.state === 'movein') : tab === 'borrow' ? (r.state === 'lentout' || r.state === 'borrowin') : tab === 'dup' ? !!dupOf(r.code) : tab === 'noqr' ? (r.state !== 'movein' && needQR(r.s)) : r.state === tab);
   if (F.src) rows = rows.filter(r => here(r) && (F.src === 'scan' ? r.s.src !== 'web' : r.s.src === F.src));
   if (F.by) rows = rows.filter(r => r.s && r.s.by === F.by);
   if (F.cond) rows = rows.filter(r => r.s && r.s.cond === F.cond);
   if (F.qr) rows = rows.filter(r => r.s && r.a && (F.qr === 'done' ? !needQR(r.s) : needQR(r.s)));
   if (F.src || F.by) rows.sort((x, y) => y.s.t - x.s.t); else rows.sort((x, y) => x.code.localeCompare(y.code));
   if (q) rows = rows.filter(r => norm(r.code).includes(q) || norm(r.a?.name || r.s?.uname || '').includes(q));
-  const totalOwn = rowsAll.filter(r => r.state !== 'movein' && r.state !== 'unk').length, doneOwn = rowsAll.filter(r => r.state === 'done' || r.state === 'moveout').length;
+  const totalOwn = rowsAll.filter(r => r.state !== 'movein' && r.state !== 'borrowin' && r.state !== 'unk').length, doneOwn = rowsAll.filter(r => r.state === 'done' || r.state === 'moveout' || r.state === 'lentout').length;
   if (S.ccPick && !rowsAll.some(r => r.code === S.ccPick)) S.ccPick = null;
   const title = all ? 'ทุก Cost Center' : `CC ${esc(ccCode)}${area && area.name !== ccCode ? ' · ' + esc(area.name) : ''}`;
   let h = `<main class="wrap"><div><button class="btn sm" data-a="web" data-v="live">← กลับหน้ารวม</button></div>
@@ -915,8 +923,8 @@ function webCC() {
     <div class="row pair"><section class="card grow" style="min-width:0"><div class="tbl-wrap"><table class="tfix"><colgroup><col style="width:98px"><col>${all ? '<col style="width:72px">' : ''}<col style="width:108px"><col style="width:62px"><col style="width:58px"><col style="width:76px"><col style="width:50px"><col style="width:72px"><col style="width:114px"></colgroup><thead><tr><th>Asset</th><th>ชื่อ</th>${all ? '<th>CC</th>' : ''}<th>สถานะ</th><th>ที่มา</th><th>QR</th><th>พบที่</th><th>สภาพ</th><th>ผู้นับ</th><th></th></tr></thead><tbody>`;
   const ST = { lost: '<span class="chip c-bad">สูญหาย</span>', left: '<span class="chip c-warn">รอตรวจ</span>', done: '<span class="chip c-ok">ตรวจแล้ว</span>', unk: '<span class="chip c-bad">ไม่อยู่ในทะเบียน</span>' };
   for (const r of rows.slice(0, 500)) {
-    const s2 = r.s, mvTxt = r.state === 'moveout' ? `<span class="chip c-oth">ต้องย้ายไป ${esc(s2.areaName)}</span>` : r.state === 'movein' ? `<span class="chip c-oth">ย้ายมาจาก ${esc(r.a.cc)}</span>` : ST[r.state];
-    const decided = s2 && s2.rv.move ? (s2.rv.move === 'approved' ? ' <span class="chip c-blue">อนุมัติแล้ว</span>' : ' <span class="chip c-gray">ไม่ย้าย</span>') : s2 && s2.dec === 'borrowed' && (r.state === 'moveout' || r.state === 'movein') ? ' <span class="chip c-gray">ยืมมา</span>' : '';
+    const s2 = r.s, mvTxt = r.state === 'moveout' ? `<span class="chip c-oth">ต้องย้ายไป ${esc(s2.areaName)}</span>` : r.state === 'movein' ? `<span class="chip c-oth">ย้ายมาจาก ${esc(r.a.cc)}</span>` : r.state === 'lentout' ? `<span class="chip c-gray">ให้ ${esc(s2.areaName)} ยืม</span>` : r.state === 'borrowin' ? `<span class="chip c-gray">ยืมมาจาก ${esc(r.a.cc)}</span>` : ST[r.state];
+    const decided = s2 && s2.rv.move && !isBorrowed(s2) ? (s2.rv.move === 'approved' ? ' <span class="chip c-blue">อนุมัติแล้ว</span>' : ' <span class="chip c-gray">ไม่ย้าย</span>') : '';
     h += `<tr class="click ${S.ccPick === r.code ? 'sel' : ''}" data-a="ccpick" data-v="${esc(r.code)}"><td class="mono"><b>${esc(r.code)}</b></td><td title="${esc(r.a?.name || s2?.uname || '')}">${esc(r.a?.name || s2?.uname || '(ไม่มีชื่อ)')}${r.a?.raws.length > 1 ? ` <span class="sub">· ${r.a.raws.length} แถว</span>` : ''}</td>${all ? `<td class="mono">${esc(r.a?.cc || '—')}</td>` : ''}<td>${mvTxt}${decided}${dupOf(r.code) ? ' <span class="chip c-warn" title="สแกนจาก 2 เครื่องตอนออฟไลน์">สแกนซ้ำ</span>' : ''}</td><td>${s2 ? `<span class="chip ${SRC[s2.src][1]}" title="${SRC[s2.src][0]}">${{ qr: 'QR', barcode: 'บาร์โค้ด', manual: 'พิมพ์เอง', web: 'เว็บ' }[s2.src]}</span>` : ''}</td><td>${!s2 || !r.a ? '' : s2.src === 'qr' ? '<span class="chip c-ok">✓ ครบ</span>' : s2.printedAt ? '<span class="chip c-ok">✓ ติด</span>' : '<span class="chip c-blue" title="ต้องสร้าง QR">สร้าง</span>'}${s2 && s2.flags.reprint ? ' <span class="chip c-warn">ขอพิมพ์</span>' : ''}</td><td>${s2 ? esc(s2.areaName) + (s2.room ? ' · ' + esc(s2.room) : '') : '<span class="sub">—</span>'}</td><td>${s2 ? (s2.cond === 'ปกติ' ? '<span class="sub">ปกติ</span>' : `<span class="chip c-warn">${esc(s2.cond)}</span>`) : ''}</td><td class="sub" title="${s2 ? esc(s2.by) + ' · ' + fmtT(s2.t) : ''}">${s2 ? esc(s2.by) + ' · ' + hm(s2.t) : ''}</td><td style="overflow:visible">${!s2 ? '' : S.confirmUndo === r.code ? `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm red" data-a="wundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">ยืนยัน</button><button class="btn sm" data-a="noundo" style="min-height:28px;padding:2px 8px;font-size:12px">ไม่</button></span>` : `<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm" data-a="editpop" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px">แก้ไข</button><button class="btn sm red" data-a="askundo" data-v="${esc(r.code)}" style="min-height:28px;padding:2px 8px;font-size:12px" title="ยกเลิกตรวจนับ">ยกเลิก</button></span>`}</td></tr>`;
   }
   h += `</tbody></table></div>${rows.length > 500 ? `<p class="sub">แสดง 500 จาก ${N(rows.length)} รายการ · ค้นหาเพื่อกรอง</p>` : ''}${rows.length ? '' : '<p class="sub">ไม่มีรายการ</p>'}</section>
@@ -964,7 +972,7 @@ function webInbox(c) {
   h += `</section><section class="card grow">${selCode ? inboxDetail(selCode) : '<p class="sub">เลือกเรื่องทางซ้าย</p>'}</section></div></main>`;
   return h;
 }
-const decLabel = d => ({ moved: 'ผู้ตรวจนับ: ต้องการย้าย', borrowed: 'ผู้ตรวจนับ: ยืมใช้ชั่วคราว', unsure: 'ผู้ตรวจนับ: รอตรวจสอบ' }[d] || 'ยังไม่ระบุ');
+const decLabel = d => ({ moved: 'ผู้ตรวจนับ: ต้องการย้าย', borrowed: 'ผู้ตรวจนับ: ยืมมา', unsure: 'ผู้ตรวจนับ: รอตรวจสอบ' }[d] || 'ยังไม่ระบุ');
 function inboxDetail(code) {
   const { cur, hist } = compute(), s = cur.get(code), a = master.get(code);
   if (!s) return '<p class="sub">ไม่มีผลนับ</p>';
@@ -976,7 +984,7 @@ function inboxDetail(code) {
   const dl = dupOf(code);
   if (dl) h += `<div class="msg warn" style="display:flex;flex-direction:column;gap:6px"><b>สแกนซ้ำจาก ${dl.length + 1} เครื่อง (ตอนออฟไลน์)</b><span>ใช้ผลแรก: ${esc(s.by)} · ${fmtT(s.t)} · พบที่ ${esc(s.areaName)}</span>${dl.map(d => `<span>${esc(d.by)} · ${fmtT(d.t)} · พบที่ ${esc(d.areaName)}${String(d.area) !== String(s.area) ? ` <button class="btn sm" data-a="dupuse" data-v="${esc(code)}" data-cc="${esc(d.area)}" data-ccn="${esc(d.areaName)}">ใช้ที่พบนี้แทน</button>` : ' (ที่เดียวกัน)'} <button class="btn sm red" data-a="dupdrop" data-v="${esc(code)}" data-id="${esc(d.id)}">ลบรายการนี้</button></span>`).join('')}<button class="btn sm" data-a="rv" data-act="dup_ack" data-v="${esc(code)}" style="align-self:flex-start">รับทราบ</button></div>`;
   h += `<div class="row">`;
-  if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมใช้ชั่วคราว)') + B('recount', 'สั่งตรวจนับซ้ำ');
+  if (isOther(s) && !s.rv.move) h += B('approve_move', `อนุมัติย้ายไป ${esc(s.areaName)}`, 'oth') + B('keep', 'ไม่ย้าย (ยืมมา)') + B('recount', 'สั่งตรวจนับซ้ำ');
   if (!a && !s.rv.unk) h += B('unk_accept', 'รับเข้าทะเบียน', 'pri') + B('unk_reject', 'ไม่ใช่ทรัพย์สินของบริษัท');
   if ((s.cond === 'ชำรุด' || s.cond === 'รอซ่อม') && !s.rv.dmg) h += B('dmg_ack', 'รับทราบสภาพ', 'pri');
   if (!isOther(s) || s.rv.move) h += B('recount', 'สั่งตรวจนับซ้ำ');
@@ -1084,7 +1092,7 @@ function appView(c) {
     if (a && s) { const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="popdec" data-d="${d}" data-v="${esc(s.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
       h += `<div class="dupbg" data-a="closeoth" role="alertdialog" aria-labelledby="othH"><div class="duppop oth" data-stop="1"><span class="dupicon" aria-hidden="true">!</span><b id="othH">ไม่ตรงพื้นที่</b><span class="mono" style="font-size:20px;font-weight:700">${esc(s.code)}</span><span>${esc(a.name)}</span>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:6px 0"><div class="card" style="padding:8px;gap:0;background:#f4f5fa"><span class="sub">ทะเบียน</span><b>${esc(a.ccName)}</b><span class="sub mono">CC ${esc(a.cc)}</span></div><div class="card" style="padding:8px;gap:0;background:var(--oth-soft)"><span class="sub">คุณอยู่ที่</span><b>${esc(s.areaName)}</b><span class="sub mono">CC ${esc(s.area)}</span></div></div>
-        <span class="sub">บันทึกว่าพบแล้ว · โปรดระบุเหตุผล</span><div class="chips" style="justify-content:center">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมใช้ชั่วคราว')}${D('unsure', 'รอตรวจสอบ')}</div>
+        <span class="sub">บันทึกว่าพบแล้ว · โปรดระบุเหตุผล</span><div class="chips" style="justify-content:center">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมมา')}${D('unsure', 'รอตรวจสอบ')}</div>
         <button class="btn dark" data-a="closeoth" style="align-self:stretch">ตกลง</button></div></div>`; } }
   if (S.dupPop && S.mode === 'app') { const d = S.dupPop, a = master.get(d.code);
     h += `<div class="dupbg" data-a="closedup" role="alertdialog" aria-labelledby="dupH"><div class="duppop"><span class="dupicon" aria-hidden="true">!</span><b id="dupH">ตรวจนับซ้ำ</b><span class="mono" style="font-size:20px;font-weight:700">${esc(d.code)}</span>${a ? `<span>${esc(a.name)}</span>` : ''}<span class="sub">นับไปแล้วโดย ${esc(d.by)} · ${hm(d.t)}${d.where ? ' · ' + esc(d.where) : ''}</span><button class="btn dark" data-a="closedup" style="align-self:stretch">ตกลง</button></div></div>`; }
@@ -1172,7 +1180,7 @@ function appScan() {
         <div class="row"><input class="in" id="un-${esc(card.code)}" value="${esc(s.uname)}" placeholder="ชื่อ / ลักษณะของ" style="flex:1"><button class="btn sm" data-a="uname" data-v="${esc(card.code)}">บันทึก</button></div><div class="row"><button class="btn sm red" data-a="undo" data-v="${esc(card.code)}">ข้าม (สแกนผิดพลาด)</button></div></div>`;
     } else if (isOther(s)) {
       const D = (d, l) => `<button class="btn sm ${s.dec === d ? 'oth' : ''}" data-a="dec" data-d="${d}" data-v="${esc(card.code)}" aria-pressed="${s.dec === d}">${l}</button>`;
-      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ทะเบียน CC ${esc(a.cc)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)}</span><span class="sub" style="color:var(--oth-ink)">ทะเบียนอยู่ CC ${esc(a.cc)} แต่พบที่ ${esc(s.areaName)} (แผนกที่คุณเลือก) · โปรดระบุเหตุผล</span><div class="chips">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมใช้ชั่วคราว')}${D('unsure', 'รอตรวจสอบ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
+      h += `<div class="rcard oth"><div class="row" style="justify-content:space-between;align-items:center"><b class="mono">${esc(card.code)}</b><span class="chip c-oth">ทะเบียน CC ${esc(a.cc)}</span>${tick}</div><span style="font-size:14px">${esc(a.name)}</span><span class="sub" style="color:var(--oth-ink)">ทะเบียนอยู่ CC ${esc(a.cc)} แต่พบที่ ${esc(s.areaName)} (แผนกที่คุณเลือก) · โปรดระบุเหตุผล</span><div class="chips">${D('moved', 'ต้องการย้าย')}${D('borrowed', 'ยืมมา')}${D('unsure', 'รอตรวจสอบ')}<button class="btn sm" data-a="openitem" data-v="${esc(card.code)}">รายละเอียด</button></div></div>`;
     } else {
       h += `<button class="rcard" data-a="openitem" data-v="${esc(card.code)}" style="border:none;text-align:left;flex-direction:row;align-items:center;gap:12px"><span class="dot" style="background:var(--ok)">✓</span><span style="flex:1;display:flex;flex-direction:column;min-width:0"><b class="mono">${esc(card.code)}</b><span class="sub">${esc(a.name)} · ${esc(s.cond)}${a.raws.length > 1 ? ` · ${a.raws.length} รายการย่อย` : ''}</span><span>${srcChip(s)}${s.src === 'qr' ? ' <span class="chip c-ok">ครบ</span>' : ''}</span>${s.dev !== dev && (compute().dups.get(card.code) || []).some(d => d.dev === dev) ? `<span class="sub" style="color:var(--warn-ink)">⚠ ${esc(s.by)} นับไปก่อนแล้ว ${hm(s.t)} (ขณะอินเทอร์เน็ตขาดการเชื่อมต่อ) · ไม่นับซ้ำ</span>` : ''}${!s.shared && a.ccName !== s.areaName && a.ccName !== String(a.cc) ? `<span class="sub" style="color:var(--warn-ink)">⚠ CC ตรง แต่ชื่อในทะเบียนเป็น "${esc(a.ccName)}"</span>` : ''}</span>${tick}</button>`;
     }
@@ -1290,7 +1298,7 @@ async function exportReport() {
   const view = [['Asset', 'ชื่อ', 'แผนกในทะเบียน', 'พื้นที่ที่พบ', 'ห้อง', 'ผลการนับ', 'สภาพ', 'ต้องพิมพ์สติกเกอร์ใหม่', 'ชื่อบนสติกเกอร์ไม่ตรงระบบ', 'สถานะโอนย้าย', 'Remark', 'ผู้นับ', 'เวลานับ', 'วิธีตรวจนับ']];
   for (const s of [...cur.values()].filter(s => s.dev === dev).sort((a, b) => a.t - b.t)) {
     const a = master.get(s.code);
-    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมใช้ชั่วคราว)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t), SRC[s.src][0]]);
+    view.push([s.code, a?.name || s.uname, a?.ccName || '', s.areaName, s.room, !a ? 'ไม่อยู่ในทะเบียน' : isOther(s) ? (s.dec === 'borrowed' ? 'พบ (ยืมมา)' : 'พบ (ของแผนกอื่น)') : 'พบ', s.cond, s.flags.reprint ? 'Y' : '', s.flags.namebad ? 'Y' : '', s.flags.pendingTransfer ? 'รอโอนย้าย' : '', s.remark, s.by, fmtT(s.t), SRC[s.src][0]]);
   }
   const C = compute(), myLost = new Set(mine.filter(e => e.lost).map(e => e.code));
   for (const [code, L] of C.lost) if (myLost.has(code)) { const a = master.get(code); view.push([code, a?.name || '', a?.ccName || '', '', '', 'สูญหาย', '', '', '', '', L.remark, L.by, fmtT(L.t), '']); }
@@ -1787,7 +1795,7 @@ function exportBook(kind) {
     const dt = ms => { const d = new Date(ms); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
     const fillSY = (r, s, unk) => {
       const L = !s && r[m0.code] ? lostOf(norm(r[m0.code])) : null;
-      if (t.chk >= 0) r[t.chk] = s ? (isOther(s) ? 'Found (other CC)' : 'Found') : L ? 'Lost' : 'Not Found';
+      if (t.chk >= 0) r[t.chk] = s ? (isBorrowed(s) ? 'Found (borrowed)' : isOther(s) ? 'Found (other CC)' : 'Found') : L ? 'Lost' : 'Not Found';
       if (t.stA >= 0) r[t.stA] = s ? s.cond : '';
       if (t.scanDate >= 0) r[t.scanDate] = s ? dt(s.t) : '';
       if (t.cntCC >= 0) r[t.cntCC] = s ? String(s.area) : '';
@@ -1812,7 +1820,7 @@ function exportBook(kind) {
           if (t.ccNewName >= 0) r[t.ccNewName] = s ? (mv ? s.areaName : a.ccName) : '';
           fillSY(r, s, false);
         }
-        data.push([...r, !s ? (lostOf(a.code) ? 'สูญหาย' : 'ไม่พบ') : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมใช้ชั่วคราว)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
+        data.push([...r, !s ? (lostOf(a.code) ? 'สูญหาย' : 'ไม่พบ') : mv ? 'พบ (ย้ายแผนก)' : isOther(s) ? 'พบ (ยืมมา)' : 'พบ', s ? (s.shared || String(s.area) === String(s.areaName) ? s.areaName : `${s.area} ${s.areaName}`) : '', s?.room || '', s?.cond || '', s?.flags.reprint ? 'Y' : '', s?.flags.namebad ? 'Y' : '', s?.flags.pendingTransfer ? 'รอโอนย้าย' : '', s?.remark || '', s?.by || '', s ? fmtT(s.t) : '', s?.dev || '', s ? SRC[s.src][0] : '', !s ? '' : s.src === 'qr' ? 'ครบ' : s.printedAt ? 'ติดแล้ว' : 'ต้องสร้าง QR']);
       }
     }
     // scanned but not in the register: one row each at the bottom, marked 'Asset Not In Plan'
