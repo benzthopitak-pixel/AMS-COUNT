@@ -5,3 +5,4 @@ android/app/build/
 android/local.properties
 *.jks
 _site/
+demo/seed*.json
