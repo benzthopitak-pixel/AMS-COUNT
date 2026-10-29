@@ -31,11 +31,17 @@ subs = {
 for a, b in subs.items():
     assert html.count(a) == 1, a
     html = html.replace(a, b)
+# the app's own code and styles (web/js/NN-*.js, web/css/app.css) go inline in the same order
+html, n_js = re.subn(r'<script src="(js/[\w.-]+\.js)"></script>', lambda m: f'<script>{js(m.group(1))}</script>', html)
+assert n_js >= 1, 'no js/ scripts found'
+css_tag = '<link rel="stylesheet" href="css/app.css">'
+assert html.count(css_tag) == 1, css_tag
+html = html.replace(css_tag, '<style>' + (WEB / 'css' / 'app.css').read_text() + '</style>')
 # Pivot libraries load on demand; the review copy carries them inline as inert blocks the loader picks up
 lazy = ''.join(f'<script type="text/x-lazy" id="lazy-{n}">' + (WEB / 'lib' / n).read_text().replace('</script', '<\\/script').replace('\ufffd', '\\ufffd') + '</script>' for n in ['jquery.min.js', 'jquery-ui.min.js', 'pivot.min.js'])
 lazy += '<script type="text/x-lazy" id="lazy-pivot.min.css">' + (WEB / 'lib' / 'pivot.min.css').read_text() + '</script>'
 html = html.replace('\n</body>', lazy + '\n</body>', 1)
-html = re.sub(r'url\(fonts/([\w.-]+\.woff2)\)', lambda m: f'url({b64("fonts/" + m.group(1), "font/woff2")})', html)
+html = re.sub(r'url\((?:\.\./)?fonts/([\w.-]+\.woff2)\)', lambda m: f'url({b64("fonts/" + m.group(1), "font/woff2")})', html)
 html = html.replace('src="logo-mark.svg"', f'src="{b64("logo-mark.svg", "image/svg+xml")}"').replace('src="logo.svg"', f'src="{b64("logo.svg", "image/svg+xml")}"')
 
 # computer / scanner view switch (#app = scanner screens)
