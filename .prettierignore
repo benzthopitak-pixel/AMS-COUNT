@@ -1,0 +1,4 @@
+web/lib/
+web/build.js
+android/
+*.min.js

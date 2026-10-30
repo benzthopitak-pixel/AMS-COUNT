@@ -135,7 +135,9 @@
 
 ```
 web/            หน้าเว็บ = หน้าแอป (ชุดเดียวกัน)
-  index.html    หน้าจอทั้งหมด (คอม + เครื่องยิง)
+  index.html    โครงหน้า + รายการไฟล์ที่ต้องโหลด (คอม + เครื่องยิงใช้หน้าเดียวกัน)
+  js/           โค้ดของแอป แยกตามหมวด เลขหน้าชื่อไฟล์ = ลำดับโหลด (ดู web/README.md)
+  css/app.css   หน้าตาทั้งหมด
   store.js      ตัวเชื่อม Supabase (kv / events / realtime / auth) + บันทึกไฟล์ผ่าน Android
   config.js     URL + anon key
   install.html  หน้าติดตั้งแอป
