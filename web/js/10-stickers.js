@@ -82,7 +82,8 @@ const lk = k =>
 let lblTpls = LS.get('lblTpls', []);
 const lblAll = () => [LBL_STD, LBL_7050, ...lblTpls];
 const lblActive = () => lblAll().find(t => t.id === S.lblId) || LBL_STD;
-const lblDpi = () => +LS.get('lblDpi', 300) || 300;
+// company label printer: TSC TTP-244 Pro = 203 dpi (each computer remembers its own choice)
+const lblDpi = () => +LS.get('lblDpi', 203) || 203;
 async function lblLoad() {
   if (!db) return;
   try {
@@ -386,13 +387,13 @@ function webStickers(c) {
     })()}
     <label class="f">เครื่องพิมพ์ / กระดาษ<select class="in" id="stSize"><option value="roll" ${a4 ? '' : 'selected'}>เครื่องพิมพ์สติกเกอร์ · ม้วน (${tpl.w} × ${tpl.h} มม.)</option><option value="a4" ${a4 ? 'selected' : ''} ${per ? '' : 'disabled'}>เครื่องพิมพ์ธรรมดา · A4 ${per} ดวงต่อแผ่น</option></select></label>
     ${a4 ? '' : prnBox(tpl)}
-    <div class="row" style="gap:8px"><label class="f" style="flex:1">ความละเอียด<select class="in" id="lblDpi">${[203, 300, 600].map(d => `<option value="${d}" ${lblDpi() === d ? 'selected' : ''}>${d} dpi</option>`).join('')}</select></label>
+    <div class="row" style="gap:8px"><label class="f" style="flex:1">ความละเอียด<select class="in" id="lblDpi">${[203, 300, 600].map(d => `<option value="${d}" ${lblDpi() === d ? 'selected' : ''}>${d} dpi${d === 203 ? ' (TSC TTP-244 Pro)' : ''}</option>`).join('')}</select></label>
       <label class="f" style="flex:1">จำนวนต่อรายการ<input class="in" id="stCopies" type="number" min="1" max="50" value="${copies}"></label></div>
     ${
       Store.isApp
         ? `<div class="row"><button class="btn" data-a="stpdf" data-v="test" ${dis}>ทดสอบ 1 ดวง</button><button class="btn pri" data-a="stpdf" data-v="all" ${dis}>PDF ${nSel * copies} ดวง</button></div>`
         : `<button class="btn pri" data-a="stprint" data-v="all" ${dis}>🖨 พิมพ์ ${N(nSel * copies)} ดวง</button><div class="row"><button class="btn" data-a="stprint" data-v="test" ${dis}>🖨 ทดสอบ 1 ดวง</button><button class="btn" data-a="stpdf" data-v="all" ${dis}>⬇ PDF</button></div>
-    <span class="sub">พิมพ์ตรงจากเว็บ ไม่ต้องใช้ BarTender · หน้าพิมพ์: เลือกเครื่องพิมพ์สติกเกอร์ · ขอบกระดาษ = ไม่มี · สเกล = 100% · ความละเอียดให้ตรงกับเครื่องพิมพ์</span>`
+    <span class="sub">พิมพ์ตรงจากเว็บ ไม่ต้องใช้ BarTender · หน้าพิมพ์: เลือกเครื่องพิมพ์สติกเกอร์ (TSC TTP-244 Pro) · ขอบกระดาษ = ไม่มี · สเกล = 100% · ความละเอียดให้ตรงกับเครื่องพิมพ์</span>`
     }
     ${
       xls
