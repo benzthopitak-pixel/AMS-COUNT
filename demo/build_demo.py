@@ -34,9 +34,8 @@ for a, b in subs.items():
 # the app's own code and styles (web/js/NN-*.js, web/css/app.css) go inline in the same order
 html, n_js = re.subn(r'<script src="(js/[\w.-]+\.js)"></script>', lambda m: f'<script>{js(m.group(1))}</script>', html)
 assert n_js >= 1, 'no js/ scripts found'
-css_tag = '<link rel="stylesheet" href="css/app.css">'
-assert html.count(css_tag) == 1, css_tag
-html = html.replace(css_tag, '<style>' + (WEB / 'css' / 'app.css').read_text() + '</style>')
+html, n_css = re.subn(r'<link rel="stylesheet" href="(css/[\w.-]+\.css)">', lambda m: '<style>' + (WEB / m.group(1)).read_text() + '</style>', html)
+assert n_css >= 1, 'no css/ stylesheets found'
 # Pivot libraries load on demand; the review copy carries them inline as inert blocks the loader picks up
 lazy = ''.join(f'<script type="text/x-lazy" id="lazy-{n}">' + (WEB / 'lib' / n).read_text().replace('</script', '<\\/script').replace('\ufffd', '\\ufffd') + '</script>' for n in ['jquery.min.js', 'jquery-ui.min.js', 'pivot.min.js'])
 lazy += '<script type="text/x-lazy" id="lazy-pivot.min.css">' + (WEB / 'lib' / 'pivot.min.css').read_text() + '</script>'

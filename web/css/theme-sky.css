@@ -1,0 +1,257 @@
+/* AssetSync · ธีม "ท้องฟ้า" (Glass) — ใช้เมื่อ <html data-theme="sky">
+ * ทุกกฎขึ้นต้นด้วย html[data-theme='sky'] จึงไม่แตะธีมเดิม · สลับธีมได้ที่เมนูข้าง (เว็บ) หรือหน้า บัญชี (เครื่องยิง) */
+
+html[data-theme='sky'] {
+  --ink: #0b1f3a;
+  --muted: #3e5878;
+  --bg: rgb(255 255 255 / 0.5);
+  --card: rgb(255 255 255 / 0.62);
+  --line: rgb(11 31 58 / 0.1);
+  --blue: #0a84ff;
+  --blue-soft: rgb(10 132 255 / 0.13);
+  --blue-ink: #0060c7;
+  --oth-soft: rgb(122 90 248 / 0.14);
+  --glass-strong: rgb(255 255 255 / 0.8);
+  --glass-soft: rgb(255 255 255 / 0.45);
+  --glass-edge: rgb(255 255 255 / 0.8);
+  --glass-shadow: 0 10px 30px rgb(20 80 160 / 0.14), inset 0 1px 0 rgb(255 255 255 / 0.85);
+  --blur: blur(18px) saturate(170%);
+  color-scheme: light;
+}
+
+/* ---------- sky: blue gradient, sun glow and soft clouds, fixed behind everything ---------- */
+html[data-theme='sky'] body {
+  background: #6ab8ff;
+}
+html[data-theme='sky'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 88% 6%, rgb(255 248 214 / 0.95) 0, rgb(255 248 214 / 0.35) 9%, transparent 22%),
+    radial-gradient(ellipse 34% 9% at 18% 20%, rgb(255 255 255 / 0.9), transparent 70%),
+    radial-gradient(ellipse 22% 7% at 30% 16%, rgb(255 255 255 / 0.75), transparent 70%),
+    radial-gradient(ellipse 30% 8% at 70% 32%, rgb(255 255 255 / 0.7), transparent 70%),
+    radial-gradient(ellipse 45% 12% at 40% 62%, rgb(255 255 255 / 0.55), transparent 72%),
+    radial-gradient(ellipse 38% 10% at 90% 78%, rgb(255 255 255 / 0.6), transparent 72%),
+    radial-gradient(ellipse 50% 14% at 8% 90%, rgb(255 255 255 / 0.65), transparent 72%),
+    linear-gradient(180deg, #1f7cf2 0%, #4aa3ff 30%, #8fcaff 62%, #d6eeff 88%, #eef8ff 100%);
+}
+html[data-theme='sky'] body::before {
+  background: rgb(31 124 242 / 0.85);
+}
+
+/* ---------- glass surfaces ---------- */
+html[data-theme='sky'] :is(.card, .kpi, .side-nav, .top, .bnav, .duppop, .sheet, .brand, .rcard, .li, .mini, .confirm) {
+  background: var(--card);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+html[data-theme='sky'] .card .card,
+html[data-theme='sky'] .card .kpi {
+  background: var(--glass-soft);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+html[data-theme='sky'] .side-nav {
+  border-width: 0 1px 0 0;
+  background: rgb(255 255 255 / 0.5);
+}
+html[data-theme='sky'] .top {
+  border-width: 0 0 1px;
+  background: rgb(255 255 255 / 0.55);
+}
+html[data-theme='sky'] .bnav {
+  border-width: 1px 0 0;
+  background: rgb(255 255 255 / 0.7);
+}
+html[data-theme='sky'] .bnav .fab {
+  border-color: rgb(255 255 255 / 0.9);
+  box-shadow: 0 6px 18px rgb(20 80 160 / 0.25);
+}
+html[data-theme='sky'] .sheet,
+html[data-theme='sky'] .duppop {
+  background: rgb(255 255 255 / 0.82);
+}
+html[data-theme='sky'] .sheetbg,
+html[data-theme='sky'] .dupbg {
+  background: rgb(8 40 90 / 0.32);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* ---------- controls ---------- */
+html[data-theme='sky'] :is(.btn, .in, textarea.in, .tog, .cond button) {
+  background: var(--glass-strong);
+  border-color: rgb(255 255 255 / 0.9);
+  box-shadow: 0 1px 2px rgb(20 80 160 / 0.08);
+}
+html[data-theme='sky'] .btn.pri,
+html[data-theme='sky'] .tog[aria-pressed='true'] {
+  background: linear-gradient(180deg, #2b96ff, #0a78f0);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgb(10 120 240 / 0.35);
+}
+html[data-theme='sky'] .btn.dark {
+  background: var(--ink);
+  border-color: transparent;
+  color: #fff;
+}
+html[data-theme='sky'] .btn.lime {
+  background: var(--lime);
+  border-color: transparent;
+}
+html[data-theme='sky'] .btn.oth {
+  background: var(--oth);
+  border-color: transparent;
+  color: #fff;
+}
+html[data-theme='sky'] .btn.red {
+  color: var(--bad-ink);
+}
+html[data-theme='sky'] .cond button[aria-pressed='true'] {
+  background: var(--ok);
+  color: #fff;
+}
+html[data-theme='sky'] .cond button.w[aria-pressed='true'] {
+  background: var(--warn);
+  color: #1d0e00;
+}
+
+/* ---------- neutral fills that were light grey ---------- */
+html[data-theme='sky'] :is(.pill, .s-off, .c-gray, .ver, .msg, .nav-num, .seg, .tabs3, .bar, .drop) {
+  background: var(--glass-soft);
+}
+html[data-theme='sky'] .pill.on {
+  background: var(--blue);
+  color: #fff;
+}
+html[data-theme='sky'] .pill.done {
+  background: var(--ok-soft);
+}
+html[data-theme='sky'] .msg.ok {
+  background: var(--ok-soft);
+}
+html[data-theme='sky'] .msg.bad {
+  background: var(--bad-soft);
+}
+html[data-theme='sky'] .msg.warn {
+  background: var(--warn-soft);
+}
+html[data-theme='sky'] .drop {
+  border-color: rgb(10 132 255 / 0.45);
+}
+html[data-theme='sky'] :is(.seg button[aria-pressed='true'], .tabs3 button.on) {
+  background: var(--glass-strong);
+  box-shadow: 0 2px 8px rgb(20 80 160 / 0.12);
+}
+html[data-theme='sky'] .nav-item {
+  color: #1f3550;
+}
+html[data-theme='sky'] :is(.nav-item:hover, .nav-group:hover, tr.click:hover) {
+  background: rgb(255 255 255 / 0.55);
+}
+html[data-theme='sky'] .nav-item.on {
+  background: linear-gradient(180deg, #2b96ff, #0a78f0);
+  color: #fff;
+  box-shadow: 0 4px 14px rgb(10 120 240 / 0.3);
+}
+html[data-theme='sky'] .nav-item.on .nav-num {
+  background: rgb(255 255 255 / 0.25);
+}
+html[data-theme='sky'] .nav-item.done:not(.on) .nav-num {
+  background: var(--ok-soft);
+}
+
+/* ---------- tables, banners ---------- */
+html[data-theme='sky'] td {
+  border-bottom-color: rgb(11 31 58 / 0.06);
+}
+html[data-theme='sky'] tr.sel {
+  background: var(--blue-soft);
+}
+html[data-theme='sky'] .hero {
+  background: linear-gradient(135deg, rgb(10 120 240 / 0.92), rgb(64 186 255 / 0.88));
+  border: 1px solid rgb(255 255 255 / 0.45);
+  box-shadow: 0 10px 30px rgb(10 100 220 / 0.3);
+}
+html[data-theme='sky'] .toast {
+  background: rgb(11 31 58 / 0.88);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+
+/* ---------- label designer keeps a plain white sticker so it looks like the paper ---------- */
+html[data-theme='sky'] .lbl-wrap {
+  background: var(--glass-soft);
+}
+
+/* ---------- theme switch ---------- */
+.theme-sw {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #e9ebf3;
+}
+.theme-sw button {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--muted);
+}
+.theme-sw button[aria-pressed='true'] {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+html[data-theme='sky'] .theme-sw {
+  background: var(--glass-soft);
+}
+html[data-theme='sky'] .theme-sw button[aria-pressed='true'] {
+  background: var(--glass-strong);
+}
+
+/* ---------- scanners and older phones: less blur keeps scrolling smooth ---------- */
+@media (max-width: 860px) {
+  html[data-theme='sky'] {
+    --blur: blur(10px) saturate(160%);
+    --card: rgb(255 255 255 / 0.72);
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-theme='sky'] {
+    --card: rgb(255 255 255 / 0.88);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme='sky'] {
+    --card: rgb(255 255 255 / 0.92);
+    --blur: none;
+  }
+}
+
+/* ---------- page heading sits on the bright sky: white text ---------- */
+html[data-theme='sky'] .wrap > :first-child:not(.card):not(section) {
+  color: #fff;
+  text-shadow: 0 1px 10px rgb(0 60 140 / 0.35);
+}
+html[data-theme='sky'] .wrap > :first-child:not(.card):not(section) .sub {
+  color: rgb(255 255 255 / 0.92);
+}
+html[data-theme='sky'] .wrap > :first-child:not(.card):not(section) .btn {
+  text-shadow: none;
+}
+html[data-theme='sky'] .wrap > :first-child:not(.card):not(section) .sub b {
+  color: #fff;
+}
