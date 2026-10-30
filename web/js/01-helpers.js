@@ -23,7 +23,7 @@ const THEMES = [
 function applyTheme(t) {
   if (!THEMES.some(([k]) => k === t)) t = 'sky';
   document.documentElement.dataset.theme = t;
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'sky' ? '#1f7cf2' : '#3b5bfd');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'sky' ? '#dcecfa' : '#3b5bfd');
   return t;
 }
 applyTheme(LS.get('theme', 'sky'));
