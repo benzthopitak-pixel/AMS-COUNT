@@ -15,6 +15,20 @@ const LS = {
     } catch {}
   }
 };
+// look of the app: 'sky' = glass on a blue sky (default) · 'classic' = the original flat colours · remembered per device
+const THEMES = [
+  ['sky', 'ท้องฟ้า'],
+  ['classic', 'แบบเดิม']
+];
+function applyTheme(t) {
+  if (!THEMES.some(([k]) => k === t)) t = 'sky';
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'sky' ? '#dcecfa' : '#3b5bfd');
+  return t;
+}
+applyTheme(LS.get('theme', 'sky'));
+const themeSwitch = () =>
+  `<div class="theme-sw" role="group" aria-label="ธีม">${THEMES.map(([k, l]) => `<button type="button" data-a="theme" data-v="${k}" aria-pressed="${document.documentElement.dataset.theme === k}">${l}</button>`).join('')}</div>`;
 const esc = s =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const norm = s =>

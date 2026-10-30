@@ -135,6 +135,9 @@ document.addEventListener('click', async e => {
       }
       break;
     }
+    case 'theme':
+      LS.set('theme', applyTheme(v));
+      break;
     case 'closesub':
       S.subPop = null;
       break;

@@ -1,0 +1,283 @@
+/* AssetSync · ธีม "ท้องฟ้า" — ฟ้าพาสเทล ขาวนวล ม่วงคราม ทองอ่อน · มินิมอล อ่านง่าย
+ * ใช้เมื่อ <html data-theme="sky"> · ทุกกฎขึ้นต้นด้วย html[data-theme='sky'] จึงไม่แตะธีมเดิม
+ * สลับธีมได้ที่เมนูข้าง (เว็บ) หรือหน้า บัญชี (เครื่องยิง) */
+
+html[data-theme='sky'] {
+  --ink: #1d1b4c; /* ม่วงครามเข้ม: ตัวอักษร */
+  --muted: #5b6386;
+  --bg: #f4f8fd;
+  --card: rgb(255 255 255 / 0.88);
+  --line: rgb(29 27 76 / 0.08);
+  --blue: #4a32b8; /* ม่วงคราม: ปุ่มหลัก เมนูที่เลือก */
+  --blue-soft: rgb(74 50 184 / 0.09);
+  --blue-ink: #3a2496;
+  --lime: #f1cd6e; /* ทองอ่อน: ปุ่มสแกน แถบความคืบหน้า */
+  --gold: #c9a24c;
+  --oth-soft: rgb(122 90 248 / 0.12);
+  --soft: rgb(74 50 184 / 0.05); /* พื้นเทาเดิม → ม่วงจางมาก */
+  --edge: rgb(255 255 255 / 0.95);
+  --shadow: 0 1px 2px rgb(40 50 120 / 0.04), 0 8px 24px rgb(40 60 140 / 0.07);
+  --blur: blur(14px) saturate(140%);
+  color-scheme: light;
+}
+
+/* ---------- background: soft pastel sky, a light glow and two faint clouds ---------- */
+html[data-theme='sky'] body {
+  background: #e6f1fb;
+}
+html[data-theme='sky'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 40% 10% at 22% 8%, rgb(255 255 255 / 0.85), transparent 70%),
+    radial-gradient(ellipse 30% 8% at 80% 14%, rgb(255 255 255 / 0.7), transparent 70%),
+    radial-gradient(ellipse 70% 45% at 50% 55%, rgb(255 255 255 / 0.55), transparent 75%),
+    linear-gradient(180deg, #c9e2f8 0%, #dcecfa 30%, #edf5fd 65%, #f7fbff 100%);
+}
+html[data-theme='sky'] body::before {
+  background: #dcecfa;
+}
+
+/* ---------- surfaces: white, nearly solid (easy to read), hairline edge, soft shadow ---------- */
+html[data-theme='sky'] :is(.card, .kpi, .duppop, .sheet, .brand, .rcard, .li, .mini) {
+  background: var(--card);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--edge);
+  box-shadow: var(--shadow);
+}
+html[data-theme='sky'] .card .card,
+html[data-theme='sky'] .card .kpi {
+  background: var(--soft);
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-theme='sky'] .side-nav {
+  background: rgb(255 255 255 / 0.6);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border-right: 1px solid var(--edge);
+}
+html[data-theme='sky'] :is(.top, .bnav) {
+  background: rgb(255 255 255 / 0.78);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border-color: var(--line);
+}
+html[data-theme='sky'] .bnav .fab {
+  border-color: #fff;
+  box-shadow: 0 6px 16px rgb(201 162 76 / 0.35);
+}
+html[data-theme='sky'] .sheet,
+html[data-theme='sky'] .duppop {
+  background: rgb(255 255 255 / 0.96);
+}
+html[data-theme='sky'] .sheetbg,
+html[data-theme='sky'] .dupbg {
+  background: rgb(29 27 76 / 0.28);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+html[data-theme='sky'] .confirm {
+  border: 1px solid rgb(240 68 56 / 0.15);
+}
+
+/* ---------- controls: flat, quiet; one strong colour for the main action ---------- */
+html[data-theme='sky'] :is(.btn, .in, textarea.in, .tog, .cond button) {
+  background: #fff;
+  border-color: rgb(29 27 76 / 0.12);
+}
+html[data-theme='sky'] :is(.btn, .tog, .cond button):hover:not(:disabled) {
+  border-color: rgb(74 50 184 / 0.35);
+}
+html[data-theme='sky'] .in:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgb(74 50 184 / 0.12);
+  outline: none;
+}
+html[data-theme='sky'] .btn.pri,
+html[data-theme='sky'] .tog[aria-pressed='true'] {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  box-shadow: 0 4px 12px rgb(74 50 184 / 0.22);
+}
+html[data-theme='sky'] .btn.pri:hover:not(:disabled) {
+  background: var(--blue-ink);
+}
+html[data-theme='sky'] .btn.dark {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+html[data-theme='sky'] .btn.lime {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--ink);
+}
+html[data-theme='sky'] .btn.oth {
+  background: var(--oth);
+  border-color: var(--oth);
+  color: #fff;
+}
+html[data-theme='sky'] .btn.red {
+  color: var(--bad-ink);
+}
+html[data-theme='sky'] .cond button[aria-pressed='true'] {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+html[data-theme='sky'] .cond button.w[aria-pressed='true'] {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: #1d0e00;
+}
+html[data-theme='sky'] :focus-visible {
+  outline-color: var(--blue);
+}
+
+/* ---------- light fills that were grey ---------- */
+html[data-theme='sky'] :is(.pill, .s-off, .c-gray, .ver, .msg, .nav-num, .seg, .tabs3, .bar) {
+  background: var(--soft);
+}
+html[data-theme='sky'] .pill {
+  border: 1px solid rgb(29 27 76 / 0.06);
+}
+html[data-theme='sky'] .pill.on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+html[data-theme='sky'] .pill.done {
+  background: var(--ok-soft);
+}
+html[data-theme='sky'] .msg.ok {
+  background: var(--ok-soft);
+}
+html[data-theme='sky'] .msg.bad {
+  background: var(--bad-soft);
+}
+html[data-theme='sky'] .msg.warn {
+  background: var(--warn-soft);
+}
+html[data-theme='sky'] .drop {
+  background: rgb(255 255 255 / 0.6);
+  border-color: rgb(74 50 184 / 0.3);
+}
+html[data-theme='sky'] :is(.seg button[aria-pressed='true'], .tabs3 button.on) {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgb(40 50 120 / 0.1);
+}
+
+/* ---------- side menu ---------- */
+html[data-theme='sky'] .nav-item {
+  color: #3a3f66;
+}
+html[data-theme='sky'] :is(.nav-item:hover, .nav-group:hover) {
+  background: rgb(255 255 255 / 0.75);
+}
+html[data-theme='sky'] .nav-item.on {
+  background: #fff;
+  color: var(--blue);
+  box-shadow: var(--shadow);
+  position: relative;
+}
+html[data-theme='sky'] .nav-item.on::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--gold);
+}
+html[data-theme='sky'] .nav-item.on .nav-num {
+  background: var(--blue);
+  color: #fff;
+}
+html[data-theme='sky'] .nav-item.done:not(.on) .nav-num {
+  background: var(--ok-soft);
+}
+
+/* ---------- tables ---------- */
+html[data-theme='sky'] th {
+  color: var(--muted);
+  border-bottom-color: rgb(29 27 76 / 0.1);
+}
+html[data-theme='sky'] td {
+  border-bottom-color: rgb(29 27 76 / 0.05);
+}
+html[data-theme='sky'] tr.click:hover {
+  background: rgb(74 50 184 / 0.04);
+}
+html[data-theme='sky'] tr.sel {
+  background: var(--blue-soft);
+}
+
+/* ---------- banner on the scanner home: indigo with a thin gold edge ---------- */
+html[data-theme='sky'] .hero {
+  background: linear-gradient(135deg, #4a32b8, #6b52d9);
+  border: 1px solid rgb(201 162 76 / 0.55);
+  box-shadow: 0 10px 28px rgb(74 50 184 / 0.22);
+}
+html[data-theme='sky'] .toast {
+  background: rgb(29 27 76 / 0.92);
+}
+html[data-theme='sky'] .lbl-wrap {
+  background: var(--soft);
+}
+
+/* ---------- theme switch ---------- */
+.theme-sw {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #e9ebf3;
+}
+.theme-sw button {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--muted);
+}
+.theme-sw button[aria-pressed='true'] {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+html[data-theme='sky'] .theme-sw {
+  background: var(--soft);
+}
+html[data-theme='sky'] .theme-sw button[aria-pressed='true'] {
+  background: #fff;
+}
+
+/* ---------- scanners / older phones: no blur, solid white (smooth scrolling) ---------- */
+@media (max-width: 860px) {
+  html[data-theme='sky'] {
+    --card: rgb(255 255 255 / 0.94);
+    --blur: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme='sky'] {
+    --card: #fff;
+    --blur: none;
+  }
+}
+html[data-theme='sky'] .hero .bar {
+  background: rgb(255 255 255 / 0.22) !important; /* the banner's own inline track colour is the old blue */
+}

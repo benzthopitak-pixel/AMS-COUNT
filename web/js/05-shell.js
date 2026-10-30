@@ -107,7 +107,7 @@ function render() {
                 : `<b>${esc(meta.name)}</b>`
             }`
           : '<span class="sub">ยังไม่มีงานนับ</span>'
-      }${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'}</span>` : ''}</div></aside><div class="shell-main">`;
+      }${S.user ? `<span class="sub">${esc(S.user.name)} · ${S.user.role === 'lead' ? 'Admin' : 'ผู้ตรวจนับ'}</span>` : ''}<span class="sub">ธีม</span>${themeSwitch()}</div></aside><div class="shell-main">`;
   } else {
     html += `<header class="top"><div class="top-in"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div></header>`;
   }
