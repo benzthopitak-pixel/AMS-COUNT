@@ -33,7 +33,7 @@ const LBL_STD = {
     { id: 'a1', t: 'text', x: 2.2, y: 2.2, w: 26.8, h: 3.4, text: 'No. : {Asset-Sub}', fs: 7.4, align: 'left' },
     { id: 'a2', t: 'text', x: 2.2, y: 6.0, w: 26.8, h: 3.4, text: 'Date : {วันที่ซื้อ}', fs: 7.4, align: 'left' },
     { id: 'a3', t: 'text', x: 2.2, y: 9.8, w: 26.8, h: 3.4, text: 'CC : {CC บนป้าย}', fs: 7.4, align: 'left' },
-    { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
+    { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: '{ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
     { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
     { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset-Sub}' }
   ]
@@ -51,7 +51,7 @@ const LBL_7050 = {
     { id: 'b1', t: 'text', x: 37, y: 14, w: 31, h: 5, text: '{Asset-Sub}', fs: 12, bold: true, align: 'left' },
     { id: 'b2', t: 'text', x: 37, y: 20.5, w: 31, h: 10, text: '{ชื่อ}', fs: 8, align: 'left', wrap: true },
     { id: 'b3', t: 'text', x: 37, y: 31.5, w: 31, h: 3.6, text: 'CC : {CC บนป้าย}', fs: 7.5, align: 'left' },
-    { id: 'b4', t: 'text', x: 37, y: 35.5, w: 31, h: 3.6, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.5, align: 'left' },
+    { id: 'b4', t: 'text', x: 37, y: 35.5, w: 31, h: 3.6, text: '{ชื่อ CC บนป้าย}', fs: 7.5, align: 'left' },
     { id: 'b5', t: 'text', x: 37, y: 39.5, w: 31, h: 3.6, text: 'Date : {วันที่ซื้อ}', fs: 7.5, align: 'left' }
   ]
 };

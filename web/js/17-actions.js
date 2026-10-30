@@ -138,6 +138,32 @@ document.addEventListener('click', async e => {
     case 'theme':
       LS.set('theme', applyTheme(v));
       break;
+    case 'ccsave': {
+      const P = S.ccPend;
+      if (!P) break;
+      try {
+        await ccSave({ map: P[P.col], file: P.file, col: P.col });
+        S.msg.cc = [`บันทึกรายชื่อ Cost Center แล้ว ${N(Object.keys(P[P.col]).length)} รหัส`, 'ok'];
+        S.ccPend = null;
+      } catch (e) {
+        S.msg.cc = ['บันทึกขึ้นระบบไม่สำเร็จ: ' + (e.message || e), 'bad'];
+      }
+      break;
+    }
+    case 'cccancel':
+      S.ccPend = null;
+      break;
+    case 'ccapply': {
+      S.msg.cc = ['กำลังใส่ชื่อแผนก…', 'ok'];
+      render();
+      try {
+        const n = await ccApplyToJob();
+        S.msg.cc = [n ? `ใส่ชื่อแผนกให้งาน "${meta.name}" แล้ว ${n} แผนก` : 'ไม่มีแผนกที่ต้องใส่ชื่อ', 'ok'];
+      } catch (e) {
+        S.msg.cc = ['ไม่สำเร็จ: ' + (e.message || e), 'bad'];
+      }
+      break;
+    }
     case 'closesub':
       S.subPop = null;
       break;
@@ -806,7 +832,12 @@ document.addEventListener('click', async e => {
 });
 let confirmNew = false,
   pickFor = null;
-const PICK = { master: ['.xlsx,.xls,.csv', false], pkg: ['.json,application/json', false], usb: ['.xlsx', true] };
+const PICK = {
+  master: ['.xlsx,.xls,.csv', false],
+  cc: ['.xlsx,.xls,.csv', false],
+  pkg: ['.json,application/json', false],
+  usb: ['.xlsx', true]
+};
 async function onMasterFile(f) {
   const buf = await f.arrayBuffer();
   try {
@@ -839,6 +870,16 @@ async function onFiles(why, files) {
       S.imp.roundName =
         'ตรวจนับ ' + new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
   }
+  if (why === 'cc') {
+    S.msg.cc = null;
+    try {
+      const r = await ccReadFile(files[0]);
+      if (r) S.ccPend = { ...r, col: r.name && Object.keys(r.name).length ? 'name' : 'desc' };
+      else S.msg.cc = ['ไม่พบคอลัมน์ Cost Center + Name / DESCRIPTION ในไฟล์นี้', 'bad'];
+    } catch (e) {
+      S.msg.cc = ['อ่านไฟล์ไม่ได้: ' + e.message, 'bad'];
+    }
+  }
   if (why === 'pkg') {
     S.msg.usbApp = await importPackage(files[0]);
     S.app = 'me';
@@ -867,6 +908,10 @@ document.addEventListener('change', async e => {
     pickFor = null;
     t.value = '';
     await onFiles(why, files);
+  }
+  if (t.id === 'ccCol' && S.ccPend) {
+    S.ccPend.col = t.value;
+    render();
   }
   if (t.id === 'impSheet') {
     prepareImport(t.value.replace(/ \(ซ่อน\)$/, ''));
@@ -936,7 +981,7 @@ document.addEventListener('input', e => {
     }, 200);
     return;
   }
-  if (e.target.id === 'ccQ' || e.target.id === 'ccItemQ') {
+  if (e.target.id === 'ccQ' || e.target.id === 'ccItemQ' || e.target.id === 'ccnQ') {
     S[e.target.id] = e.target.value;
     clearTimeout(window._cq);
     window._cq = setTimeout(render, 200);

@@ -137,6 +137,17 @@ const impKey = (r, m) => {
   const c = norm(r[m.code]);
   return !c ? '' : m.sub >= 0 ? keyOf(c, subKey(r[m.sub]) || '0') : c;
 };
+// file without a department-name column: how many of its Cost Centers get a name from menu 6.3
+function ccChip() {
+  const I = S.imp,
+    m = I.map;
+  if (m.ccName >= 0 || m.cc < 0) return '';
+  const codes = new Set(I.rows.map(r => ccKey(r[m.cc])).filter(Boolean)),
+    hit = [...codes].filter(c => ccListName(c)).length;
+  if (!Object.keys(ccList.map).length)
+    return `<span class="chip c-warn">ไฟล์ไม่มีชื่อแผนก · ยังไม่มีรายชื่อ Cost Center (เมนู 6.3) · จะแสดงเป็นรหัส CC</span>`;
+  return `<span class="chip ${hit === codes.size ? 'c-blue' : 'c-warn'}">ชื่อแผนกจากรายชื่อ Cost Center (6.3): ${hit}/${codes.size} CC</span>`;
+}
 function importStats() {
   const I = S.imp,
     m = I.map,
@@ -176,7 +187,7 @@ async function doImport() {
       sub = m.sub >= 0 ? subKey(r[m.sub]) || '0' : '';
     const wo = statusIx >= 0 && r[statusIx] === 'Write - Off';
     const ccCode = ccKey(g(r, m.cc)),
-      ccNm = g(r, m.ccName) || ccCode; // no department-name column: the Cost Center code is the department
+      ccNm = g(r, m.ccName) || ccListName(ccCode) || ccCode; // no department-name column: name from menu 6.3, else the code
     if (ccCode && !cc[ccCode]) cc[ccCode] = ccNm;
     if (ccCode) (nmSeen[ccCode] = nmSeen[ccCode] || new Set()).add(ccNm);
     const ex = out.get(code);
@@ -316,7 +327,7 @@ function importBlock() {
   ]
     .map(([k, l]) => `<label class="f">${l}<select class="in" data-map="${k}">${opts(I.map[k] ?? -1)}</select></label>`)
     .join('')}</div>
-    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${I.map.sub >= 0 ? `<span class="chip c-blue">แยกตาม Asset + Sub-number${st.withSubs ? ` · ${N(st.withSubs)} Asset มีหลายรายการย่อย` : ''}</span>` : `<span class="chip c-gray">ไม่ได้เลือกคอลัมน์ Sub-number · นับรวมตามเลข Asset</span>`}${st.multi ? `<span class="chip c-warn">${I.map.sub >= 0 ? 'Asset + Sub' : 'เลข Asset'} ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
+    <div class="chips"><span class="chip c-ok">✓ ${N(st.codes)} รายการ จาก ${N(st.rows)} แถว</span>${ccChip()}${I.map.sub >= 0 ? `<span class="chip c-blue">แยกตาม Asset + Sub-number${st.withSubs ? ` · ${N(st.withSubs)} Asset มีหลายรายการย่อย` : ''}</span>` : `<span class="chip c-gray">ไม่ได้เลือกคอลัมน์ Sub-number · นับรวมตามเลข Asset</span>`}${st.multi ? `<span class="chip c-warn">${I.map.sub >= 0 ? 'Asset + Sub' : 'เลข Asset'} ซ้ำในไฟล์ ${st.multi} เลข (รวม ${N(st.multiRows)} แถว) · สแกนครั้งเดียวนับครบทุกแถว</span>` : ''}${st.wo ? `<span class="chip c-warn">${st.wo} แถว Write-Off เดิม · ไม่นับ</span>` : ''}</div>`;
   if (busyRound)
     h += `<div class="msg ok">ไฟล์นี้จะเป็นงานใหม่อีกงาน · งาน "${esc(meta.name)}" ที่นับอยู่ยังอยู่ครบ สลับไปมาได้</div>`;
   h += `<div class="row"><button class="btn pri" data-a="doimport">${fresh ? 'นำเข้า + สร้างงานใหม่' : 'นำเข้า'} ${N(st.codes)} รายการ</button><button class="btn" data-a="cancelimport">ยกเลิก</button></div>`;

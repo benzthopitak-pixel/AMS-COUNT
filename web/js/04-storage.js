@@ -223,6 +223,7 @@ async function connect() {
     S.user = { id: p.id, name: p.name, code: p.code, role: p.role };
     LS.set('user', S.user);
     await loadTeam();
+    ccLoad();
   } catch (e) {
     // no internet: keep working with the account saved on this device
     if (!S.user) {

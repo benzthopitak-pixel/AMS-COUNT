@@ -89,8 +89,9 @@ function render() {
         G(
           '6',
           'ตั้งค่า',
-          I('usb', '6.1', 'เชื่อมต่อแบบออฟไลน์', 0, 99, 1) + (usbMode ? '' : I('team', '6.2', 'User', 0, 99, 1)),
-          ['usb', 'team']
+          I('usb', '6.1', 'เชื่อมต่อแบบออฟไลน์', 0, 99, 1) +
+            (usbMode ? '' : I('team', '6.2', 'User', 0, 99, 1) + I('ccnames', '6.3', 'รายชื่อ Cost Center', 0, 99, 1)),
+          ['usb', 'team', 'ccnames']
         );
     html += `<div class="shell"><aside class="side-nav"><div class="side-top"><span class="logo"><img src="logo-mark.svg" alt="" width="36" height="28">AssetSync ${verTag()}</span>${syncHtml()}</div>
       <nav class="nav-list" aria-label="เมนู">${items}</nav>
@@ -212,6 +213,7 @@ function afterRender() {
 /* ================= WEB ================= */
 function webView(c) {
   if (S.web === 'team' && !usbMode && isLead()) return webTeam();
+  if (S.web === 'ccnames' && !usbMode && isLead()) return webCostCenters();
   if (!isLead())
     return meta && master.size
       ? S.web === 'cc'
