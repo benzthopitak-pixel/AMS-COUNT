@@ -4,8 +4,8 @@
  * ถ้าเว้นว่างไว้ แอปจะถามค่าเหล่านี้ตอนเปิดครั้งแรกแทน
  */
 window.AMS_CONFIG = {
-  SUPABASE_URL: 'https://yggcnezlwdzcveldyxcp.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_8hHuHSkYaJ2qM_qX9o2sRQ_EfsrPLgS',
-  // โดเมนสมมุติสำหรับสร้างบัญชีจากรหัสพนักงาน (ไม่มีการส่งอีเมลจริง) ไม่ต้องแก้
-  LOGIN_DOMAIN: 'ams-count.example.com'
+  SUPABASE_URL: 'https://hcjbjbdjddnnutpwjbny.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_3f4E6MIXQOxMS7Ss_2uG2g_LEcwPH4k',
+  // ใช้ฐานข้อมูลเดียวกับ IP One Tools Portal · ล็อกอินด้วยรหัสพนักงาน + รหัสผ่านชุดเดียวกัน
+  LOGIN_DOMAIN: 'ipone.co.th'
 };

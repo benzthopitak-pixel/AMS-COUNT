@@ -7,7 +7,7 @@
  * และรับการเปลี่ยนแปลงสดผ่าน Supabase Realtime
  */
 (() => {
-  const LSK = 'amt.cfg';
+  const LSK = 'amt.cfg2'; // ค่าเดิม (amt.cfg) ชี้ฐานข้อมูลเก่า จึงไม่อ่านแล้ว
   const readCfg = () => {
     let local = {};
     try {
@@ -20,7 +20,7 @@
         .replace(/\/rest\/v1\/?$/, '')
         .replace(/\/+$/, ''),
       key: (local.key || base.SUPABASE_ANON_KEY || '').trim(),
-      domain: (base.LOGIN_DOMAIN || 'ams-count.example.com').trim()
+      domain: (base.LOGIN_DOMAIN || 'ipone.co.th').trim()
     };
   };
 
@@ -30,7 +30,7 @@
     if (sb) return sb;
     if (!cfg.url || !cfg.key || !window.supabase) return null;
     sb = window.supabase.createClient(cfg.url, cfg.key, {
-      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'amt.auth' },
+      auth: { persistSession: true, autoRefreshToken: true }, // ใช้ที่เก็บล็อกอินเดียวกับ Portal
       realtime: { params: { eventsPerSecond: 20 } }
     });
     return sb;
@@ -41,7 +41,7 @@
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9._-]/g, '')}@${cfg.domain}`;
-  const passOf = (code, pin) => `AMS-${String(pin).trim()}-${String(code).trim()}`;
+  const passOf = (code, pin) => String(pin); // รหัสผ่านเดียวกับ Portal
   const err = (e, fallback) => {
     const x = new Error((e && (e.message || e.error_description)) || fallback || 'error');
     x.code = e?.code || e?.status;
@@ -82,7 +82,7 @@
       const s = await auth.session();
       if (!c || !s) return null;
       const { data, error } = await c
-        .from('profiles')
+        .from('ams_profiles')
         .select('id,code,name,role,active')
         .eq('id', s.user.id)
         .maybeSingle();
@@ -98,6 +98,7 @@
       return !!data;
     },
     async firstLead(name, code, pin) {
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
       const c = client();
       const { data, error } = await c.auth.signUp({
         email: emailOf(code),
@@ -115,11 +116,12 @@
     async team() {
       const c = client();
       if (!c) return [];
-      const { data, error } = await c.from('profiles').select('id,code,name,role,active').order('role').order('name');
+      const { data, error } = await c.from('ams_profiles').select('id,code,name,role,active').order('name');
       if (error) throw err(error);
       return data || [];
     },
     async addMember(name, code, pin, role) {
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
       // สมัครบัญชีด้วยตัวเชื่อมแยก เพื่อไม่ให้หัวหน้าหลุดจากระบบ แล้วหัวหน้าเปิดใช้ + กำหนดบทบาท
       const tmp = window.supabase.createClient(cfg.url, cfg.key, {
         auth: { persistSession: false, autoRefreshToken: false, storageKey: 'amt.tmp' }
@@ -137,10 +139,12 @@
       return id;
     },
     async updateMember(id, patch) {
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
       const { error } = await client().from('profiles').update(patch).eq('id', id);
       if (error) throw err(error);
     },
     async deleteMember(id) {
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
       const { error } = await client().rpc('ams_delete_user', { p_user: id });
       if (error) {
         const e = err(error);
@@ -155,6 +159,7 @@
       }
     },
     async setPin(id, code, pin) {
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
       const { error } = await client().rpc('ams_set_pin', { p_user: id, p_password: passOf(code, pin) });
       if (error) throw err(error);
     }
@@ -178,7 +183,7 @@
       out = [];
     for (let from = 0; ; from += 1000) {
       let q = c
-        .from('events')
+        .from('ams_events')
         .select('data')
         .eq('round', round)
         .order('t')
@@ -205,7 +210,7 @@
     for (let i = 0; i < fresh.length; i += 500) {
       const part = fresh.slice(i, i + 500);
       const { error } = await client()
-        .from('events')
+        .from('ams_events')
         .upsert(part.map(rowOf), { onConflict: 'id', ignoreDuplicates: true });
       if (!error) {
         part.forEach(e => sentIds.add(e.id));
@@ -215,7 +220,7 @@
       for (const e of part) {
         // send one by one, set aside only the refused rows
         const r = await client()
-          .from('events')
+          .from('ams_events')
           .upsert([rowOf(e)], { onConflict: 'id', ignoreDuplicates: true });
         if (!r.error) sentIds.add(e.id);
         else if (refused(r.error)) rejected.set(e.id, r.error.message || 'refused');
@@ -224,7 +229,7 @@
     }
   }
   async function kvGet(key) {
-    const { data, error } = await client().from('kv').select('data').eq('key', key).maybeSingle();
+    const { data, error } = await client().from('ams_kv').select('data').eq('key', key).maybeSingle();
     if (error) throw err(error);
     return data ? data.data : null;
   }
@@ -258,7 +263,7 @@
       );
     const ch = client()
       .channel('kv-' + key.replace(/\W/g, '_') + '-' + Math.random().toString(36).slice(2, 6))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'kv', filter: `key=eq.${key}` }, p => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ams_kv', filter: `key=eq.${key}` }, p => {
         if (p.eventType === 'DELETE') push(null);
         else push(p.new?.data);
       })
@@ -298,7 +303,7 @@
       .channel('ev-' + round + '-' + Math.random().toString(36).slice(2, 6))
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'events', filter: `round=eq.${round}` },
+        { event: 'INSERT', schema: 'public', table: 'ams_events', filter: `round=eq.${round}` },
         p => {
           const d = p.new?.data;
           if (d && d.id) {
@@ -338,12 +343,12 @@
         },
         async set(d) {
           const { error } = await client()
-            .from('kv')
+            .from('ams_kv')
             .upsert({ key: path, data: d, updated_at: new Date().toISOString() });
           if (error) throw err(error);
         },
         async delete() {
-          const { error } = await client().from('kv').delete().eq('key', path);
+          const { error } = await client().from('ams_kv').delete().eq('key', path);
           if (error) throw err(error);
         },
         onSnapshot(cb, onErr) {
@@ -369,12 +374,12 @@
       return q;
     },
     async deleteRound(round) {
-      const { error } = await client().from('events').delete().eq('round', round);
+      const { error } = await client().from('ams_events').delete().eq('round', round);
       if (error) throw err(error);
     },
     async deleteKeys(prefix) {
       const { error } = await client()
-        .from('kv')
+        .from('ams_kv')
         .delete()
         .like('key', prefix + '%');
       if (error) throw err(error);
