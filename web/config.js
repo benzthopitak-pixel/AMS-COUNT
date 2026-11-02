@@ -6,6 +6,6 @@
 window.AMS_CONFIG = {
   SUPABASE_URL: 'https://hcjbjbdjddnnutpwjbny.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_3f4E6MIXQOxMS7Ss_2uG2g_LEcwPH4k',
-  // ใช้ฐานข้อมูลเดียวกับ IP One Tools Portal · ล็อกอินด้วยรหัสพนักงาน + รหัสผ่านชุดเดียวกัน
+  // ใช้ฐานข้อมูลเดียวกับ Inventory Tools · ล็อกอินด้วยรหัสพนักงาน + รหัสผ่านชุดเดียวกัน
   LOGIN_DOMAIN: 'ipone.co.th'
 };

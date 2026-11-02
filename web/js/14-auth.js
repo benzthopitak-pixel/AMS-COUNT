@@ -14,7 +14,7 @@ function gateView() {
     <div class="card"><b>ไม่มีอินเทอร์เน็ตที่นี่?</b><p class="sub">ใช้โหมดสาย USB ส่งข้อมูลผ่านไฟล์แทน</p><button class="btn" data-a="usbmode" data-v="1">ใช้โหมดสาย USB</button></div>`);
   if (S.gate === 'inactive')
     return wrap(
-      `<div class="card"><h2>ยังไม่มีสิทธิ์ใช้ AssetSync</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้รับสิทธิ์ · ให้ Admin ติ๊กเครื่องมือ AssetSync ที่หน้าตั้งค่าของ IP One Tools Portal</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`
+      `<div class="card"><h2>ยังไม่มีสิทธิ์ใช้ AssetSync</h2><p class="sub">บัญชี ${esc(S.user?.name || '')} (${esc(S.user?.code || '')}) ยังไม่ได้รับสิทธิ์ · ให้ Admin ติ๊กเครื่องมือ AssetSync ที่หน้าตั้งค่าของ Inventory Tools</p><button class="btn" data-a="logout">ออกจากระบบ</button></div>`
     );
   if (S.firstRun)
     return wrap(`<div class="card"><h2>เริ่มใช้ครั้งแรก · สร้างบัญชี Admin</h2><p class="sub">ระบบยังไม่มีผู้ใช้ บัญชีแรกจะเป็น Admin (นำเข้าทะเบียน มอบงาน ตรวจ ปิดรอบ)</p>
@@ -28,7 +28,7 @@ function gateView() {
     <label class="f">รหัสผ่าน<input class="in mono" id="lgPin" type="password" autocomplete="current-password"></label>${msg}
     <button class="btn pri" type="submit" ${S.busy ? 'disabled' : ''}>${S.busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button></form>
     <div class="row"><button class="btn sm" data-a="editcfg">ตั้งค่าการเชื่อมต่อ (Admin)</button><button class="btn sm" data-a="usbmode" data-v="1">โหมดสาย USB</button></div>
-    <p class="sub">ใช้รหัสพนักงาน + รหัสผ่านเดียวกับ IP One Tools Portal · ลืมรหัส? ให้ Admin ตั้งใหม่ที่หน้าตั้งค่า Portal · เครื่องนี้: ${esc(dev)}</p>`);
+    <p class="sub">ใช้รหัสพนักงาน + รหัสผ่านเดียวกับ Inventory Tools · ลืมรหัส? ให้ Admin ตั้งใหม่ที่หน้าตั้งค่า Portal · เครื่องนี้: ${esc(dev)}</p>`);
 }
 async function doLogin() {
   const code = $('#lgCode')?.value.trim(),
@@ -146,8 +146,8 @@ async function addMember() {
 }
 function webTeam() {
   const cfg = Store.auth.config(),
-    lead = false; // จัดการผู้ใช้ย้ายไปหน้าตั้งค่าของ IP One Tools Portal
-  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>6.2 · User</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2><p class="sub">เพิ่มคน ตั้งรหัสผ่าน และกำหนดสิทธิ์ได้ที่ <a href="https://benzthopitak-pixel.github.io/ip-one-tools/#settings" target="_blank" rel="noopener">หน้าตั้งค่า IP One Tools Portal</a></p>
+    lead = false; // จัดการผู้ใช้ย้ายไปหน้าตั้งค่าของ Inventory Tools
+  let h = `<main class="wrap"><div><p class="sub">บัญชีผู้ใช้และการเชื่อมต่อ</p><h1>6.2 · User</h1></div><div class="row"><section class="card grow"><h2>ทีม (${S.team.filter(u => u.active).length} คนที่ใช้งานได้)</h2><p class="sub">เพิ่มคน ตั้งรหัสผ่าน และกำหนดสิทธิ์ได้ที่ <a href="https://inventory-tool01.netlify.app/#settings" target="_blank" rel="noopener">หน้าตั้งค่า Inventory Tools</a></p>
     <div class="tbl-wrap"><table><thead><tr><th>ชื่อ</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>สถานะ</th>${lead ? '<th>ตั้ง PIN ใหม่</th><th></th>' : ''}</tr></thead><tbody>`;
   for (const u of S.team)
     h += `<tr><td>${lead && S.editName === u.id ? `<div class="row" style="flex-wrap:nowrap"><input class="in" id="nm-${u.id}" value="${esc(u.name)}" style="width:150px"><button class="btn sm pri" data-a="memname" data-v="${u.id}">บันทึก</button><button class="btn sm" data-a="noname">ยกเลิก</button></div>` : `<b>${esc(u.name)}</b>${u.id === S.user?.id ? ' <span class="chip c-blue">คุณ</span>' : ''}${lead ? ` <button class="btn sm" data-a="editname" data-v="${u.id}" aria-label="แก้ชื่อ ${esc(u.name)}" style="min-height:28px;padding:2px 8px">แก้ชื่อ</button>` : ''}`}</td><td class="mono">${esc(u.code)}</td>

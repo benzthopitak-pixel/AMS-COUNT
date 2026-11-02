@@ -98,7 +98,7 @@
       return !!data;
     },
     async firstLead(name, code, pin) {
-      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ Inventory Tools');
       const c = client();
       const { data, error } = await c.auth.signUp({
         email: emailOf(code),
@@ -121,7 +121,7 @@
       return data || [];
     },
     async addMember(name, code, pin, role) {
-      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ Inventory Tools');
       // สมัครบัญชีด้วยตัวเชื่อมแยก เพื่อไม่ให้หัวหน้าหลุดจากระบบ แล้วหัวหน้าเปิดใช้ + กำหนดบทบาท
       const tmp = window.supabase.createClient(cfg.url, cfg.key, {
         auth: { persistSession: false, autoRefreshToken: false, storageKey: 'amt.tmp' }
@@ -139,12 +139,12 @@
       return id;
     },
     async updateMember(id, patch) {
-      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ Inventory Tools');
       const { error } = await client().from('profiles').update(patch).eq('id', id);
       if (error) throw err(error);
     },
     async deleteMember(id) {
-      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ Inventory Tools');
       const { error } = await client().rpc('ams_delete_user', { p_user: id });
       if (error) {
         const e = err(error);
@@ -159,7 +159,7 @@
       }
     },
     async setPin(id, code, pin) {
-      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ IP One Tools Portal');
+      throw err(null, 'จัดการผู้ใช้ได้ที่หน้าตั้งค่าของ Inventory Tools');
       const { error } = await client().rpc('ams_set_pin', { p_user: id, p_password: passOf(code, pin) });
       if (error) throw err(error);
     }
