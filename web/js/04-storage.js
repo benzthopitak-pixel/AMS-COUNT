@@ -201,7 +201,7 @@ async function connect() {
     sess = await Store.auth.session();
   } catch {}
   if (!sess) {
-    // บนเว็บ: ล็อกอินที่ IP One Tools Portal ที่เดียว (แอปบนเครื่องยิงยังล็อกอินในแอปได้)
+    // บนเว็บ: ล็อกอินที่ Inventory Tools ที่เดียว (แอปบนเครื่องยิงยังล็อกอินในแอปได้)
     if (/(github\.io|netlify\.app)$/i.test(location.hostname)) {
       location.replace('https://inventory-tool01.netlify.app/');
       return;
