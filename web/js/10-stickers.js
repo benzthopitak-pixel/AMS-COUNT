@@ -29,13 +29,17 @@ const LBL_STD = {
   w: 50,
   h: 25,
   builtin: true,
+  // วางตามป้ายจริงที่ติดอยู่บนทรัพย์สิน: หัวข้อตัวเล็กหนา + ค่าเป็นคอลัมน์ · HO ตัวใหญ่ · ชื่อทรัพย์สินตัวหนา · QR ขวา
   els: [
-    { id: 'a1', t: 'text', x: 2.2, y: 2.2, w: 26.8, h: 3.4, text: 'No. : {Asset-Sub}', fs: 7.4, align: 'left' },
-    { id: 'a2', t: 'text', x: 2.2, y: 6.0, w: 26.8, h: 3.4, text: 'Date : {วันที่ซื้อ}', fs: 7.4, align: 'left' },
-    { id: 'a3', t: 'text', x: 2.2, y: 9.8, w: 26.8, h: 3.4, text: 'CC : {CC บนป้าย}', fs: 7.4, align: 'left' },
-    { id: 'a4', t: 'text', x: 2.2, y: 13.6, w: 26.8, h: 3.4, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.4, align: 'left' },
-    { id: 'a5', t: 'text', x: 2.2, y: 17.4, w: 26.8, h: 3.4, text: '{ชื่อ}', fs: 7.4, align: 'left' },
-    { id: 'q1', t: 'qr', x: 31.2, y: 4.2, w: 16.5, h: 16.5, data: '{Asset-Sub}' }
+    { id: 'l1', t: 'text', x: 4.5, y: 4.1, w: 6, h: 2.6, text: 'No. :', fs: 5.2, bold: true, align: 'left', font: 'Arial' },
+    { id: 'a1', t: 'text', x: 11, y: 3.9, w: 19, h: 3, text: '{Asset-Sub}', fs: 6.3, align: 'left', font: 'Arial' },
+    { id: 'l2', t: 'text', x: 4.5, y: 7.2, w: 6, h: 2.6, text: 'Date :', fs: 5.2, bold: true, align: 'left', font: 'Arial' },
+    { id: 'a2', t: 'text', x: 11, y: 7.0, w: 19, h: 3, text: '{วันที่ซื้อ}', fs: 6.3, align: 'left', font: 'Arial' },
+    { id: 'l3', t: 'text', x: 4.5, y: 10.3, w: 6, h: 2.6, text: 'CC :', fs: 5.2, bold: true, align: 'left', font: 'Arial' },
+    { id: 'a3', t: 'text', x: 11, y: 10.1, w: 19, h: 3, text: '{CC บนป้าย}', fs: 6.3, align: 'left', font: 'Arial' },
+    { id: 'a4', t: 'text', x: 4.5, y: 13.3, w: 26, h: 3.2, text: 'HO: {ชื่อ CC บนป้าย}', fs: 7.2, align: 'left', font: 'Arial' },
+    { id: 'a5', t: 'text', x: 4.5, y: 16.7, w: 26, h: 2.8, text: '{ชื่อ}', fs: 5.8, bold: true, align: 'left', font: 'Arial' },
+    { id: 'q1', t: 'qr', x: 31.5, y: 6.4, w: 13, h: 13, data: '{Asset-Sub}' }
   ]
 };
 // thermal roll 70 × 50 mm with a 10 mm pre-printed header band: everything sits in the 40 mm below it
@@ -221,7 +225,7 @@ function lblDraw(ctx, tpl, rec, k, guide) {
       h = e.h * k;
     if (e.t === 'text') {
       const px = (+e.fs || 8) * PT * k;
-      ctx.font = `${e.bold ? 700 : 500} ${px}px Prompt, sans-serif`;
+      ctx.font = `${e.bold ? 700 : 500} ${px}px ${e.font ? e.font + ', ' : ''}Prompt, sans-serif`;
       const lh = px * 1.28,
         lines = wrapText(ctx, lblFill(e.text, rec), w, e.wrap ? Math.max(1, Math.floor((h + px * 0.28) / lh)) : 1);
       ctx.textAlign = e.align || 'left';
