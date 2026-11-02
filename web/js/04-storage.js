@@ -202,8 +202,8 @@ async function connect() {
   } catch {}
   if (!sess) {
     // บนเว็บ: ล็อกอินที่ IP One Tools Portal ที่เดียว (แอปบนเครื่องยิงยังล็อกอินในแอปได้)
-    if (/github\.io$/i.test(location.hostname)) {
-      location.replace('https://benzthopitak-pixel.github.io/ip-one-tools/');
+    if (/(github\.io|netlify\.app)$/i.test(location.hostname)) {
+      location.replace('https://inventory-tool01.netlify.app/');
       return;
     }
     S.gate = 'login';
