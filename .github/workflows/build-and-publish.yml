@@ -1,4 +1,7 @@
-# AMS Count · build แอป APK + เผยแพร่เว็บขึ้น GitHub Pages
+# AMS Count · build แอป APK สำหรับเครื่องยิง
+# เว็บ AssetSync อยู่ที่ repo ip-one-tools โฟลเดอร์ assetsync/ (ขึ้นเว็บที่ https://inventory-tools-hub.netlify.app/assetsync/)
+# workflow นี้: ดึงไฟล์เว็บชุดนั้นมาใส่ในแอป → build APK → ส่งไฟล์ดาวน์โหลด (apk + manifest) ไว้ที่ Release 'app'
+# แล้วนำ assetsync-download.zip ไปวางใน ip-one-tools/assetsync/ (โฟลเดอร์ download/ + build.js)
 # ทำงานเองทุกครั้งที่อัปโหลดไฟล์ขึ้น branch main (หรือกด Run workflow เองที่แท็บ Actions)
 name: Build APK + Publish web
 
@@ -8,12 +11,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: app
   cancel-in-progress: true
 
 jobs:
@@ -21,6 +22,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # ไฟล์เว็บ AssetSync ตัวจริงอยู่ที่ ip-one-tools/assetsync → ใช้ชุดนั้นใส่ในแอป
+      - uses: actions/checkout@v4
+        with:
+          repository: benzthopitak-pixel/ip-one-tools
+          path: _src
+      - name: Use AssetSync web from ip-one-tools
+        run: |
+          rm -rf web && mkdir web
+          rsync -a --exclude download/ _src/assetsync/ web/
+          rm -rf _src
 
       - uses: actions/setup-java@v4
         with:
@@ -49,7 +61,7 @@ jobs:
           AMS_BUILD_NUMBER: ${{ github.run_number }}
           AMS_KEYSTORE_PASSWORD: ${{ secrets.AMS_KEYSTORE_PASSWORD }}
           AMS_KEY_ALIAS: ams-count
-          AMS_UPDATE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          AMS_UPDATE_URL: https://inventory-tools-hub.netlify.app/assetsync/
         run: gradle -p android assembleRelease --no-daemon
 
       - name: Assemble website
@@ -76,16 +88,12 @@ jobs:
           name: ams-count-apk-1.0.${{ github.run_number }}
           path: _site/download/ams-count.apk
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # ชุดไฟล์สำหรับวางใน ip-one-tools/assetsync/ : download/ (apk, version.json, web-manifest.json) + build.js ที่ประทับเวอร์ชันแล้ว
+      - name: Publish download bundle (Release 'app')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp web/build.js _site/download/../build.js
+          (cd _site && zip -qr ../assetsync-download.zip download build.js)
+          gh release view app >/dev/null 2>&1 || gh release create app --title "AssetSync app (latest)" --notes "ไฟล์แอปล่าสุดสำหรับวางใน ip-one-tools/assetsync/ · อย่าลบ"
+          gh release upload app assetsync-download.zip --clobber
