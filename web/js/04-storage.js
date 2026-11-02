@@ -203,7 +203,7 @@ async function connect() {
   if (!sess) {
     // บนเว็บ: ล็อกอินที่ IP One Tools Portal ที่เดียว (แอปบนเครื่องยิงยังล็อกอินในแอปได้)
     if (/github\.io$/i.test(location.hostname)) {
-      location.replace('https://benzthopitak-pixel.github.io/ip-one-tools/');
+      location.replace('https://benzthopitak-pixel.github.io/ipone-inventory/');
       return;
     }
     S.gate = 'login';
