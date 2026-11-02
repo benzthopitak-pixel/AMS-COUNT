@@ -1,4 +1,5 @@
-# AMS Count · build แอป APK + เผยแพร่เว็บขึ้น GitHub Pages
+# AMS Count · build แอป APK + ส่งไฟล์เว็บ AssetSync ไปให้ Netlify (inventory-tool01.netlify.app/assetsync/)
+# เว็บไม่ได้อยู่บน GitHub Pages แล้ว: ไฟล์ทั้งชุดอัปเป็น GitHub Release แท็ก 'site' แล้ว Netlify ดึงไปตอน build
 # ทำงานเองทุกครั้งที่อัปโหลดไฟล์ขึ้น branch main (หรือกด Run workflow เองที่แท็บ Actions)
 name: Build APK + Publish web
 
@@ -8,12 +9,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: site
   cancel-in-progress: true
 
 jobs:
@@ -49,7 +48,7 @@ jobs:
           AMS_BUILD_NUMBER: ${{ github.run_number }}
           AMS_KEYSTORE_PASSWORD: ${{ secrets.AMS_KEYSTORE_PASSWORD }}
           AMS_KEY_ALIAS: ams-count
-          AMS_UPDATE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          AMS_UPDATE_URL: https://inventory-tool01.netlify.app/assetsync/
         run: gradle -p android assembleRelease --no-daemon
 
       - name: Assemble website
@@ -76,16 +75,11 @@ jobs:
           name: ams-count-apk-1.0.${{ github.run_number }}
           path: _site/download/ams-count.apk
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # ชุดไฟล์เว็บทั้งหมด (รวม download/ ของแอป) → Release แท็ก 'site' · Netlify ดึงไฟล์นี้ไปวางที่ /assetsync/
+      - name: Publish site bundle (Release 'site')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd _site && zip -qr ../assetsync-site.zip .)
+          gh release view site >/dev/null 2>&1 || gh release create site --title "AssetSync site (latest)" --notes "ไฟล์เว็บ AssetSync ล่าสุด · Netlify ดึงไปใช้อัตโนมัติ · อย่าลบ"
+          gh release upload site assetsync-site.zip --clobber
