@@ -30,6 +30,7 @@ jobs:
           path: _src
       - name: Use AssetSync web from ip-one-tools
         run: |
+          node _src/tests/regressions.cjs
           rm -rf web && mkdir web
           rsync -a --exclude download/ _src/assetsync/ web/
           rm -rf _src
@@ -73,14 +74,19 @@ jobs:
           touch _site/.nojekyll
           # list of the app's screen files + checksums → the scanner app downloads a newer set by itself
           python3 - "${{ github.run_number }}" "$(cat android/shell-version.txt)" <<'PY'
-          import hashlib, json, os, sys
+          import hashlib, json, os, sys, zipfile
           files = []
           for root, _, names in os.walk('web'):
               for n in sorted(names):
                   full = os.path.join(root, n); rel = os.path.relpath(full, 'web').replace(os.sep, '/')
                   if rel == 'install.html' or rel.startswith('download/'): continue
                   files.append({'p': rel, 'sha256': hashlib.sha256(open(full, 'rb').read()).hexdigest()})
-          json.dump({'build': int(sys.argv[1]), 'shell': int(sys.argv[2]), 'files': files}, open('_site/download/web-manifest.json', 'w'))
+          manifest = {'build': int(sys.argv[1]), 'shell': int(sys.argv[2]), 'files': files}
+          with zipfile.ZipFile('_site/download/ams-count.apk') as apk:
+              for entry in files:
+                  assert hashlib.sha256(apk.read('assets/www/' + entry['p'])).hexdigest() == entry['sha256'], entry['p']
+          json.dump(manifest, open('_site/download/web-manifest.json', 'w'))
+          print('Verified APK and web checksums:', len(files), 'files')
           PY
 
       - uses: actions/upload-artifact@v4
